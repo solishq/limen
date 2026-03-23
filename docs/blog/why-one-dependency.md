@@ -175,4 +175,4 @@ Six providers. One interface. No SDKs. The dependency you don't take is the vuln
 
 Next: [Introducing Limen](introducing-limen.md) · [28 Invariants](28-invariants.md)
 
-*Built by [SolisHQ](https://solishq.com).*
+*Built by [SolisHQ](https://solishq.ai).*

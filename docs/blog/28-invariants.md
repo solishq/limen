@@ -240,4 +240,4 @@ Apache 2.0 licensed. Read every line of source. Read every invariant test. Run t
 
 Next: [Introducing Limen](introducing-limen.md) · [Why One Dependency Changes Everything](why-one-dependency.md)
 
-*Built by [SolisHQ](https://solishq.com).*
+*Built by [SolisHQ](https://solishq.ai).*

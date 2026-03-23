@@ -543,4 +543,4 @@ Report vulnerabilities privately. See [SECURITY.md](SECURITY.md) for details.
 
 ---
 
-<p align="center">Built by <a href="https://solishq.com">SolisHQ</a></p>
+<p align="center">Built by <a href="https://solishq.ai">SolisHQ</a></p>

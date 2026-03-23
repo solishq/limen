@@ -182,4 +182,4 @@ Run the test suite. Read the invariant tests. Try to find a state where an audit
 
 Next: [Why One Dependency Changes Everything](why-one-dependency.md) · [28 Invariants](28-invariants.md)
 
-*Built by [SolisHQ](https://solishq.com).*
+*Built by [SolisHQ](https://solishq.ai).*
