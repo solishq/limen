@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@solishq/limen"><img src="https://img.shields.io/npm/v/@solishq/limen" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/limen-ai"><img src="https://img.shields.io/npm/v/limen-ai" alt="npm version"></a>
   <a href="https://github.com/solishq/limen/actions"><img src="https://img.shields.io/github/actions/workflow/status/solishq/limen/ci.yml?branch=main" alt="CI"></a>
   <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen" alt="Node.js"></a>
@@ -56,7 +56,7 @@ Limen is not a wrapper around LLM APIs. It is an operating system for AI agents.
 ## Install
 
 ```bash
-npm install @solishq/limen
+npm install limen-ai
 ```
 
 Requires Node.js >= 22. Single production dependency: `better-sqlite3`.
@@ -66,7 +66,7 @@ Requires Node.js >= 22. Single production dependency: `better-sqlite3`.
 ## Quick Start
 
 ```typescript
-import { createLimen } from '@solishq/limen';
+import { createLimen } from 'limen-ai';
 import crypto from 'node:crypto';
 
 const limen = await createLimen({
@@ -178,21 +178,21 @@ Limen is built as four layers, each with a strict dependency direction: down onl
 
 Limen ships three independent entry points. Use the full engine, the reference agent, or the transport layer alone.
 
-### `@solishq/limen` -- The Engine
+### `limen-ai` -- The Engine
 
 The complete Cognitive OS. Everything described in this document.
 
 ```typescript
-import { createLimen } from '@solishq/limen';
-import type { Limen, LimenConfig, ChatResult } from '@solishq/limen';
+import { createLimen } from 'limen-ai';
+import type { Limen, LimenConfig, ChatResult } from 'limen-ai';
 ```
 
-### `@solishq/limen/reference-agent` -- Mission Agent
+### `limen-ai/reference-agent` -- Mission Agent
 
 A proof-of-architecture agent that demonstrates how to build on the 16 system calls. It decomposes objectives into task graphs, manages budgets, handles checkpoints, aggregates artifacts, and delegates sub-missions. It interacts with the engine exclusively through the public API -- it cannot reach kernel or substrate internals.
 
 ```typescript
-import { createReferenceAgent } from '@solishq/limen/reference-agent';
+import { createReferenceAgent } from 'limen-ai/reference-agent';
 
 const agent = createReferenceAgent(limen, {
   name: 'analyst',
@@ -210,7 +210,7 @@ const result = await agent.runMission({
 });
 ```
 
-### `@solishq/limen/transport` -- Standalone LLM Client
+### `limen-ai/transport` -- Standalone LLM Client
 
 The transport layer works independently of the engine. Zero-dependency LLM communication with circuit breakers, retry with exponential backoff, streaming with stall detection, response size limits, TLS enforcement, and graceful shutdown. If you need a reliable way to talk to LLM providers without pulling in their SDKs, this is it.
 
@@ -219,7 +219,7 @@ import {
   createTransportEngine,
   createAnthropicAdapterFromEnv,
   createOpenAIAdapterFromEnv,
-} from '@solishq/limen/transport';
+} from 'limen-ai/transport';
 
 const engine = createTransportEngine();
 const anthropic = createAnthropicAdapterFromEnv();
@@ -485,7 +485,7 @@ interface LimenConfig {
 Every error thrown by Limen is a `LimenError` with a typed code, a human-readable message, a `retryable` flag, and an optional `cooldownMs` for rate-limited responses.
 
 ```typescript
-import { LimenError } from '@solishq/limen';
+import { LimenError } from 'limen-ai';
 
 try {
   const result = limen.chat('Hello');

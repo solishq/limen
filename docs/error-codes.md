@@ -3,7 +3,7 @@
 Every error thrown by Limen is a `LimenError` with a typed `code`, a human-readable `message`, a `retryable` flag, and optional `cooldownMs` and `suggestion` fields.
 
 ```typescript
-import { LimenError } from '@solishq/limen';
+import { LimenError } from 'limen-ai';
 
 try {
   await result.text;

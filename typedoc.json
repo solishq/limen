@@ -9,7 +9,7 @@
     "src/substrate/transport/transport_types.ts"
   ],
   "out": "docs/api",
-  "name": "@solishq/limen",
+  "name": "limen-ai",
   "readme": "README.md",
   "tsconfig": "tsconfig.json",
   "excludePrivate": true,

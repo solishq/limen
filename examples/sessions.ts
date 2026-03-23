@@ -12,7 +12,7 @@
  *   ANTHROPIC_API_KEY=sk-ant-... npx tsx examples/sessions.ts
  */
 
-import { createLimen, type TenantId } from '@solishq/limen';
+import { createLimen, type TenantId } from 'limen-ai';
 import crypto from 'node:crypto';
 
 const limen = await createLimen({

@@ -7,7 +7,7 @@
  *   ANTHROPIC_API_KEY=sk-ant-... npx tsx examples/basic-chat.ts
  */
 
-import { createLimen } from '@solishq/limen';
+import { createLimen } from 'limen-ai';
 import crypto from 'node:crypto';
 
 const limen = await createLimen({

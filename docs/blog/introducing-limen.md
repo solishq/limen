@@ -67,7 +67,7 @@ The **API Surface** composes these layers into a single frozen object. `createLi
 ## Proof
 
 ```typescript
-import { createLimen } from '@solishq/limen';
+import { createLimen } from 'limen-ai';
 import crypto from 'node:crypto';
 
 const limen = await createLimen({
@@ -126,7 +126,7 @@ The transport engine works standalone — if all you need is reliable LLM commun
 import {
   createTransportEngine,
   createAnthropicAdapterFromEnv,
-} from '@solishq/limen/transport';
+} from 'limen-ai/transport';
 
 const engine = createTransportEngine();
 const anthropic = createAnthropicAdapterFromEnv();
@@ -165,16 +165,16 @@ Circuit breakers, exponential backoff, response size limits, TLS enforcement, st
 ## The Challenge
 
 ```bash
-npm install @solishq/limen
+npm install limen-ai
 ```
 
 Requires Node.js 22+. One production dependency. TypeScript strict mode throughout. Apache 2.0 licensed. No tier gating. No feature flags.
 
 | Import | What You Get |
 |---|---|
-| `@solishq/limen` | Full Cognitive OS: `createLimen`, sessions, missions, agents, everything |
-| `@solishq/limen/reference-agent` | Proof-of-architecture agent demonstrating the 16 system calls |
-| `@solishq/limen/transport` | Standalone LLM transport: circuit breakers, retry, streaming, six providers |
+| `limen-ai` | Full Cognitive OS: `createLimen`, sessions, missions, agents, everything |
+| `limen-ai/reference-agent` | Proof-of-architecture agent demonstrating the 16 system calls |
+| `limen-ai/transport` | Standalone LLM transport: circuit breakers, retry, streaming, six providers |
 
 Run the test suite. Read the invariant tests. Try to find a state where an audit entry exists without its corresponding mutation. Try to escalate an agent's capabilities through delegation. Try to modify an artifact after creation. We couldn't. 2,447 tests say you won't either.
 

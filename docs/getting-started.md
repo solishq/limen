@@ -14,7 +14,7 @@ This guide walks you through installing Limen, making your first LLM call, and e
 ## Installation
 
 ```bash
-npm install @solishq/limen
+npm install limen-ai
 ```
 
 That's it. One production dependency (`better-sqlite3`). No provider SDKs.
@@ -24,7 +24,7 @@ That's it. One production dependency (`better-sqlite3`). No provider SDKs.
 ## 1. Your First Chat
 
 ```typescript
-import { createLimen } from '@solishq/limen';
+import { createLimen } from 'limen-ai';
 import crypto from 'node:crypto';
 
 const limen = await createLimen({
@@ -105,7 +105,7 @@ console.log(result.data.languages); // Typed and validated
 Sessions maintain conversation history across turns, scoped to a tenant and agent.
 
 ```typescript
-import type { TenantId } from '@solishq/limen';
+import type { TenantId } from 'limen-ai';
 
 const session = await limen.session({
   agentName: 'researcher',
@@ -154,7 +154,7 @@ limen.chat('Hello', { routing: 'explicit', model: 'gpt-4o' });
 If you only need reliable LLM communication (retry, circuit breakers, streaming safety) without the full engine:
 
 ```typescript
-import { createTransportEngine, createAnthropicAdapterFromEnv } from '@solishq/limen/transport';
+import { createTransportEngine, createAnthropicAdapterFromEnv } from 'limen-ai/transport';
 
 const engine = createTransportEngine();
 const adapter = createAnthropicAdapterFromEnv();

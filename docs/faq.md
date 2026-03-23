@@ -24,7 +24,7 @@ No. Limen is an engine. You don't subclass it or plug into lifecycle hooks. You 
 For persistent state in serverless:
 - Use `/tmp` for the database and sync to S3/EFS between invocations
 - Mount an EFS volume to your Lambda function
-- Use the standalone transport layer (`@solishq/limen/transport`) for stateless LLM calls
+- Use the standalone transport layer (`limen-ai/transport`) for stateless LLM calls
 
 ### Can Limen run at the edge (Cloudflare Workers, Vercel Edge)?
 **No.** Edge runtimes do not provide a Node.js-compatible filesystem or native module support. Limen depends on `better-sqlite3`, which is a native C++ addon compiled for Node.js. It cannot run in V8 isolates.

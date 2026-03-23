@@ -8,7 +8,7 @@
  *   ANTHROPIC_API_KEY=sk-ant-... OPENAI_API_KEY=sk-... npx tsx examples/multi-provider.ts
  */
 
-import { createLimen } from '@solishq/limen';
+import { createLimen } from 'limen-ai';
 import crypto from 'node:crypto';
 
 const limen = await createLimen({

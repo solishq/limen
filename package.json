@@ -1,5 +1,5 @@
 {
-  "name": "@solishq/limen",
+  "name": "limen-ai",
   "version": "1.0.0",
   "description": "Cognitive Operating System — deterministic infrastructure hosting stochastic cognition",
   "type": "module",

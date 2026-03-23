@@ -144,7 +144,7 @@ jobs:
       - name: Publish if version changed
         run: |
           CURRENT=$(node -e "console.log(require('./package.json').version)")
-          PUBLISHED=$(npm view @solishq/limen version 2>/dev/null || echo "0.0.0")
+          PUBLISHED=$(npm view limen-ai version 2>/dev/null || echo "0.0.0")
           if [ "$CURRENT" != "$PUBLISHED" ]; then
             npm publish --provenance --access public
           else

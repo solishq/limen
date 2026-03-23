@@ -15,7 +15,7 @@ import {
   createTransportEngine,
   createAnthropicAdapterFromEnv,
   createOpenAIAdapterFromEnv,
-} from '@solishq/limen/transport';
+} from 'limen-ai/transport';
 
 const engine = createTransportEngine();
 const anthropic = createAnthropicAdapterFromEnv();

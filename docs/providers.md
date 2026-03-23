@@ -9,7 +9,7 @@ Limen communicates with LLM providers over raw HTTP. No provider SDKs are import
 Pass providers to `createLimen()`. Each provider specifies a type, base URL, supported models, and authentication.
 
 ```typescript
-import { createLimen } from '@solishq/limen';
+import { createLimen } from 'limen-ai';
 import crypto from 'node:crypto';
 
 const limen = await createLimen({
@@ -152,7 +152,7 @@ limen.chat('Hello', { routing: 'quality' });
 
 ## Standalone Transport
 
-The transport layer works independently of the Limen engine. Import from `@solishq/limen/transport`.
+The transport layer works independently of the Limen engine. Import from `limen-ai/transport`.
 
 ```typescript
 import {
@@ -163,7 +163,7 @@ import {
   createGroqAdapterFromEnv,
   createMistralAdapterFromEnv,
   createOllamaAdapter,
-} from '@solishq/limen/transport';
+} from 'limen-ai/transport';
 
 const engine = createTransportEngine();
 const adapter = createAnthropicAdapterFromEnv();

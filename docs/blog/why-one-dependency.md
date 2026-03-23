@@ -149,13 +149,13 @@ Limen sits at the bottom. One dependency is the right number for what we're buil
 
 ## Try It
 
-The transport layer is available standalone: `@solishq/limen/transport`. Zero-dependency LLM communication with circuit breakers, retry, streaming stall detection, TLS enforcement, and graceful shutdown.
+The transport layer is available standalone: `limen-ai/transport`. Zero-dependency LLM communication with circuit breakers, retry, streaming stall detection, TLS enforcement, and graceful shutdown.
 
 ```typescript
 import {
   createTransportEngine,
   createAnthropicAdapterFromEnv,
-} from '@solishq/limen/transport';
+} from 'limen-ai/transport';
 
 const engine = createTransportEngine();
 const anthropic = createAnthropicAdapterFromEnv();
