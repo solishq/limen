@@ -1,0 +1,80 @@
+{
+  "name": "@solishq/limen",
+  "version": "1.0.0",
+  "description": "Cognitive Operating System — deterministic infrastructure hosting stochastic cognition",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "SolisHQ",
+    "url": "https://solishq.com"
+  },
+  "homepage": "https://github.com/solishq/limen",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/solishq/limen.git"
+  },
+  "bugs": {
+    "url": "https://github.com/solishq/limen/issues"
+  },
+  "keywords": [
+    "ai",
+    "llm",
+    "cognitive-os",
+    "agent",
+    "framework",
+    "anthropic",
+    "openai",
+    "gemini",
+    "groq",
+    "mistral",
+    "ollama",
+    "sqlite",
+    "mission",
+    "orchestration",
+    "transport",
+    "streaming",
+    "typescript"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/api/index.d.ts",
+      "import": "./dist/api/index.js"
+    },
+    "./reference-agent": {
+      "types": "./dist/reference-agent/index.d.ts",
+      "import": "./dist/reference-agent/index.js"
+    },
+    "./transport": {
+      "types": "./dist/substrate/transport/index.d.ts",
+      "import": "./dist/substrate/transport/index.js"
+    }
+  },
+  "main": "./dist/api/index.js",
+  "types": "./dist/api/index.d.ts",
+  "files": [
+    "dist/",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "npx tsx --test $(find tests -path tests/scaffold -prune -o -name '*.test.ts' -print)",
+    "test:all": "npx tsx --test $(find tests -name '*.test.ts')",
+    "ci": "npm run typecheck && npm run build && npm run test",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "better-sqlite3": "11.10.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  }
+}

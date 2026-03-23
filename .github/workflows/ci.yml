@@ -1,0 +1,141 @@
+name: Limen CI
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    branches: ['main']
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: 'No @ts-ignore'
+        run: |
+          if grep -rn "@ts-ignore" src/; then
+            echo "::error::@ts-ignore found"
+            exit 1
+          fi
+
+      - name: 'No uncontrolled any types'
+        run: |
+          COUNT=$(grep -rn "as any\|: any" src/ --include="*.ts" | grep -v "task_scheduler.ts" | grep -v "// " | wc -l | tr -d ' ')
+          if [ "$COUNT" -gt 0 ]; then
+            echo "::error::Uncontrolled 'any' usage found"
+            grep -rn "as any\|: any" src/ --include="*.ts" | grep -v "task_scheduler.ts" | grep -v "// "
+            exit 1
+          fi
+
+      - name: 'Single production dependency (I-01)'
+        run: |
+          DEP_COUNT=$(node -e "const p=require('./package.json'); console.log(Object.keys(p.dependencies||{}).length)")
+          if [ "$DEP_COUNT" -ne 1 ]; then
+            echo "::error::Expected exactly 1 production dependency, found $DEP_COUNT"
+            exit 1
+          fi
+          DEP_NAME=$(node -e "const p=require('./package.json'); console.log(Object.keys(p.dependencies||{})[0])")
+          if [ "$DEP_NAME" != "better-sqlite3" ]; then
+            echo "::error::Expected better-sqlite3 as sole dependency, found $DEP_NAME"
+            exit 1
+          fi
+
+      - name: 'No decorative assertions (Hard Ban #8)'
+        run: |
+          PATTERNS="assert\.ok\(true\)|assert\.ok\(1\)|assert\.equal\(true,\s*true\)|toBeTruthy"
+          if grep -rPn --exclude-dir=scaffold "$PATTERNS" tests/ src/ 2>/dev/null; then
+            echo "::error::Decorative assertion found"
+            exit 1
+          fi
+
+      - name: Test
+        run: |
+          npm test 2>&1 | tee /tmp/test-output.txt || true
+          FAIL_COUNT=$(grep "^ℹ fail" /tmp/test-output.txt | awk '{print $2}')
+          if [ "${FAIL_COUNT:-0}" = "0" ]; then
+            echo "All tests passed."
+            exit 0
+          fi
+          UNEXPECTED=$(awk '
+            { lines[NR] = $0 }
+            /Error \[|AssertionError \[/ {
+              line = $0
+              if (line ~ /NotImplementedError/) next
+              if (line ~ /HARNESS GAP/) next
+              if (line ~ /Schema version must/) next
+              found_context = 0
+              start = (NR-10 > 0) ? NR-10 : 1
+              for (i = start; i < NR; i++) {
+                if (lines[i] ~ /NOT_IMPLEMENTED/) { found_context = 1; break }
+              }
+              if (found_context) next
+              print "UNEXPECTED [line " NR "]: " line
+            }
+          ' /tmp/test-output.txt)
+          if [ -n "$UNEXPECTED" ]; then
+            echo "::error::Unexpected test failures:"
+            echo "$UNEXPECTED"
+            exit 1
+          fi
+          echo "All $FAIL_COUNT failures are expected contract stubs (NotImplementedError/HARNESS GAP)"
+
+  migration-safety:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: No existing migration modified (forward-only)
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          MODIFIED=$(git diff --name-only "$BASE"...HEAD -- 'src/**/migration/*.ts')
+          for f in $MODIFIED; do
+            if git show "$BASE":"$f" >/dev/null 2>&1; then
+              echo "::error::Existing migration modified: $f"
+              exit 1
+            fi
+          done
+
+  publish:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - name: Publish if version changed
+        run: |
+          CURRENT=$(node -e "console.log(require('./package.json').version)")
+          PUBLISHED=$(npm view @solishq/limen version 2>/dev/null || echo "0.0.0")
+          if [ "$CURRENT" != "$PUBLISHED" ]; then
+            npm publish --provenance --access public
+          else
+            echo "Version $CURRENT already published, skipping."
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

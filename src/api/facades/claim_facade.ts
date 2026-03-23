@@ -1,0 +1,116 @@
+/**
+ * ClaimFacade — RBAC + rate limit + delegation for SC-11, SC-12, SC-13.
+ *
+ * Phase: 4 (Governance Wiring)
+ * Implements: Design Source §Output 4 (Facade Mapping)
+ * Spec sections: §14.1 (assertClaim), §14.5 (relateClaims), §14.7 (queryClaims)
+ *
+ * Security constraints enforced:
+ *   DC-P4-404: RBAC check first in every method — unauthorized → UNAUTHORIZED
+ *   DC-P4-406: Raw ClaimSystem is closure-local; only facade exposed on Limen
+ *   C-SEC-05: Facade-only exposure — raw system never on Limen object
+ *
+ * Pattern: Follows MissionApiImpl (src/api/missions/mission_api.ts):
+ *   1. requirePermission (RBAC)
+ *   2. requireRateLimit
+ *   3. Delegate to underlying system
+ *
+ * Invariants enforced: I-13 (authorization completeness), I-17 (governance boundary)
+ */
+
+import type { DatabaseConnection } from '../../kernel/interfaces/database.js';
+import type { OperationContext, Result } from '../../kernel/interfaces/index.js';
+import type { RbacEngine } from '../../kernel/interfaces/rbac.js';
+import type { RateLimiter } from '../../kernel/interfaces/rate_limiter.js';
+import type {
+  ClaimSystem,
+  ClaimCreateInput, AssertClaimOutput,
+  RelationshipCreateInput, RelateClaimsOutput,
+  ClaimQueryInput, ClaimQueryResult,
+} from '../../claims/interfaces/claim_types.js';
+
+import { requirePermission } from '../enforcement/rbac_guard.js';
+import { requireRateLimit } from '../enforcement/rate_guard.js';
+
+// ============================================================================
+// ClaimApi — public facade interface
+// ============================================================================
+
+/**
+ * Public claim API exposed on the Limen object.
+ * SC-11 (assertClaim), SC-12 (relateClaims), SC-13 (queryClaims).
+ * RBAC-gated, rate-limited, delegates to closure-local ClaimSystem.
+ */
+export interface ClaimApi {
+  assertClaim(conn: DatabaseConnection, ctx: OperationContext, input: ClaimCreateInput): Result<AssertClaimOutput>;
+  relateClaims(conn: DatabaseConnection, ctx: OperationContext, input: RelationshipCreateInput): Result<RelateClaimsOutput>;
+  queryClaims(conn: DatabaseConnection, ctx: OperationContext, input: ClaimQueryInput): Result<ClaimQueryResult>;
+}
+
+// ============================================================================
+// createClaimFacade — factory
+// ============================================================================
+
+/**
+ * Create a ClaimFacade that wraps ClaimSystem with RBAC + rate limiting.
+ *
+ * The raw ClaimSystem is closure-local — never leaked (DC-P4-406, C-SEC-05).
+ * The returned facade is frozen and satisfies ClaimApi.
+ *
+ * @param claimSystem - The raw ClaimSystem (closure-local, never exposed)
+ * @param rbac - Kernel RBAC engine
+ * @param rateLimiter - Kernel rate limiter
+ * @returns Frozen ClaimApi facade
+ */
+export function createClaimFacade(
+  claimSystem: ClaimSystem,
+  rbac: RbacEngine,
+  rateLimiter: RateLimiter,
+): ClaimApi {
+  return Object.freeze({
+    /**
+     * SC-11: Assert a claim.
+     * DC-P4-404: RBAC check FIRST — unauthorized → throws UNAUTHORIZED.
+     */
+    assertClaim(
+      conn: DatabaseConnection,
+      ctx: OperationContext,
+      input: ClaimCreateInput,
+    ): Result<AssertClaimOutput> {
+      requirePermission(rbac, ctx, 'create_mission');  // mission-scope permission
+      requireRateLimit(rateLimiter, conn, ctx, 'api_calls');
+
+      return claimSystem.assertClaim.execute(conn, ctx, input);
+    },
+
+    /**
+     * SC-12: Relate claims.
+     * DC-P4-404: RBAC check FIRST — unauthorized → throws UNAUTHORIZED.
+     */
+    relateClaims(
+      conn: DatabaseConnection,
+      ctx: OperationContext,
+      input: RelationshipCreateInput,
+    ): Result<RelateClaimsOutput> {
+      requirePermission(rbac, ctx, 'create_mission');
+      requireRateLimit(rateLimiter, conn, ctx, 'api_calls');
+
+      return claimSystem.relateClaims.execute(conn, ctx, input);
+    },
+
+    /**
+     * SC-13: Query claims.
+     * DC-P4-404: RBAC check FIRST — unauthorized → throws UNAUTHORIZED.
+     */
+    queryClaims(
+      conn: DatabaseConnection,
+      ctx: OperationContext,
+      input: ClaimQueryInput,
+    ): Result<ClaimQueryResult> {
+      requirePermission(rbac, ctx, 'create_mission');
+      requireRateLimit(rateLimiter, conn, ctx, 'api_calls');
+
+      return claimSystem.queryClaims.execute(conn, ctx, input);
+    },
+  });
+}
