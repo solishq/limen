@@ -84,6 +84,18 @@ Please use GitHub Issues. Include:
 
 Please report security vulnerabilities privately. See [SECURITY.md](SECURITY.md) for details.
 
+## Developer Certificate of Origin
+
+All contributions must be signed off under the [Developer Certificate of Origin (DCO)](https://developercertificate.org/). This certifies that you wrote the contribution or have the right to submit it under the Apache-2.0 license.
+
+Sign off your commits with `git commit -s`:
+
+```bash
+git commit -s -m "Add streaming timeout configuration"
+```
+
+This adds a `Signed-off-by: Your Name <your@email.com>` line to the commit message. All commits in a pull request must be signed off.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the Apache License 2.0.

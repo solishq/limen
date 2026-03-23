@@ -33,6 +33,26 @@ The result: AI infrastructure with the reliability guarantees of a database engi
 
 ---
 
+## How Limen Compares
+
+|  | Limen | Vercel AI SDK | LangChain.js |
+|---|---|---|---|
+| **Production deps** | 1 | ~50+ | ~50+ |
+| **Provider SDKs required** | No (raw HTTP) | Yes (`@ai-sdk/*`) | Yes (`@langchain/*`) |
+| **Built-in persistence** | SQLite (WAL, local) | No | Optional (external DB) |
+| **Audit trail** | Hash-chained, append-only | No | LangSmith (paid SaaS) |
+| **Budget enforcement** | Per-mission token budgets | No | No |
+| **Agent governance** | 16 system calls, RBAC | No | No |
+| **Multi-tenant isolation** | Row-level or database-level | No | No |
+| **Encryption at rest** | AES-256-GCM | No | No |
+| **Streaming** | Yes (stall detection, timeouts) | Yes | Yes |
+| **Structured output** | JSON Schema + auto-retry | Zod schemas | Output parsers |
+| **Deterministic replay** | Yes (from recorded LLM outputs) | No | No |
+
+Limen is not a wrapper around LLM APIs. It is an operating system for AI agents. If you need a lightweight way to call an LLM, the Vercel AI SDK is excellent. If you need your agents to operate within enforced boundaries with full auditability, that is what Limen was built for.
+
+---
+
 ## Install
 
 ```bash
@@ -102,6 +122,25 @@ await limen.shutdown();
 ```
 
 `createLimen()` returns a deeply frozen object. Every method is immutable. Two calls produce fully independent instances -- no shared state, no cross-contamination.
+
+> **Important: Master Key Management**
+>
+> The `masterKey` is used for AES-256-GCM encryption at rest. If you lose the key, encrypted data in the SQLite database becomes permanently unreadable. Do **not** use `crypto.randomBytes(32)` in production — that generates a new key on every startup.
+>
+> ```bash
+> # Generate once, store securely
+> node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" > master.key
+> chmod 600 master.key
+> ```
+>
+> ```typescript
+> // Load from file or environment
+> const masterKey = Buffer.from(process.env.LIMEN_MASTER_KEY!, 'hex');
+> // or
+> const masterKey = fs.readFileSync('./master.key', 'utf8').trim();
+> ```
+>
+> Keep the key out of version control. Rotate by re-encrypting: create a new engine instance with the new key and migrate data through the public API.
 
 ---
 

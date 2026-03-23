@@ -27,3 +27,6 @@ docs/sprint*_design.md
 .provenance.json
 .provenance.pub
 .provenanceignore
+
+# Per-project local documents (not tracked — backed up separately)
+docs/local/
