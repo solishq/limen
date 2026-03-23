@@ -395,7 +395,9 @@ describe('Retirement Edge Cases (S29.6)', () => {
     if (!createResult.ok) return;
 
     const tid = createResult.value.id;
-    const exactly90DaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    // Use 90 days minus 1 minute to avoid flakiness from elapsed time between
+    // timestamp computation and evaluation (a few ms can push past the >90 boundary).
+    const exactly90DaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000 + 60_000).toISOString();
     ls.store.update(conn, ctx, tid, TEST_TENANT, { lastApplied: exactly90DaysAgo });
 
     const result = ls.retirement.evaluate(conn, tid, TEST_TENANT);

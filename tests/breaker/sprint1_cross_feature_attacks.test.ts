@@ -14,6 +14,11 @@ import { AgentApiImpl } from '../../src/api/agents/agent_api.js';
 import { createEvidenceValidator } from '../../src/claims/evidence/evidence_validator.js';
 import { createCapabilityResultScopeValidator } from '../../src/claims/evidence/capability_scope_validator.js';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { resolve, dirname } from 'node:path';
+
+const __filename = fileURLToPath(import.meta.url);
+const PROJECT_ROOT = resolve(dirname(__filename), '..', '..');
 import { getAgentPersistenceMigrations } from '../../src/api/migration/023_agent_persistence.js';
 
 // ─── Test Helpers ───
@@ -144,7 +149,7 @@ describe('BREAKER: Cross-Feature Attacks', () => {
   it('WIRING-01: evidence validator wired in createLimen factory (verified by import)', () => {
     // This test verifies that the evidence validator is imported and used in api/index.ts
     // We cannot run createLimen in unit tests (needs filesystem), so we verify structurally
-    const indexContent = readFileSync('/Users/solishq/Projects/limen/src/api/index.ts', 'utf-8');
+    const indexContent = readFileSync(resolve(PROJECT_ROOT, 'src/api/index.ts'), 'utf-8');
 
     assert.ok(
       indexContent.includes("import { createEvidenceValidator }"),
@@ -199,7 +204,7 @@ describe('BREAKER: Cross-Feature Attacks', () => {
   // ═══════════════════════════════════════════════════════════════════════════
 
   it('WIRING-02: request_capability.ts persists results to core_capability_results', () => {
-    const rcContent = readFileSync('/Users/solishq/Projects/limen/src/orchestration/syscalls/request_capability.ts', 'utf-8');
+    const rcContent = readFileSync(resolve(PROJECT_ROOT, 'src/orchestration/syscalls/request_capability.ts'), 'utf-8');
 
     assert.ok(
       rcContent.includes('core_capability_results'),
@@ -223,7 +228,7 @@ describe('BREAKER: Cross-Feature Attacks', () => {
     // F-S1-003 FIX: The catch block now records persistence failures via audit trail.
     // Persistence is still non-fatal (capability result returned regardless),
     // but failures are observable for diagnostic purposes.
-    const rcContent = readFileSync('/Users/solishq/Projects/limen/src/orchestration/syscalls/request_capability.ts', 'utf-8');
+    const rcContent = readFileSync(resolve(PROJECT_ROOT, 'src/orchestration/syscalls/request_capability.ts'), 'utf-8');
 
     // Verify the catch block contains audit observability
     assert.ok(
@@ -241,7 +246,7 @@ describe('BREAKER: Cross-Feature Attacks', () => {
   // ═══════════════════════════════════════════════════════════════════════════
 
   it('BREAKER-XF-02: request_capability uses null for absent taskId in persistence (F-S1-002 FIXED)', () => {
-    const rcContent = readFileSync('/Users/solishq/Projects/limen/src/orchestration/syscalls/request_capability.ts', 'utf-8');
+    const rcContent = readFileSync(resolve(PROJECT_ROOT, 'src/orchestration/syscalls/request_capability.ts'), 'utf-8');
 
     // F-S1-002 FIX: taskId now maps to null (not 'default' string) in the INSERT.
     // task_id column is nullable, FK on task_id removed.
@@ -273,7 +278,7 @@ describe('BREAKER: Cross-Feature Attacks', () => {
 
   it('BREAKER-XF-03: scope validation call site in claim_stores.ts has evidence check before scope', () => {
     // Verify the defense-in-depth ordering: evidence exists check (with tenant) before scope check
-    const csContent = readFileSync('/Users/solishq/Projects/limen/src/claims/store/claim_stores.ts', 'utf-8');
+    const csContent = readFileSync(resolve(PROJECT_ROOT, 'src/claims/store/claim_stores.ts'), 'utf-8');
 
     const evidenceCheckIndex = csContent.indexOf('evidenceValidator.exists');
     const scopeCheckIndex = csContent.indexOf('capabilityResultScopeValidator.validateScope');
