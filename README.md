@@ -1,5 +1,5 @@
 <p align="center">
-  <strong>@solishq/limen</strong>
+  <img src="docs/assets/banner.svg" alt="Limen — Cognitive Operating System" width="700">
 </p>
 
 <p align="center">

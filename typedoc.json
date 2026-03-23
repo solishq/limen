@@ -1,0 +1,19 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "src/api/index.ts",
+    "src/api/interfaces/api.ts",
+    "src/api/errors/limen_error.ts",
+    "src/reference-agent/index.ts",
+    "src/substrate/transport/index.ts",
+    "src/substrate/transport/transport_types.ts"
+  ],
+  "out": "docs/api",
+  "name": "@solishq/limen",
+  "readme": "README.md",
+  "tsconfig": "tsconfig.json",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "excludeExternals": true,
+  "cleanOutputDir": true
+}

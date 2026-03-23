@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Limen — Cognitive Operating System</title>
+  <meta name="description" content="Deterministic infrastructure hosting stochastic cognition. 1 dependency. 16 system calls. 99 invariants. 3,100+ tests.">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --fg: #e0e0e0;
+      --muted: #666;
+      --accent: #667eea;
+      --accent2: #764ba2;
+      --surface: #141414;
+      --border: #222;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 120px 0 80px;
+    }
+    .hero h1 {
+      font-size: 4rem;
+      font-weight: 200;
+      letter-spacing: 0.4em;
+      margin-bottom: 16px;
+    }
+    .hero .subtitle {
+      font-size: 1.1rem;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 32px;
+    }
+    .hero .tagline {
+      font-size: 1.2rem;
+      color: #999;
+      max-width: 600px;
+      margin: 0 auto 48px;
+    }
+    .hero .install {
+      display: inline-block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 32px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 1rem;
+      color: var(--fg);
+      margin-bottom: 24px;
+    }
+    .hero .install span { color: var(--accent); }
+
+    /* Stats */
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 48px;
+      padding: 48px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .stat { text-align: center; }
+    .stat .number {
+      font-size: 2rem;
+      font-weight: 300;
+      color: var(--fg);
+    }
+    .stat .label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-top: 4px;
+    }
+
+    /* Features */
+    .features {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      padding: 80px 0;
+    }
+    .feature {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 32px;
+    }
+    .feature h3 {
+      font-size: 1rem;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+    .feature p {
+      font-size: 0.9rem;
+      color: #999;
+    }
+
+    /* Docs */
+    .docs {
+      padding: 0 0 80px;
+      text-align: center;
+    }
+    .docs h2 {
+      font-size: 1.5rem;
+      font-weight: 300;
+      letter-spacing: 0.1em;
+      margin-bottom: 32px;
+    }
+    .doc-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      text-align: left;
+    }
+    .doc-link {
+      display: block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      transition: border-color 0.2s;
+    }
+    .doc-link:hover {
+      border-color: var(--accent);
+      text-decoration: none;
+    }
+    .doc-link .title { font-weight: 500; }
+    .doc-link .desc {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 48px 0;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    footer a { color: var(--muted); }
+    footer a:hover { color: var(--fg); }
+
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 2.5rem; letter-spacing: 0.2em; }
+      .stats { flex-direction: column; gap: 24px; }
+      .features, .doc-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <section class="hero">
+      <h1>LIMEN</h1>
+      <div class="subtitle">Cognitive Operating System</div>
+      <p class="tagline">
+        Deterministic infrastructure hosting stochastic cognition. One dependency. Typed, tested, audited.
+      </p>
+      <div class="install">
+        <span>$</span> npm install @solishq/limen
+      </div>
+      <div>
+        <a href="https://github.com/solishq/limen">GitHub</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://www.npmjs.com/package/@solishq/limen">npm</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://github.com/solishq/limen/discussions">Discussions</a>
+      </div>
+    </section>
+
+    <section class="stats">
+      <div class="stat">
+        <div class="number">1</div>
+        <div class="label">Production Dependency</div>
+      </div>
+      <div class="stat">
+        <div class="number">16</div>
+        <div class="label">System Calls</div>
+      </div>
+      <div class="stat">
+        <div class="number">99</div>
+        <div class="label">Verified Invariants</div>
+      </div>
+      <div class="stat">
+        <div class="number">3,100+</div>
+        <div class="label">Tests</div>
+      </div>
+    </section>
+
+    <section class="features">
+      <div class="feature">
+        <h3>Governance Boundary</h3>
+        <p>Agents propose through 16 system calls. Infrastructure validates and executes. No bypasses.</p>
+      </div>
+      <div class="feature">
+        <h3>Audit Trail</h3>
+        <p>Append-only, SHA-256 hash-chained. Every mutation and its audit entry in one transaction.</p>
+      </div>
+      <div class="feature">
+        <h3>Zero Provider SDKs</h3>
+        <p>Raw HTTP to Anthropic, OpenAI, Gemini, Groq, Mistral, Ollama. No transitive dependencies.</p>
+      </div>
+      <div class="feature">
+        <h3>Budget Enforcement</h3>
+        <p>Per-mission token budgets tracked continuously. Exceeding budget blocks execution.</p>
+      </div>
+      <div class="feature">
+        <h3>Multi-Tenant Isolation</h3>
+        <p>Row-level or database-level. Every query scoped. Cross-tenant access structurally impossible.</p>
+      </div>
+      <div class="feature">
+        <h3>Deterministic Replay</h3>
+        <p>Record LLM outputs. Replay to identical state. Debug, test, and audit agent behavior.</p>
+      </div>
+    </section>
+
+    <section class="docs">
+      <h2>Documentation</h2>
+      <div class="doc-grid">
+        <a class="doc-link" href="getting-started.html">
+          <div class="title">Getting Started</div>
+          <div class="desc">Install, first chat, streaming, structured output</div>
+        </a>
+        <a class="doc-link" href="providers.html">
+          <div class="title">Provider Cookbook</div>
+          <div class="desc">All 6 providers, routing, standalone transport</div>
+        </a>
+        <a class="doc-link" href="missions.html">
+          <div class="title">Mission System</div>
+          <div class="desc">Autonomous execution with governance</div>
+        </a>
+        <a class="doc-link" href="architecture.html">
+          <div class="title">Architecture</div>
+          <div class="desc">Four layers, three-file pattern, data flow</div>
+        </a>
+        <a class="doc-link" href="security-model.html">
+          <div class="title">Security Model</div>
+          <div class="desc">Encryption, audit, RBAC, transport safety</div>
+        </a>
+        <a class="doc-link" href="error-codes.html">
+          <div class="title">Error Codes</div>
+          <div class="desc">Complete error reference with retry guidance</div>
+        </a>
+        <a class="doc-link" href="deployment.html">
+          <div class="title">Deployment</div>
+          <div class="desc">Docker, environment, scaling, shutdown</div>
+        </a>
+        <a class="doc-link" href="faq.html">
+          <div class="title">FAQ</div>
+          <div class="desc">Serverless, edge, performance, security</div>
+        </a>
+        <a class="doc-link" href="api/index.html">
+          <div class="title">API Reference</div>
+          <div class="desc">TypeDoc-generated type documentation</div>
+        </a>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <p>
+      Built by <a href="https://solishq.com">SolisHQ</a>
+      &nbsp;&middot;&nbsp;
+      <a href="https://github.com/solishq/limen/blob/main/LICENSE">Apache-2.0</a>
+    </p>
+  </footer>
+</body>
+</html>

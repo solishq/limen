@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="800" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0a0a0a"/>
+      <stop offset="100%" stop-color="#1a1a2e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="400" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#667eea"/>
+      <stop offset="100%" stop-color="#764ba2"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="200" rx="12" fill="url(#bg)"/>
+
+  <!-- Threshold line (the limen) -->
+  <line x1="60" y1="120" x2="740" y2="120" stroke="url(#accent)" stroke-width="1.5" stroke-dasharray="4 6" opacity="0.4"/>
+
+  <!-- Left: deterministic (structured) -->
+  <rect x="80" y="130" width="3" height="40" rx="1" fill="#667eea" opacity="0.25"/>
+  <rect x="92" y="135" width="3" height="35" rx="1" fill="#667eea" opacity="0.2"/>
+  <rect x="104" y="128" width="3" height="42" rx="1" fill="#667eea" opacity="0.3"/>
+  <rect x="116" y="132" width="3" height="38" rx="1" fill="#667eea" opacity="0.2"/>
+  <rect x="128" y="130" width="3" height="40" rx="1" fill="#667eea" opacity="0.25"/>
+
+  <!-- Right: stochastic (organic) -->
+  <circle cx="680" cy="60" r="4" fill="#764ba2" opacity="0.15"/>
+  <circle cx="700" cy="50" r="3" fill="#764ba2" opacity="0.2"/>
+  <circle cx="660" cy="70" r="5" fill="#764ba2" opacity="0.1"/>
+  <circle cx="720" cy="65" r="3.5" fill="#764ba2" opacity="0.18"/>
+  <circle cx="690" cy="80" r="2.5" fill="#764ba2" opacity="0.12"/>
+
+  <!-- Title -->
+  <text x="400" y="75" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="56" font-weight="300" letter-spacing="12" fill="white">LIMEN</text>
+
+  <!-- Subtitle -->
+  <text x="400" y="105" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" letter-spacing="3" fill="#888" text-transform="uppercase">Cognitive Operating System</text>
+
+  <!-- Tagline below threshold -->
+  <text x="400" y="160" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" letter-spacing="1" fill="#555">deterministic infrastructure · stochastic cognition</text>
+
+  <!-- Stats bar -->
+  <text x="200" y="185" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="10" fill="#444">1 dependency</text>
+  <text x="360" y="185" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="10" fill="#444">16 system calls</text>
+  <text x="520" y="185" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="10" fill="#444">99 invariants</text>
+  <text x="660" y="185" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="10" fill="#444">3,100+ tests</text>
+</svg>

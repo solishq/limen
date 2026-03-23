@@ -66,6 +66,8 @@
     "test": "npx tsx --test $(find tests -path tests/scaffold -prune -o -name '*.test.ts' -print)",
     "test:all": "npx tsx --test $(find tests -name '*.test.ts')",
     "ci": "npm run typecheck && npm run build && npm run test",
+    "test:coverage": "c8 --reporter=text --reporter=lcov npx tsx --test $(find tests -path tests/scaffold -prune -o -name '*.test.ts' -print)",
+    "docs": "typedoc",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
@@ -74,7 +76,9 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.0.0",
+    "c8": "^11.0.0",
     "tsx": "^4.21.0",
+    "typedoc": "^0.28.18",
     "typescript": "^5.7.0"
   }
 }
