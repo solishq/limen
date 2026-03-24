@@ -1,0 +1,30 @@
+{
+  "name": "limen-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Limen Cognitive OS — Claude Code native integration",
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "limen-mcp": "./dist/server.js"
+  },
+  "main": "./dist/server.js",
+  "files": [
+    "dist/"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "limen-ai": "file:../../",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

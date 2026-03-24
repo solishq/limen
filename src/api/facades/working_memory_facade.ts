@@ -33,40 +33,41 @@ import { requirePermission } from '../enforcement/rbac_guard.js';
 import { requireRateLimit } from '../enforcement/rate_guard.js';
 
 // ============================================================================
-// WorkingMemoryApi — public facade interface
+// RawWorkingMemoryFacade — internal facade interface (conn, ctx, input)
 // ============================================================================
 
 /**
- * Public working memory API exposed on the Limen object.
+ * Internal working memory facade requiring explicit DatabaseConnection and OperationContext.
+ * Used by orchestration layer. Consumers use WorkingMemoryApi (convenience wrapper).
  * SC-14 (write), SC-15 (read), SC-16 (discard).
  * RBAC-gated, rate-limited, delegates to closure-local WorkingMemorySystem.
  */
-export interface WorkingMemoryApi {
+export interface RawWorkingMemoryFacade {
   write(conn: DatabaseConnection, ctx: OperationContext, input: WriteWorkingMemoryInput): Result<WriteWorkingMemoryOutput>;
   read(conn: DatabaseConnection, ctx: OperationContext, input: ReadWorkingMemoryInput): Result<ReadWorkingMemoryOutput>;
   discard(conn: DatabaseConnection, ctx: OperationContext, input: DiscardWorkingMemoryInput): Result<DiscardWorkingMemoryOutput>;
 }
 
 // ============================================================================
-// createWorkingMemoryFacade — factory
+// createRawWorkingMemoryFacade — factory
 // ============================================================================
 
 /**
- * Create a WorkingMemoryFacade that wraps WorkingMemorySystem with RBAC + rate limiting.
+ * Create a RawWorkingMemoryFacade that wraps WorkingMemorySystem with RBAC + rate limiting.
  *
  * The raw WorkingMemorySystem is closure-local — never leaked (DC-P4-406, C-SEC-05).
- * The returned facade is frozen and satisfies WorkingMemoryApi.
+ * The returned facade is frozen and satisfies RawWorkingMemoryFacade.
  *
  * @param wmpSystem - The raw WorkingMemorySystem (closure-local, never exposed)
  * @param rbac - Kernel RBAC engine
  * @param rateLimiter - Kernel rate limiter
- * @returns Frozen WorkingMemoryApi facade
+ * @returns Frozen RawWorkingMemoryFacade
  */
-export function createWorkingMemoryFacade(
+export function createRawWorkingMemoryFacade(
   wmpSystem: WorkingMemorySystem,
   rbac: RbacEngine,
   rateLimiter: RateLimiter,
-): WorkingMemoryApi {
+): RawWorkingMemoryFacade {
   return Object.freeze({
     /**
      * SC-14: Write to working memory.

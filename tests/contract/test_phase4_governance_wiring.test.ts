@@ -61,8 +61,8 @@ import { createExecutionGovernor } from '../../src/execution/harness/egp_harness
 import { createInvocationGate } from '../../src/execution/wiring/invocation_gate.js';
 import type { ExecutionGovernorDeps } from '../../src/execution/interfaces/egp_types.js';
 
-import { createClaimFacade } from '../../src/api/facades/claim_facade.js';
-import { createWorkingMemoryFacade } from '../../src/api/facades/working_memory_facade.js';
+import { createRawClaimFacade } from '../../src/api/facades/claim_facade.js';
+import { createRawWorkingMemoryFacade } from '../../src/api/facades/working_memory_facade.js';
 import { createWorkingMemorySystem } from '../../src/working-memory/harness/wmp_harness.js';
 
 import type { RbacEngine } from '../../src/kernel/interfaces/rbac.js';
@@ -1024,7 +1024,7 @@ describe('Phase 4: Governance Wiring — ClaimFacade RBAC', () => {
         queryClaims: { execute() { return { ok: true, value: { items: [], total: 0 } }; } },
       } as unknown as import('../../src/claims/interfaces/claim_types.js').ClaimSystem;
 
-      const facade = createClaimFacade(claimSystemMock, rbac, rateLimiter);
+      const facade = createRawClaimFacade(claimSystemMock, rbac, rateLimiter);
       facade.assertClaim(conn, ctx, {} as import('../../src/claims/interfaces/claim_types.js').ClaimCreateInput);
       assert.ok(assertClaimCalled, 'assertClaim should have been called on underlying system');
     });
@@ -1039,7 +1039,7 @@ describe('Phase 4: Governance Wiring — ClaimFacade RBAC', () => {
         queryClaims: { execute() { return { ok: true, value: {} }; } },
       } as unknown as import('../../src/claims/interfaces/claim_types.js').ClaimSystem;
 
-      const facade = createClaimFacade(claimSystemMock, rbac, rateLimiter);
+      const facade = createRawClaimFacade(claimSystemMock, rbac, rateLimiter);
 
       assert.throws(
         () => facade.assertClaim(conn, ctx, {} as import('../../src/claims/interfaces/claim_types.js').ClaimCreateInput),
@@ -1079,7 +1079,7 @@ describe('Phase 4: Governance Wiring — WorkingMemoryFacade RBAC', () => {
         discard: { execute() { return { ok: true, value: { discardedCount: 0, freedBytes: 0 } }; } },
       } as unknown as import('../../src/working-memory/interfaces/wmp_types.js').WorkingMemorySystem;
 
-      const facade = createWorkingMemoryFacade(wmpMock, rbac, rateLimiter);
+      const facade = createRawWorkingMemoryFacade(wmpMock, rbac, rateLimiter);
       facade.write(conn, ctx, {
         taskId: taskId('t-1'),
         key: 'test-key',
@@ -1098,7 +1098,7 @@ describe('Phase 4: Governance Wiring — WorkingMemoryFacade RBAC', () => {
         discard: { execute() { return { ok: true, value: {} }; } },
       } as unknown as import('../../src/working-memory/interfaces/wmp_types.js').WorkingMemorySystem;
 
-      const facade = createWorkingMemoryFacade(wmpMock, rbac, rateLimiter);
+      const facade = createRawWorkingMemoryFacade(wmpMock, rbac, rateLimiter);
 
       assert.throws(
         () => facade.write(conn, ctx, {

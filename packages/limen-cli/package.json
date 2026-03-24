@@ -1,0 +1,29 @@
+{
+  "name": "limen-cli",
+  "version": "1.0.0",
+  "description": "CLI for Limen Cognitive OS — JSON-first command-line interface",
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "limen": "./dist/cli.js"
+  },
+  "main": "./dist/cli.js",
+  "files": [
+    "dist/"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "^14.0.0",
+    "limen-ai": "file:../../"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

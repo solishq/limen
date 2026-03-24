@@ -57,6 +57,9 @@
     "README.md",
     "CHANGELOG.md"
   ],
+  "workspaces": [
+    "packages/*"
+  ],
   "engines": {
     "node": ">=22.0.0"
   },
