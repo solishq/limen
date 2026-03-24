@@ -113,7 +113,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
-      - name: Publish if version changed
+      - name: Publish core (limen-ai)
         run: |
           CURRENT=$(node -e "console.log(require('./package.json').version)")
           PUBLISHED=$(npm view limen-ai version 2>/dev/null || echo "0.0.0")
@@ -121,6 +121,40 @@ jobs:
             npm publish --provenance --access public
           else
             echo "Version $CURRENT already published, skipping."
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-packages:
+    needs: publish
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      matrix:
+        package: [limen-cli, limen-mcp, limen-a2a]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - name: Build ${{ matrix.package }}
+        run: npm run build --workspace packages/${{ matrix.package }}
+      - name: Publish ${{ matrix.package }}
+        run: |
+          cd packages/${{ matrix.package }}
+          CURRENT=$(node -e "console.log(require('./package.json').version)")
+          PUBLISHED=$(npm view ${{ matrix.package }} version 2>/dev/null || echo "0.0.0")
+          if [ "$CURRENT" != "$PUBLISHED" ]; then
+            npm publish --provenance --access public
+          else
+            echo "${{ matrix.package }}@$CURRENT already published, skipping."
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
