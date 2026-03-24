@@ -46,6 +46,7 @@ import { injectTechniques } from './technique_injector.js';
 // Sprint 5: I-14 latency verification + I-15 cost tracking
 import { evaluateLatency } from '../enforcement/latency_harness.js';
 import { computeSessionOverhead } from '../enforcement/cost_tracker.js';
+import type { MetricsCollector } from '../observability/metrics.js';
 
 // CF-013: Input size limits at API boundary
 /** Maximum chat message content size in bytes (default 100KB) */
@@ -76,6 +77,7 @@ export class ChatPipeline {
     private readonly techniqueReader?: TechniqueReader,
     private readonly modelContextWindow: number = 127_500,
     private readonly time: TimeProvider = { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() },
+    private readonly metrics?: MetricsCollector,
   ) {}
 
   /**
@@ -606,8 +608,24 @@ export class ChatPipeline {
         );
 
         resolveMetadata(metadata);
+
+        // PRR-103: Wire metrics recording
+        if (pipeline.metrics) {
+          const tid = pctx.sessionState.tenantId ?? undefined;
+          pipeline.metrics.recordRequest(totalMs, tid);
+          pipeline.metrics.recordTokens(
+            inputTokens, outputTokens,
+            (inputTokens + outputTokens) * 0.000001, tid,
+          );
+          if (ttftMs > 0) pipeline.metrics.recordTtft(ttftMs);
+        }
       } catch (error) {
         const cortexError = ensureLimenError(error);
+
+        // PRR-103: Record provider errors in metrics
+        if (pipeline.metrics && cortexError.code === 'PROVIDER_UNAVAILABLE') {
+          pipeline.metrics.recordProviderError(pctx.sessionState.tenantId ?? undefined);
+        }
 
         // Emit error chunk
         enqueueChunk({ type: 'error', code: cortexError.code, message: cortexError.message });

@@ -35,10 +35,10 @@ jobs:
 
       - name: 'No uncontrolled any types'
         run: |
-          COUNT=$(grep -rn "as any\|: any" src/ --include="*.ts" | grep -v "task_scheduler.ts" | grep -v "// " | wc -l | tr -d ' ')
+          COUNT=$(grep -rn "as any\|: any" src/ --include="*.ts" | grep -v "// " | wc -l | tr -d ' ')
           if [ "$COUNT" -gt 0 ]; then
             echo "::error::Uncontrolled 'any' usage found"
-            grep -rn "as any\|: any" src/ --include="*.ts" | grep -v "task_scheduler.ts" | grep -v "// "
+            grep -rn "as any\|: any" src/ --include="*.ts" | grep -v "// "
             exit 1
           fi
 
@@ -64,35 +64,7 @@ jobs:
           fi
 
       - name: Test
-        run: |
-          npm test 2>&1 | tee /tmp/test-output.txt || true
-          FAIL_COUNT=$(grep "^ℹ fail" /tmp/test-output.txt | awk '{print $2}')
-          if [ "${FAIL_COUNT:-0}" = "0" ]; then
-            echo "All tests passed."
-            exit 0
-          fi
-          UNEXPECTED=$(awk '
-            { lines[NR] = $0 }
-            /Error \[|AssertionError \[/ {
-              line = $0
-              if (line ~ /NotImplementedError/) next
-              if (line ~ /HARNESS GAP/) next
-              if (line ~ /Schema version must/) next
-              found_context = 0
-              start = (NR-10 > 0) ? NR-10 : 1
-              for (i = start; i < NR; i++) {
-                if (lines[i] ~ /NOT_IMPLEMENTED/) { found_context = 1; break }
-              }
-              if (found_context) next
-              print "UNEXPECTED [line " NR "]: " line
-            }
-          ' /tmp/test-output.txt)
-          if [ -n "$UNEXPECTED" ]; then
-            echo "::error::Unexpected test failures:"
-            echo "$UNEXPECTED"
-            exit 1
-          fi
-          echo "All $FAIL_COUNT failures are expected contract stubs (NotImplementedError/HARNESS GAP)"
+        run: npm test
 
       - name: Coverage report
         if: matrix.node-version == 22

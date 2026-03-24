@@ -17,7 +17,7 @@
 
 Your AI agents don't have a reliability problem. They have an infrastructure problem.
 
-Limen is a Cognitive Operating System. It does for AI agents what a kernel does for processes: isolation, resource control, lifecycle management, and deterministic behavior contracts. One production dependency. 16 system calls. 99 formally verified invariants. Every execution path typed and tested.
+Limen is a Cognitive Operating System. It does for AI agents what a kernel does for processes: isolation, resource control, lifecycle management, and deterministic behavior contracts. One production dependency. 16 system calls. 99 continuously enforced invariants backed by dedicated tests. Every execution path typed and tested.
 
 The name is Latin for *threshold* -- the architectural boundary where deterministic infrastructure meets stochastic cognition.
 

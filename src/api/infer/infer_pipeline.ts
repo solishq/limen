@@ -29,6 +29,7 @@ import type { SessionState } from '../sessions/session_manager.js';
 import { LimenError } from '../errors/limen_error.js';
 import { requirePermission, buildOperationContext } from '../enforcement/rbac_guard.js';
 import { requireRateLimit } from '../enforcement/rate_guard.js';
+import type { MetricsCollector } from '../observability/metrics.js';
 
 // CF-013: Input size limits at API boundary
 /** Maximum infer input size in bytes (default 100KB) */
@@ -110,6 +111,7 @@ export class InferPipeline {
     private readonly getConnection: () => DatabaseConnection,
     private readonly defaultTimeoutMs: number,
     private readonly defaultModel: string,
+    private readonly metrics?: MetricsCollector,
   ) {}
 
   /**
@@ -257,6 +259,10 @@ export class InferPipeline {
       const responseResult = await this.gateway.request(conn, ctx, llmRequest);
 
       if (!responseResult.ok) {
+        // PRR-103: Record provider error
+        if (this.metrics) {
+          this.metrics.recordProviderError(sessionState.tenantId ?? undefined);
+        }
         throw new LimenError('PROVIDER_UNAVAILABLE', 'LLM provider request failed.');
       }
 
@@ -309,6 +315,17 @@ export class InferPipeline {
           techniqueTokenCost: 0,
           safetyGates: [],
         };
+
+        // PRR-103: Wire metrics recording
+        if (this.metrics) {
+          const tid = sessionState.tenantId ?? undefined;
+          const durationMs = metadata.totalMs;
+          this.metrics.recordRequest(durationMs, tid);
+          this.metrics.recordTokens(
+            totalInputTokens, totalOutputTokens,
+            (totalInputTokens + totalOutputTokens) * 0.000001, tid,
+          );
+        }
 
         return {
           data: parsed,

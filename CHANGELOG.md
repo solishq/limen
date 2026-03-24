@@ -11,7 +11,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Cognitive Operating System: deterministic infrastructure hosting stochastic cognition
 - Four-layer architecture: Kernel (L1), Substrate (L1.5), Orchestration (L2), API (L4)
 - 16 system calls defining the governance boundary between agents and infrastructure
-- 99 formally verified invariants enforced by 3,100+ tests
+- 99 continuously enforced invariants backed by 3,200+ tests
 - SQLite foundation with WAL mode, ACID transactions, single dependency (`better-sqlite3`)
 - Append-only, hash-chained audit trail recording every state mutation
 - RBAC engine with role hierarchy and per-operation authorization

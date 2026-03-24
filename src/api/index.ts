@@ -789,13 +789,13 @@ export async function createLimen(
     rbac, rateLimiter, governedOrchestration, substrate.gateway,
     getConnection, getAudit, getSubstrate,
     defaultTimeoutMs, backpressureConfig, defaultModel,
-    learningSystem.applicator, 127_500, kernel.time,
+    learningSystem.applicator, 127_500, kernel.time, metricsCollector,
   );
 
   // Initialize infer pipeline
   const inferPipeline = new InferPipeline(
     rbac, rateLimiter, substrate.gateway,
-    getConnection, defaultTimeoutMs, defaultModel,
+    getConnection, defaultTimeoutMs, defaultModel, metricsCollector,
   );
 
   // Initialize session manager (needs chat and infer functions)
