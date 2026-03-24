@@ -213,6 +213,10 @@ export function createCheckpointCoordinator(transitionService?: OrchestrationTra
 
       // Side effects based on system action
       // P0-A: Rewired to OrchestrationTransitionService when available.
+      // F-RW-004: Use transitionMissionRecovery() — checkpoint escalation/abort are
+      // system-level overrides that must work from ANY non-terminal state (not just EXECUTING).
+      // Recovery skips transition map validation but keeps audit + CAS + governance.
+      // F-RW-003: Check the Result — log failure via audit if transition fails.
       // Legacy path retained for backward compatibility (tests without governance layer).
       if (transitionService && (systemAction === 'escalated' || systemAction === 'aborted')) {
         const cpMission = deps.conn.get<{ state: string }>(
@@ -223,16 +227,28 @@ export function createCheckpointCoordinator(transitionService?: OrchestrationTra
           const currentState = cpMission.state as MissionState;
           const terminalStates = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
           if (!terminalStates.has(currentState)) {
-            if (systemAction === 'escalated') {
-              transitionService.transitionMission(
-                deps.conn, checkpoint.mission_id as import('../../kernel/interfaces/index.js').MissionId,
-                currentState, 'BLOCKED',
-              );
-            } else {
-              transitionService.transitionMission(
-                deps.conn, checkpoint.mission_id as import('../../kernel/interfaces/index.js').MissionId,
-                currentState, 'CANCELLED',
-              );
+            const targetState = systemAction === 'escalated' ? 'BLOCKED' : 'CANCELLED';
+            const transitionResult = transitionService.transitionMissionRecovery(
+              deps.conn, checkpoint.mission_id as import('../../kernel/interfaces/index.js').MissionId,
+              currentState, targetState as MissionState,
+            );
+            if (!transitionResult.ok) {
+              // F-RW-003: Log transition failure. The checkpoint response is still recorded
+              // (the assessment IS captured) — this is a warning, not a fatal error.
+              deps.audit.append(deps.conn, {
+                tenantId: cpTenantId,
+                actorType: 'system',
+                actorId: 'checkpoint_coordinator',
+                operation: 'transition_failed',
+                resourceType: 'mission',
+                resourceId: checkpoint.mission_id,
+                detail: {
+                  attemptedTransition: { from: currentState, to: targetState },
+                  reason: systemAction === 'escalated' ? 'checkpoint_escalation' : 'checkpoint_abort',
+                  checkpointId: input.checkpointId,
+                  error: transitionResult.error,
+                },
+              });
             }
           }
         }

@@ -437,18 +437,25 @@ export class MissionApiImpl implements MissionApi {
 
       // S6: Pause mission (transition to PAUSED state)
       // P0-A: Rewired to OrchestrationTransitionService (sole transition mechanism)
+      // F-RW-005: Read current state first (like cancel() does), don't hardcode 'EXECUTING'.
+      // The transition map still validates (only EXECUTING→PAUSED is valid), but the error
+      // message will be accurate if the mission is in a different state.
       async pause(): Promise<void> {
         const conn = impl.getConnection();
         const ctx = impl.getContext();
         requirePermission(impl.rbac, ctx, 'create_mission');
         requireRateLimit(impl.rateLimiter, conn, ctx, 'api_calls');
 
+        const orchDeps = impl.buildOrchDeps();
+        const missionResult = impl.orchestration.missions.get(orchDeps, missionId);
+        const mission = unwrapResult(missionResult);
+
         const service = impl.orchestration.transitions;
         if (!service) {
           throw new Error('OrchestrationTransitionService not available');
         }
         const result = service.transitionMission(
-          conn, missionId, 'EXECUTING', 'PAUSED',
+          conn, missionId, mission.state, 'PAUSED',
         );
         unwrapResult(result);
       },
