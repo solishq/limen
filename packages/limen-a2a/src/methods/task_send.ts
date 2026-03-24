@@ -49,9 +49,17 @@ import {
   AgentRegisterSchema,
   AgentGetSchema,
   AgentPromoteSchema,
-  toBrandedInput,
   formatZodError,
 } from '../validation/schemas.js';
+
+/**
+ * Bridge Zod-validated data to Limen branded types.
+ * SAFETY: Called only after Zod schema.parse() validates structure.
+ * Branded types (MissionId, TaskId) are compile-time phantoms with no runtime effect.
+ */
+function toBrandedInput<T>(validated: unknown): T {
+  return validated as T;
+}
 
 /**
  * Validate and parse the A2A task envelope using Zod.
