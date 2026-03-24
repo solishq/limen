@@ -11,7 +11,7 @@
  * C-07: Returned object is Object.freeze'd.
  */
 
-import type { DatabaseConnection, AuditTrail, OperationContext, MissionId, RateLimiter, TimeProvider } from '../kernel/interfaces/index.js';
+import type { DatabaseConnection, AuditTrail, OperationContext, MissionId, RateLimiter, TimeProvider, TransitionEnforcer } from '../kernel/interfaces/index.js';
 import type { Substrate } from '../substrate/interfaces/substrate.js';
 import type {
   OrchestrationDeps, OrchestrationEngine,
@@ -27,6 +27,7 @@ import type {
   RespondCheckpointInput, RespondCheckpointOutput,
 } from './interfaces/orchestration.js';
 import type { Result } from '../kernel/interfaces/index.js';
+import { createOrchestrationTransitionService } from './transitions/transition_service.js';
 
 // Core module factories
 import { createMissionStore } from './missions/mission_store.js';
@@ -72,6 +73,7 @@ export function createOrchestration(
   audit: AuditTrail,
   rateLimiter?: RateLimiter,
   time?: TimeProvider,
+  transitionEnforcer?: TransitionEnforcer,
 ): OrchestrationEngine {
   // Hard Stop #7: Default to system time if not injected (backward compatibility).
   // Production callers should always provide kernel.time.
@@ -107,6 +109,13 @@ export function createOrchestration(
   const checkpointCoordinator = createCheckpointCoordinator();
   const conversationManager = createConversationManager();
   const compactionEngine = createCompactionEngine();
+
+  // P0-A: OrchestrationTransitionService — bridges L2 transitions to governance TransitionEnforcer.
+  // Optional until Task #233 rewires all callers. When transitionEnforcer is provided (from governance layer),
+  // the service is created and exposed on the engine. When absent, engine.transitions is undefined.
+  const transitionService = transitionEnforcer
+    ? createOrchestrationTransitionService(transitionEnforcer, audit, resolvedTime)
+    : undefined;
 
   // FM-19: Delegation detector uses mission store's chain
   const delegationDetector = Object.freeze({
@@ -184,6 +193,8 @@ export function createOrchestration(
     events: eventPropagator,
     conversations: conversationManager,
     delegation: delegationDetector,
+    // P0-A: Transition service is conditionally included when TransitionEnforcer is provided
+    ...(transitionService ? { transitions: transitionService } : {}),
   };
 
   return Object.freeze(engine);
