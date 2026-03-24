@@ -789,7 +789,7 @@ export async function createLimen(
     rbac, rateLimiter, governedOrchestration, substrate.gateway,
     getConnection, getAudit, getSubstrate,
     defaultTimeoutMs, backpressureConfig, defaultModel,
-    learningSystem.applicator,
+    learningSystem.applicator, 127_500, kernel.time,
   );
 
   // Initialize infer pipeline
