@@ -4,6 +4,23 @@
   "description": "A2A server for Limen Cognitive OS — Google Agent-to-Agent Protocol",
   "type": "module",
   "license": "Apache-2.0",
+  "author": {
+    "name": "SolisHQ",
+    "url": "https://solishq.ai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/solishq/limen.git",
+    "directory": "packages/limen-a2a"
+  },
+  "homepage": "https://github.com/solishq/limen/tree/main/packages/limen-a2a",
+  "bugs": {
+    "url": "https://github.com/solishq/limen/issues"
+  },
+  "keywords": ["limen", "a2a", "agent-to-agent", "cognitive-os", "ai", "agent"],
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "limen-a2a": "./dist/server.js"
   },
@@ -20,7 +37,7 @@
     "test": "npx tsx --test tests/*.test.ts"
   },
   "dependencies": {
-    "limen-ai": "file:../../",
+    "limen-ai": "^1.0.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {

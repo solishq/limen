@@ -4,6 +4,23 @@
   "description": "MCP server for Limen Cognitive OS — Claude Code native integration",
   "type": "module",
   "license": "Apache-2.0",
+  "author": {
+    "name": "SolisHQ",
+    "url": "https://solishq.ai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/solishq/limen.git",
+    "directory": "packages/limen-mcp"
+  },
+  "homepage": "https://github.com/solishq/limen/tree/main/packages/limen-mcp",
+  "bugs": {
+    "url": "https://github.com/solishq/limen/issues"
+  },
+  "keywords": ["limen", "mcp", "model-context-protocol", "claude", "cognitive-os", "ai"],
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "limen-mcp": "./dist/server.js"
   },
@@ -20,7 +37,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
-    "limen-ai": "file:../../",
+    "limen-ai": "^1.0.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {

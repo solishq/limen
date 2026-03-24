@@ -4,6 +4,23 @@
   "description": "CLI for Limen Cognitive OS — JSON-first command-line interface",
   "type": "module",
   "license": "Apache-2.0",
+  "author": {
+    "name": "SolisHQ",
+    "url": "https://solishq.ai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/solishq/limen.git",
+    "directory": "packages/limen-cli"
+  },
+  "homepage": "https://github.com/solishq/limen/tree/main/packages/limen-cli",
+  "bugs": {
+    "url": "https://github.com/solishq/limen/issues"
+  },
+  "keywords": ["limen", "cli", "cognitive-os", "ai", "agent"],
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "limen": "./dist/cli.js"
   },
@@ -20,7 +37,7 @@
   },
   "dependencies": {
     "commander": "^14.0.0",
-    "limen-ai": "file:../../"
+    "limen-ai": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
