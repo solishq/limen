@@ -120,8 +120,8 @@ interface SubstrateAuditDep {
  * When provided, the LLM gateway encrypts request/response bodies before storage.
  */
 interface SubstrateEncryptionDep {
-  encrypt(plaintext: string): string;
-  decrypt(ciphertext: string): string;
+  encrypt(plaintext: string): Result<string>;
+  decrypt(ciphertext: string): Result<string>;
 }
 
 /**

@@ -338,21 +338,30 @@ export function createAuditTrail(sha256Fn: (data: string) => string, time?: Time
         let expectedHash: string | null = null;
         let actualHash: string | null = null;
 
+        // PRR-F-001: The audit hash chain is global (all tenants share one
+        // monotonic sequence). When filtering by tenantId, the filtered rows
+        // will have non-contiguous seq_nos and each row's previous_hash points
+        // to its global predecessor (which may belong to another tenant).
+        // Therefore: skip chain linkage and gap checks for tenant-filtered views.
+        // Per-entry hash recomputation still verifies individual entry integrity.
+        const isTenantFiltered = tenantId !== undefined;
         let prevHash = GENESIS_HASH;
 
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i]!;
 
-          // Check for sequence gaps
-          if (i > 0) {
+          // Check for sequence gaps (skip for tenant-filtered views — gaps are
+          // structurally expected when other tenants' entries are excluded)
+          if (!isTenantFiltered && i > 0) {
             const prevSeqNo = rows[i - 1]!.seq_no;
             for (let s = prevSeqNo + 1; s < row.seq_no; s++) {
               gaps.push(s);
             }
           }
 
-          // Verify previousHash links
-          if (row.previous_hash !== prevHash) {
+          // Verify previousHash chain linkage (skip for tenant-filtered views —
+          // the chain is global so filtered entries won't form a contiguous chain)
+          if (!isTenantFiltered && row.previous_hash !== prevHash) {
             valid = false;
             brokenAt = row.seq_no;
             expectedHash = prevHash;
@@ -360,7 +369,7 @@ export function createAuditTrail(sha256Fn: (data: string) => string, time?: Time
             break;
           }
 
-          // Recompute hash
+          // Recompute hash (always — proves individual entry integrity)
           const input: AuditCreateInput = {
             tenantId: row.tenant_id as TenantId | null,
             actorType: row.actor_type as AuditCreateInput['actorType'],
@@ -387,7 +396,7 @@ export function createAuditTrail(sha256Fn: (data: string) => string, time?: Time
         return {
           ok: true,
           value: {
-            valid: valid && gaps.length === 0,
+            valid: valid && (isTenantFiltered || gaps.length === 0),
             totalEntries: rows.length,
             firstSeqNo: rows[0]!.seq_no,
             lastSeqNo: rows[rows.length - 1]!.seq_no,

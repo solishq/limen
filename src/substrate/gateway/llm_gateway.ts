@@ -90,8 +90,8 @@ const DEFAULT_COOLDOWN_MS = 60000;
  * S ref: I-11 (encryption at rest), I-25 (deterministic replay — still works with decryption)
  */
 interface EncryptionDep {
-  encrypt(plaintext: string): string;
-  decrypt(ciphertext: string): string;
+  encrypt(plaintext: string): Result<string>;
+  decrypt(ciphertext: string): Result<string>;
 }
 
 /**
@@ -256,9 +256,12 @@ export function createLlmGateway(audit?: AuditDep, encryption?: EncryptionDep, t
     promptHash: string,
     providerId: string,
   ): void {
-    // CF-010: Encrypt request body before storage if encryption is available
+    // CF-010: Encrypt request body before storage if encryption is available.
+    // LRA-002: StringEncryption returns Result<string>. On failure, store plaintext
+    // rather than crashing — encryption failure must not block LLM requests.
     const requestJson = JSON.stringify(request);
-    const storedBody = encryption ? encryption.encrypt(requestJson) : requestJson;
+    const encryptResult = encryption ? encryption.encrypt(requestJson) : null;
+    const storedBody = encryptResult ? (encryptResult.ok ? encryptResult.value : requestJson) : requestJson;
 
     conn.run(
       `INSERT INTO core_llm_request_log
@@ -287,9 +290,11 @@ export function createLlmGateway(audit?: AuditDep, encryption?: EncryptionDep, t
     latencyMs: number,
   ): void {
     if (response) {
-      // CF-010: Encrypt response body before storage if encryption is available
+      // CF-010: Encrypt response body before storage if encryption is available.
+      // LRA-002: Degrade to plaintext on encryption failure rather than crash.
       const responseJson = JSON.stringify(response);
-      const storedBody = encryption ? encryption.encrypt(responseJson) : responseJson;
+      const encResult = encryption ? encryption.encrypt(responseJson) : null;
+      const storedBody = encResult ? (encResult.ok ? encResult.value : responseJson) : responseJson;
 
       conn.run(
         `UPDATE core_llm_request_log
@@ -392,13 +397,13 @@ export function createLlmGateway(audit?: AuditDep, encryption?: EncryptionDep, t
       }
     }
 
-    // Fallback: No transport configured (Phase 2 stub behavior)
+    // Fallback: No transport configured (No transport configured)
     const latencyMs = clock.nowMs() - startTime;
     logResponse(conn, requestId, null, 'No HTTP transport configured', latencyMs);
 
     return err(
       'PROVIDER_UNAVAILABLE',
-      'LLM gateway HTTP transport not configured -- infrastructure only in Phase 2',
+      'LLM gateway HTTP transport not configured -- configure providers in LimenConfig to enable LLM requests',
       '§25.4'
     );
   }
@@ -454,10 +459,10 @@ export function createLlmGateway(audit?: AuditDep, encryption?: EncryptionDep, t
       }
     }
 
-    // Fallback: No transport configured (Phase 2 stub behavior)
+    // Fallback: No transport configured (No transport configured)
     return err(
       'PROVIDER_UNAVAILABLE',
-      'LLM gateway streaming transport not configured -- infrastructure only in Phase 2',
+      'LLM gateway streaming transport not configured -- configure providers in LimenConfig to enable LLM requests',
       '§25.4/§27'
     );
   }

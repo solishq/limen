@@ -151,6 +151,19 @@ export function createRetentionScheduler(auditTrail?: AuditTrail, time?: TimePro
               break;
             }
 
+            case 'interactions': {
+              // PRR-PE-016: Retain chat interaction records for technique extraction,
+              // then delete after retention period to prevent unbounded table growth.
+              if (policy.action === 'delete') {
+                const result = conn.run(
+                  `DELETE FROM core_interactions WHERE created_at < ?`,
+                  [cutoff]
+                );
+                recordsDeleted += result.changes;
+              }
+              break;
+            }
+
             case 'memories':
             case 'techniques': {
               // CF-002 dependency: core_memories and core_techniques tables don't exist yet.

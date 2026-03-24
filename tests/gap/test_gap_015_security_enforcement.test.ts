@@ -310,10 +310,10 @@ describe('CF-010: Sensitive data encryption at rest (I-11)', () => {
     const conn = createTestDatabase();
     const ctx = createTestOperationContext();
 
-    // Create event bus WITH encryption
+    // Create event bus WITH encryption (LRA-002: Result<string> interface)
     const encryption = {
-      encrypt: (plaintext: string) => `ENC:${Buffer.from(plaintext).toString('base64')}`,
-      decrypt: (ciphertext: string) => Buffer.from(ciphertext.replace('ENC:', ''), 'base64').toString(),
+      encrypt: (plaintext: string) => ({ ok: true as const, value: `ENC:${Buffer.from(plaintext).toString('base64')}` }),
+      decrypt: (ciphertext: string) => ({ ok: true as const, value: Buffer.from(ciphertext.replace('ENC:', ''), 'base64').toString() }),
     };
     const eventBus = createEventBus(encryption);
 
@@ -366,8 +366,8 @@ describe('CF-010: Sensitive data encryption at rest (I-11)', () => {
     const audit = createTestAuditTrail();
 
     const encryption = {
-      encrypt: (plaintext: string) => `ENC:${Buffer.from(plaintext).toString('base64')}`,
-      decrypt: (ciphertext: string) => Buffer.from(ciphertext.replace('ENC:', ''), 'base64').toString(),
+      encrypt: (plaintext: string) => ({ ok: true as const, value: `ENC:${Buffer.from(plaintext).toString('base64')}` }),
+      decrypt: (ciphertext: string) => ({ ok: true as const, value: Buffer.from(ciphertext.replace('ENC:', ''), 'base64').toString() }),
     };
 
     const gateway = createLlmGateway(audit, encryption);
@@ -734,11 +734,13 @@ describe('CF-010 WIRING: Default kernel path activates event bus encryption (I-1
     const enc = createStringEncryption(crypto, masterKey);
 
     const original = 'sensitive-data-that-must-be-protected';
-    const encrypted = enc.encrypt(original);
-    assert.notEqual(encrypted, original, 'Encrypted value must differ from plaintext');
+    const encryptResult = enc.encrypt(original);
+    assert.ok(encryptResult.ok, 'Encryption must succeed');
+    assert.notEqual(encryptResult.value, original, 'Encrypted value must differ from plaintext');
 
-    const decrypted = enc.decrypt(encrypted);
-    assert.equal(decrypted, original, 'Decrypted value must match original plaintext');
+    const decryptResult = enc.decrypt(encryptResult.value);
+    assert.ok(decryptResult.ok, 'Decryption must succeed');
+    assert.equal(decryptResult.value, original, 'Decrypted value must match original plaintext');
   });
 });
 

@@ -326,7 +326,7 @@ describe('EVENT-01: Webhook Delivery Engine', () => {
     });
 
     const mockEncryption = {
-      decrypt: (ciphertext: string) => ciphertext.replace('ENCRYPTED:', ''),
+      decrypt: (ciphertext: string) => ({ ok: true as const, value: ciphertext.replace('ENCRYPTED:', '') }),
     };
 
     const result = await deliverWebhooks(conn, mockEncryption, TEST_TIME);

@@ -14,7 +14,7 @@
 
 import {
   createCipheriv, createDecipheriv, createHash, createHmac,
-  randomBytes, pbkdf2Sync,
+  randomBytes, pbkdf2Sync, timingSafeEqual,
 } from 'node:crypto';
 import { randomUUID } from 'node:crypto';
 import type {
@@ -395,8 +395,8 @@ export function createVaultOperations(crypto: CryptoEngine, masterKey: Buffer): 
  * S ref: I-11 (encryption at rest), CF-010 (LLM + webhook encryption)
  */
 export interface StringEncryption {
-  encrypt(plaintext: string): string;
-  decrypt(ciphertext: string): string;
+  encrypt(plaintext: string): Result<string>;
+  decrypt(ciphertext: string): Result<string>;
 }
 
 export function createStringEncryption(crypto: CryptoEngine, masterKey: Buffer): StringEncryption {
@@ -404,19 +404,19 @@ export function createStringEncryption(crypto: CryptoEngine, masterKey: Buffer):
   const key = masterKey.subarray(0, KEY_LENGTH);
 
   return {
-    encrypt(plaintext: string): string {
+    encrypt(plaintext: string): Result<string> {
       const result = crypto.encrypt(Buffer.from(plaintext, 'utf8'), key);
       if (!result.ok) {
-        throw new Error(`Encryption failed: ${result.error.code}`);
+        return { ok: false, error: { code: 'ENCRYPTION_FAILED', message: result.error.message, spec: 'I-11' } };
       }
       const { iv, authTag, ciphertext } = result.value;
-      return `${iv.toString('base64')}:${authTag.toString('base64')}:${ciphertext.toString('base64')}`;
+      return { ok: true, value: `${iv.toString('base64')}:${authTag.toString('base64')}:${ciphertext.toString('base64')}` };
     },
 
-    decrypt(ciphertext: string): string {
+    decrypt(ciphertext: string): Result<string> {
       const parts = ciphertext.split(':');
       if (parts.length !== 3) {
-        throw new Error('Invalid encrypted format: expected iv:authTag:ciphertext');
+        return { ok: false, error: { code: 'DECRYPTION_FAILED', message: 'Invalid encrypted format: expected iv:authTag:ciphertext', spec: 'I-11' } };
       }
       const [ivB64, authTagB64, ciphertextB64] = parts as [string, string, string];
       const payload = {
@@ -428,11 +428,41 @@ export function createStringEncryption(crypto: CryptoEngine, masterKey: Buffer):
       };
       const result = crypto.decrypt(payload, key);
       if (!result.ok) {
-        throw new Error(`Decryption failed: ${result.error.code}`);
+        return { ok: false, error: { code: 'DECRYPTION_FAILED', message: result.error.message, spec: 'I-11' } };
       }
-      return result.value.toString('utf8');
+      return { ok: true, value: result.value.toString('utf8') };
     },
   };
+}
+
+/**
+ * LRA-001 / INV-130: Timing-safe HMAC verification.
+ * Prevents timing side-channel attacks when comparing HMAC signatures.
+ * Use this instead of === for any security-sensitive string comparison.
+ *
+ * @param a - First hex string
+ * @param b - Second hex string
+ * @returns true if equal (constant-time)
+ */
+export function timingSafeHexEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'hex');
+  const bufB = Buffer.from(b, 'hex');
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
+/**
+ * LRA-001: Timing-safe HMAC-SHA256 verification.
+ * Computes HMAC-SHA256 and compares against expected value in constant time.
+ *
+ * @param data - Data that was signed
+ * @param secret - HMAC secret
+ * @param expectedHmac - Expected hex-encoded HMAC to verify against
+ * @returns true if the HMAC matches (constant-time comparison)
+ */
+export function hmacVerify(data: string, secret: string, expectedHmac: string): boolean {
+  const computed = createHmac('sha256', secret).update(data).digest('hex');
+  return timingSafeHexEqual(computed, expectedHmac);
 }
 
 export { DEFAULT_PBKDF2_ITERATIONS, KEY_LENGTH, IV_LENGTH, AUTH_TAG_LENGTH, AES_256_GCM };
