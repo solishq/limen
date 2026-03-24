@@ -296,13 +296,16 @@ export function createTransportEngine(options?: TransportEngineOptions): Transpo
             retryCount++;
             // Wait for Retry-After delay or use exponential backoff
             const delay = retryAfterMs ?? Math.min(1000 * Math.pow(2, attempt), 10000);
+            // PRR-F-002: Listen for abort during delay to avoid TOCTOU race.
+            // Previous code only checked composedSignal.aborted once (snapshot),
+            // missing aborts that arrive after the check but before timeout fires.
             await new Promise<void>((resolve) => {
+              if (composedSignal.aborted) { resolve(); return; }
               const timerId = setTimeout(resolve, delay);
-              // If aborted during wait, resolve immediately
-              if (composedSignal.aborted) {
+              composedSignal.addEventListener('abort', () => {
                 clearTimeout(timerId);
                 resolve();
-              }
+              }, { once: true });
             });
             continue;
           }

@@ -3,7 +3,7 @@
 ## General
 
 ### What is Limen?
-A Cognitive Operating System for AI agents. It provides the infrastructure that makes AI agents reliable: persistence, audit trails, budget enforcement, multi-tenant isolation, and governance boundaries. One production dependency, 16 system calls, 99 formally verified invariants.
+A Cognitive Operating System for AI agents. It provides the infrastructure that makes AI agents reliable: persistence, audit trails, budget enforcement, multi-tenant isolation, and governance boundaries. One production dependency, 16 system calls, 99 continuously enforced invariants.
 
 ### Why "Limen"?
 Latin for *threshold* — the architectural boundary where deterministic infrastructure meets stochastic cognition.
@@ -88,7 +88,7 @@ No. Limen enforces a single production dependency (I-01). CI will reject any PR 
 
 ### How do I run the tests?
 ```bash
-npm test          # Main test suite (~3,100 tests)
+npm test          # Main test suite (3,200+ tests)
 npm run test:all  # All tests including scaffold stubs
 npm run typecheck # TypeScript strict mode
 npm run ci        # typecheck + build + test

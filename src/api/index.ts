@@ -93,6 +93,9 @@ import { getKnowledgeGraphMigrations } from './migration/025_knowledge_graph.js'
 // Sprint 4: Replay & pipeline — replay snapshots + LLM log immutability + recovery index (v35)
 import { getReplayPipelineMigrations } from './migration/026_replay_pipeline.js';
 
+// PRR-PE-016: Interactions retention policy (v36)
+import { getInteractionsRetentionMigrations } from './migration/027_interactions_retention.js';
+
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
 
@@ -125,7 +128,7 @@ import { WorkingMemoryApiImpl } from './facades/working_memory_api_impl.js';
 // Re-export public types (convenience for consumers)
 // ============================================================================
 
-export type { Limen, LimenConfig } from './interfaces/api.js';
+export type { Limen, LimenConfig, LimenLogEvent, LimenLogger } from './interfaces/api.js';
 export { LimenError } from './errors/limen_error.js';
 export type { LimenErrorCode } from './interfaces/api.js';
 
@@ -348,10 +351,11 @@ function buildOrchestrationAdapter(
       ...getTrustLearningMigrations(),                 // v33: core_trust_transitions, core_safety_violations, core_interactions
       ...getKnowledgeGraphMigrations(),                // v34: staleness_flag, core_drift_assessments
       ...getReplayPipelineMigrations(),                // v35: core_replay_snapshots, LLM log immutability, recovery index
+      ...getInteractionsRetentionMigrations(),          // v36: expand retention CHECK constraint, seed interactions policy
     ]);
     if (!phase4Governance.ok) {
       conn.close();
-      throw new LimenError('ENGINE_UNHEALTHY', `Failed to run Phase 4 governance migrations (v16-v35): ${phase4Governance.error.message}`);
+      throw new LimenError('ENGINE_UNHEALTHY', `Failed to run Phase 4 governance migrations (v16-v36): ${phase4Governance.error.message}`);
     }
 
     // CF-004 / self-review: cleanup connection if orchestration construction fails
@@ -578,6 +582,7 @@ export async function createLimen(
         ...getTrustLearningMigrations(),
         ...getKnowledgeGraphMigrations(),
         ...getReplayPipelineMigrations(),
+        ...getInteractionsRetentionMigrations(),
       ]);
       if (recoveryMigResult.ok) {
         // P0-A: Pass transition service to recovery for governance-enforced transitions.

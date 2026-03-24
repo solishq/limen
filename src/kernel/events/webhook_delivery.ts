@@ -25,7 +25,7 @@
  */
 
 import { createHmac } from 'node:crypto';
-import type { DatabaseConnection } from '../interfaces/index.js';
+import type { DatabaseConnection, Result } from '../interfaces/index.js';
 import type { TimeProvider } from '../interfaces/time.js';
 
 // ============================================================================
@@ -38,7 +38,7 @@ import type { TimeProvider } from '../interfaces/time.js';
  * import coupling to the event bus module.
  */
 interface WebhookEncryption {
-  decrypt(ciphertext: string): string;
+  decrypt(ciphertext: string): Result<string>;
 }
 
 /**
@@ -280,27 +280,29 @@ async function deliverSingle(
     };
   }
 
-  // 3. Decrypt secret if encrypted
+  // 3. Decrypt secret if encrypted (LRA-002: Result<string> pattern)
   let webhookSecret: string;
-  try {
-    webhookSecret = config.encrypted && encryption
-      ? encryption.decrypt(config.secret)
-      : config.secret;
-  } catch {
-    // Decryption failure — do NOT include secret in error
-    conn.run(
-      `UPDATE obs_webhook_deliveries SET status = 'exhausted', last_attempt_at = ?,
-       error_message = 'Webhook secret decryption failed'
-       WHERE id = ?`,
-      [clock.nowISO(), delivery.id],
-    );
-    return {
-      deliveryId: delivery.id,
-      subscriptionId: delivery.subscription_id,
-      eventId: delivery.event_id,
-      status: 'exhausted',
-      errorMessage: 'Webhook secret decryption failed',
-    };
+  if (config.encrypted && encryption) {
+    const decryptResult = encryption.decrypt(config.secret);
+    if (!decryptResult.ok) {
+      // Decryption failure — do NOT include secret in error
+      conn.run(
+        `UPDATE obs_webhook_deliveries SET status = 'exhausted', last_attempt_at = ?,
+         error_message = 'Webhook secret decryption failed'
+         WHERE id = ?`,
+        [clock.nowISO(), delivery.id],
+      );
+      return {
+        deliveryId: delivery.id,
+        subscriptionId: delivery.subscription_id,
+        eventId: delivery.event_id,
+        status: 'exhausted',
+        errorMessage: 'Webhook secret decryption failed',
+      };
+    }
+    webhookSecret = decryptResult.value;
+  } else {
+    webhookSecret = config.secret;
   }
 
   // 4. Get event payload

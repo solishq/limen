@@ -65,8 +65,8 @@ function matchesPattern(eventType: string, pattern: string): boolean {
  * S ref: I-11 (encryption at rest), IP-6 (webhook HMAC signing)
  */
 interface EventBusEncryption {
-  encrypt(plaintext: string): string;
-  decrypt(ciphertext: string): string;
+  encrypt(plaintext: string): Result<string>;
+  decrypt(ciphertext: string): Result<string>;
 }
 
 /**
@@ -250,9 +250,12 @@ export function createEventBus(encryption?: EventBusEncryption, time?: TimeProvi
         }
 
         const id = randomUUID();
-        // CF-010: Encrypt webhook secret before storage if encryption is available
-        const storedSecret = encryption ? encryption.encrypt(secret) : secret;
-        const handlerConfig = JSON.stringify({ url, secret: storedSecret, encrypted: !!encryption });
+        // CF-010: Encrypt webhook secret before storage if encryption is available.
+        // LRA-002: On encryption failure, store plaintext and mark as unencrypted.
+        const encResult = encryption ? encryption.encrypt(secret) : null;
+        const storedSecret = encResult && encResult.ok ? encResult.value : secret;
+        const isEncrypted = encResult !== null && encResult.ok;
+        const handlerConfig = JSON.stringify({ url, secret: storedSecret, encrypted: isEncrypted });
 
         conn.run(
           `INSERT INTO obs_event_subscriptions (id, event_pattern, subscriber_type, handler_config, tenant_id, active, created_at)

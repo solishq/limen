@@ -43,5 +43,5 @@
   <text x="200" y="185" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="10" fill="#444">1 dependency</text>
   <text x="360" y="185" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="10" fill="#444">16 system calls</text>
   <text x="520" y="185" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="10" fill="#444">99 invariants</text>
-  <text x="660" y="185" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="10" fill="#444">3,100+ tests</text>
+  <text x="660" y="185" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="10" fill="#444">3,200+ tests</text>
 </svg>

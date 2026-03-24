@@ -117,9 +117,11 @@ const analysis = await limen.infer({
 });
 console.log(analysis.data); // Typed, validated, guaranteed to match schema
 
-// Cleanup
+// Cleanup — closes sessions, flushes webhooks, checkpoints WAL, closes DB
 await limen.shutdown();
 ```
+
+> **Shutdown behavior:** `shutdown()` closes all active sessions (which terminates open streams with error chunks), flushes pending webhook deliveries, stops the substrate worker pool, and closes database connections. In-flight LLM requests that have already been dispatched to providers will complete or time out independently — they are not forcibly aborted. Ensure all `chat()` and `infer()` calls have resolved before calling `shutdown()` for a clean exit.
 
 `createLimen()` returns a deeply frozen object. Every method is immutable. Two calls produce fully independent instances -- no shared state, no cross-contamination.
 
@@ -137,7 +139,7 @@ await limen.shutdown();
 > // Load from file or environment
 > const masterKey = Buffer.from(process.env.LIMEN_MASTER_KEY!, 'hex');
 > // or
-> const masterKey = fs.readFileSync('./master.key', 'utf8').trim();
+> const masterKey = Buffer.from(fs.readFileSync('./master.key', 'utf8').trim(), 'hex');
 > ```
 >
 > Keep the key out of version control. Rotate by re-encrypting: create a new engine instance with the new key and migrate data through the public API.
@@ -204,7 +206,7 @@ const result = await agent.runMission({
   objective: 'Analyze competitive landscape for drone delivery in Southeast Asia',
   constraints: {
     tokenBudget: 50_000,
-    deadline: '2024-12-31T23:59:59Z',
+    deadline: '2026-12-31T23:59:59Z',
     capabilities: ['web', 'data'],
   },
 });
@@ -301,6 +303,8 @@ const limen = await createLimen({
 
 Sessions bind a conversation to an agent and tenant context. Within a session, conversation history is maintained, turns are recorded, and the context window is managed automatically -- including summarization when the window fills.
 
+> **Concurrency note:** `chat()` and `infer()` calls on the same session are not serialized. If you need to send multiple messages in sequence, `await` each call before starting the next. Concurrent calls on the same session will produce interleaved conversation history.
+
 ```typescript
 const session = await limen.session({
   agentName: 'researcher',
@@ -339,7 +343,7 @@ const mission = await limen.missions.create({
   objective: 'Produce a competitive analysis report',
   constraints: {
     tokenBudget: 100_000,
-    deadline: '2024-12-31T23:59:59Z',
+    deadline: '2026-12-31T23:59:59Z',
     capabilities: ['web', 'data', 'code'],
     maxTasks: 20,
   },
@@ -468,12 +472,23 @@ interface LimenConfig {
     maxWorkers?: number;                     // Worker pool size (default: 4)
     schedulerPolicy?: 'deadline' | 'fair-share' | 'budget-aware';
   };
+  offline?: {                                // Offline/disconnected operation (S30)
+    embeddings?: boolean;                    // Enable local embedding cache
+    queueSize?: number;                      // Offline operation queue size
+    syncOnReconnect?: boolean;               // Auto-sync when connectivity returns
+  };
   hitl?: HitlConfig;                         // Human-in-the-loop defaults
+  safety?: {                                 // Safety gate configuration (DL-5)
+    enabled?: boolean;                       // Enable pre/post-safety gates (default: true)
+    jitterEnabled?: boolean;                 // Add jitter to safety timing
+  };
   defaultTimeoutMs?: number;                 // Chat/infer timeout (default: 60000)
   rateLimiting?: {
     apiCallsPerMinute?: number;              // Default: 100
+    emitEventPerMinute?: number;             // Event emission rate limit
     maxConcurrentStreams?: number;            // Default: 50
   };
+  failoverPolicy?: 'degrade' | 'allow-overdraft' | 'block';  // Provider failure behavior (FM-12)
   logger?: (event: LimenLogEvent) => void;  // Structured logging callback
 }
 ```
