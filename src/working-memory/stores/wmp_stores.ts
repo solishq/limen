@@ -562,10 +562,25 @@ export function createBoundaryCaptureCoordinator(
 
         // 4. Terminal state transition — update core_tasks
         // F-WMP-BB-01: Use actual terminal state, never hard-code 'COMPLETED'
+        // F-RW-001: CAS protection — read current state, only update if non-terminal.
+        // WMP is at L1.5 (Substrate layer). OrchestrationTransitionService is at L2.
+        // Calling UP from L1.5→L2 would violate layer boundaries.
+        // CAS (WHERE id = ? AND state NOT IN terminal) is the L1-level defense.
+        // This prevents TOCTOU races where another transaction already terminated the task.
         const now = monotonicNowISO(clock);
+        const terminalStates = ['COMPLETED', 'FAILED', 'CANCELLED'];
+        const currentTask = conn.get<{ state: string }>(
+          'SELECT state FROM core_tasks WHERE id = ?',
+          [taskId],
+        );
+        if (currentTask && terminalStates.includes(currentTask.state)) {
+          // Task already in terminal state — no-op for idempotency.
+          // The boundary snapshot was already captured above, which is the primary concern.
+          return eventResult;
+        }
         conn.run(
-          'UPDATE core_tasks SET state = ?, completed_at = ?, updated_at = ? WHERE id = ?',
-          [terminalState, now, now, taskId],
+          'UPDATE core_tasks SET state = ?, completed_at = ?, updated_at = ? WHERE id = ? AND state NOT IN (?, ?, ?)',
+          [terminalState, now, now, taskId, ...terminalStates],
         );
 
         return eventResult;

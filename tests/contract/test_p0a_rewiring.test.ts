@@ -32,7 +32,12 @@ import { runId, attemptId, testTimestamp } from '../helpers/governance_test_help
 import { createTaskGraphEngine } from '../../src/orchestration/tasks/task_graph.js';
 import { proposeTaskExecution } from '../../src/orchestration/syscalls/propose_task_execution.js';
 import { createBudgetGovernor } from '../../src/orchestration/budget/budget_governance.js';
+import { createCheckpointCoordinator } from '../../src/orchestration/checkpoints/checkpoint_coordinator.js';
 import { createEventPropagator } from '../../src/orchestration/events/event_propagation.js';
+import {
+  createOrchestrationTransitionService,
+} from '../../src/orchestration/transitions/transition_service.js';
+import type { OrchestrationTransitionService } from '../../src/orchestration/transitions/transition_service.js';
 
 let conn: DatabaseConnection;
 let deps: OrchestrationDeps;
@@ -327,5 +332,169 @@ describe('P0-A Critical #9: Task scheduling order (enqueue-first)', () => {
     );
     assert.ok(taskRow, 'Task should exist');
     assert.equal(taskRow!.state, 'PENDING', 'Task should stay PENDING when enqueue fails (Critical #9)');
+  });
+});
+
+// ============================================================================
+// 6. F-RW-008: Budget governance → transitionService delegation verification
+// ============================================================================
+
+describe('F-RW-008: Budget governance delegates to transitionMissionRecovery', () => {
+  let service: OrchestrationTransitionService;
+
+  beforeEach(() => {
+    setup();
+    gov = createGovernanceSystem();
+    service = createOrchestrationTransitionService(
+      gov.transitionEnforcer,
+      deps.audit,
+      deps.time,
+    );
+  });
+
+  it('success: transitions EXECUTING mission to BLOCKED when budget exceeded via recovery path', () => {
+    // Seed mission in EXECUTING state with budget
+    seedMission(conn, { id: 'mission-budget-001', state: 'EXECUTING' });
+    seedResource(conn, { missionId: 'mission-budget-001', tokenAllocated: 100, tokenConsumed: 95 });
+
+    // Create budget governor WITH transition service (F-RW-004: uses recovery path)
+    const governor = createBudgetGovernor(service);
+
+    // Attempt to consume more than remaining (5 remaining, consuming 10)
+    const result = governor.consume(deps, missionId('mission-budget-001'), { tokens: 10 });
+
+    // Budget consume should fail with BUDGET_EXCEEDED
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.error.code, 'BUDGET_EXCEEDED');
+    }
+
+    // The mission should now be BLOCKED (transitioned via recovery path)
+    const missionRow = conn.get<{ state: string }>(
+      'SELECT state FROM core_missions WHERE id = ?',
+      ['mission-budget-001'],
+    );
+    assert.ok(missionRow, 'Mission should exist');
+    assert.equal(missionRow!.state, 'BLOCKED', 'Mission should be BLOCKED after budget exceeded');
+
+    // Verify audit trail records the transition (not silent)
+    const auditEntries = conn.query<{ operation: string; resource_id: string }>(
+      `SELECT operation, resource_id FROM core_audit_log WHERE resource_id = 'mission-budget-001' AND operation = 'mission_transition'`,
+      [],
+    );
+    assert.ok(auditEntries.length > 0, 'Audit trail should record the BLOCKED transition');
+  });
+
+  it('rejection: budget exceeded on PAUSED mission still transitions to BLOCKED via recovery', () => {
+    // F-RW-004: PAUSED → BLOCKED is not in MISSION_TRANSITIONS, but recovery skips map.
+    // Budget enforcement is a system-level override — must work from any non-terminal state.
+    seedMission(conn, { id: 'mission-budget-paused', state: 'PAUSED' });
+    seedResource(conn, { missionId: 'mission-budget-paused', tokenAllocated: 50, tokenConsumed: 45 });
+
+    const governor = createBudgetGovernor(service);
+
+    const result = governor.consume(deps, missionId('mission-budget-paused'), { tokens: 10 });
+
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.error.code, 'BUDGET_EXCEEDED');
+    }
+
+    // Mission should be BLOCKED even though it was PAUSED (recovery path handles this)
+    const missionRow = conn.get<{ state: string }>(
+      'SELECT state FROM core_missions WHERE id = ?',
+      ['mission-budget-paused'],
+    );
+    assert.ok(missionRow, 'Mission should exist');
+    assert.equal(missionRow!.state, 'BLOCKED', 'PAUSED mission should be BLOCKED via recovery path');
+  });
+});
+
+// ============================================================================
+// 7. F-RW-008: Checkpoint coordinator → transitionService delegation verification
+// ============================================================================
+
+describe('F-RW-008: Checkpoint coordinator delegates to transitionMissionRecovery', () => {
+  let service: OrchestrationTransitionService;
+
+  beforeEach(() => {
+    setup();
+    gov = createGovernanceSystem();
+    service = createOrchestrationTransitionService(
+      gov.transitionEnforcer,
+      deps.audit,
+      deps.time,
+    );
+  });
+
+  it('success: escalation transitions EXECUTING mission to BLOCKED via recovery path', () => {
+    seedMission(conn, { id: 'mission-ckpt-001', state: 'EXECUTING' });
+    seedResource(conn, { missionId: 'mission-ckpt-001' });
+
+    const coordinator = createCheckpointCoordinator(service);
+
+    // Fire a checkpoint
+    const fireResult = coordinator.fire(deps, missionId('mission-ckpt-001'), 'PERIODIC');
+    assert.equal(fireResult.ok, true);
+    const checkpointId = (fireResult as { ok: true; value: string }).value;
+
+    // Respond with escalation (very low confidence → system escalates)
+    const respondResult = coordinator.processResponse(deps, {
+      checkpointId,
+      assessment: 'Things look bad',
+      confidence: 0.1, // Very low → halt and escalate
+      proposedAction: 'continue',
+      planRevision: null,
+      escalationReason: null,
+    });
+
+    assert.equal(respondResult.ok, true);
+    if (respondResult.ok) {
+      assert.equal(respondResult.value.action, 'escalated');
+    }
+
+    // Mission should be BLOCKED via transition service recovery path
+    const missionRow = conn.get<{ state: string }>(
+      'SELECT state FROM core_missions WHERE id = ?',
+      ['mission-ckpt-001'],
+    );
+    assert.ok(missionRow, 'Mission should exist');
+    assert.equal(missionRow!.state, 'BLOCKED', 'Mission should be BLOCKED after checkpoint escalation');
+  });
+
+  it('rejection: abort on PAUSED mission transitions to CANCELLED via recovery path', () => {
+    // F-RW-004: PAUSED → CANCELLED is not in MISSION_TRANSITIONS, but recovery handles it.
+    seedMission(conn, { id: 'mission-ckpt-paused', state: 'PAUSED' });
+    seedResource(conn, { missionId: 'mission-ckpt-paused' });
+
+    const coordinator = createCheckpointCoordinator(service);
+
+    // Fire checkpoint
+    const fireResult = coordinator.fire(deps, missionId('mission-ckpt-paused'), 'PERIODIC');
+    assert.equal(fireResult.ok, true);
+    const checkpointId = (fireResult as { ok: true; value: string }).value;
+
+    // Respond with abort
+    const respondResult = coordinator.processResponse(deps, {
+      checkpointId,
+      assessment: 'Must abort',
+      confidence: 0.5,
+      proposedAction: 'abort',
+      planRevision: null,
+      escalationReason: null,
+    });
+
+    assert.equal(respondResult.ok, true);
+    if (respondResult.ok) {
+      assert.equal(respondResult.value.action, 'aborted');
+    }
+
+    // Mission should be CANCELLED via recovery path (PAUSED → CANCELLED)
+    const missionRow = conn.get<{ state: string }>(
+      'SELECT state FROM core_missions WHERE id = ?',
+      ['mission-ckpt-paused'],
+    );
+    assert.ok(missionRow, 'Mission should exist');
+    assert.equal(missionRow!.state, 'CANCELLED', 'PAUSED mission should be CANCELLED via recovery path on abort');
   });
 });

@@ -92,6 +92,10 @@ export function createBudgetGovernor(transitionService?: OrchestrationTransition
       // CF-016: On BUDGET_EXCEEDED, transition mission to BLOCKED state.
       // FM-02: Defense against cost explosion — halt execution.
       // P0-A: Rewired to OrchestrationTransitionService when available.
+      // F-RW-004: Use transitionMissionRecovery() — budget enforcement is a system-level
+      // override that must work from ANY non-terminal state (not just EXECUTING).
+      // Recovery skips transition map validation but keeps audit + CAS + governance.
+      // F-RW-003: Check the Result — log failure via audit if transition fails.
       // Legacy path retained for backward compatibility (tests without governance layer).
       if (transitionService) {
         const missionRow = deps.conn.get<{ state: string }>(
@@ -102,7 +106,24 @@ export function createBudgetGovernor(transitionService?: OrchestrationTransition
           const currentState = missionRow.state as import('../interfaces/orchestration.js').MissionState;
           const terminalStates = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'BLOCKED']);
           if (!terminalStates.has(currentState)) {
-            transitionService.transitionMission(deps.conn, missionId, currentState, 'BLOCKED');
+            const transitionResult = transitionService.transitionMissionRecovery(deps.conn, missionId, currentState, 'BLOCKED');
+            if (!transitionResult.ok) {
+              // F-RW-003: Log transition failure. Budget enforcement still succeeded
+              // (the budget IS exceeded) — this is a warning, not a fatal error.
+              deps.audit.append(deps.conn, {
+                tenantId: resource.tenant_id,
+                actorType: 'system',
+                actorId: 'budget_governor',
+                operation: 'transition_failed',
+                resourceType: 'mission',
+                resourceId: missionId,
+                detail: {
+                  attemptedTransition: { from: currentState, to: 'BLOCKED' },
+                  reason: 'budget_exceeded',
+                  error: transitionResult.error,
+                },
+              });
+            }
           }
         }
       } else {

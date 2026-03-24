@@ -262,11 +262,43 @@ export function createTaskGraphEngine(transitionService?: OrchestrationTransitio
         );
       }
 
-      // Update mission plan version and state
-      deps.conn.run(
-        `UPDATE core_missions SET plan_version = ?, state = CASE WHEN state = 'CREATED' THEN 'PLANNING' ELSE state END, updated_at = ? WHERE id = ?`,
-        [newPlanVersion, now, input.missionId],
-      );
+      // Update mission plan version (always) and state (CREATED→PLANNING only)
+      // F-RW-002: Wire through transitionService when available for governance enforcement.
+      // Legacy fallback uses inline CASE for backward compatibility.
+      if (transitionService && mission.state === 'CREATED') {
+        // Update plan_version first (this is data, not a state transition)
+        deps.conn.run(
+          `UPDATE core_missions SET plan_version = ?, updated_at = ? WHERE id = ?`,
+          [newPlanVersion, now, input.missionId],
+        );
+        // State transition through the service — gets CAS + audit + governance
+        const transResult = transitionService.transitionMission(
+          deps.conn, input.missionId, 'CREATED', 'PLANNING',
+        );
+        if (!transResult.ok) {
+          // Log but don't fail — the graph proposal is the primary operation.
+          // The mission may have been concurrently transitioned to a valid state.
+          deps.audit.append(deps.conn, {
+            tenantId: missionTenantId,
+            actorType: 'system',
+            actorId: 'orchestrator',
+            operation: 'transition_failed',
+            resourceType: 'mission',
+            resourceId: input.missionId,
+            detail: {
+              attemptedTransition: { from: 'CREATED', to: 'PLANNING' },
+              reason: 'propose_task_graph',
+              error: transResult.error,
+            },
+          });
+        }
+      } else {
+        // Legacy path or non-CREATED state: plan_version update + conditional state change
+        deps.conn.run(
+          `UPDATE core_missions SET plan_version = ?, state = CASE WHEN state = 'CREATED' THEN 'PLANNING' ELSE state END, updated_at = ? WHERE id = ?`,
+          [newPlanVersion, now, input.missionId],
+        );
+      }
 
       // I-03: Audit entry
       deps.audit.append(deps.conn, {
