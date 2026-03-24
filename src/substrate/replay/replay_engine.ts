@@ -16,8 +16,9 @@
  *   and timestamps that differ between runs).
  *
  * Security constraints:
- *   - Every query includes COALESCE tenant_id pattern for tenant isolation
- *   - Mission ownership verified before operating
+ *   - Tables with tenant_id use COALESCE pattern for tenant isolation
+ *   - core_mission_goals scoped via mission_id FK (no tenant_id column)
+ *   - Mission ownership verified before any query (verifyMissionTenant)
  *   - Snapshots are append-only (enforced by DDL triggers)
  *
  * Invariants enforced: I-25, I-03
