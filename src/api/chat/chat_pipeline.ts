@@ -75,12 +75,8 @@ export class ChatPipeline {
     private readonly defaultModel: string,
     private readonly techniqueReader?: TechniqueReader,
     private readonly modelContextWindow: number = 127_500,
-    private readonly time?: TimeProvider,
+    private readonly time: TimeProvider = { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() },
   ) {}
-
-  private get clock(): TimeProvider {
-    return this.time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
-  }
 
   /**
    * S27, SD-01: Execute chat pipeline.
@@ -234,7 +230,7 @@ export class ChatPipeline {
     rejectMetadata: (error: Error) => void,
   ): AsyncIterator<StreamChunk> {
     const pipeline = this;
-    const pClock = this.clock;
+    const pClock = this.time;
     let accumulated = '';
     const startTime = pClock.nowMs();
     let inputTokens = 0;
@@ -740,7 +736,7 @@ export class ChatPipeline {
       conn,
       substrate: this.getSubstrate(),
       audit: this.getAudit(),
-      time: this.clock,
+      time: this.time,
     };
   }
 }

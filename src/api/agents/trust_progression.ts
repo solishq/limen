@@ -105,7 +105,7 @@ export function validatePromotion(
  */
 export function checkSelfPromotion(
   ctxAgentId: AgentId | null | undefined,
-  targetAgentId: string,
+  targetAgentId: AgentId | string,
 ): { allowed: true } | { allowed: false; reason: string } {
   if (ctxAgentId && ctxAgentId === targetAgentId) {
     return {
