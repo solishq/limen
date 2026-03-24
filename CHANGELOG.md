@@ -5,6 +5,32 @@ All notable changes to Limen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-03-24
+
+### Added
+- Zero-config `createLimen()` — auto-detects LLM providers from environment variables, auto-generates dev master key, uses OS temp dir for storage
+- Provider auto-detection for Anthropic, OpenAI, Gemini, Groq, Mistral, and Ollama from environment variables
+- Proof pack: CI-governed evidence index at `docs/proof/` with 530 verified file:line references
+  - `system-calls.md` — 16 system calls, all Verified with interface, implementation, and A21 test coverage
+  - `invariants.md` — 134 invariants across 3 tiers (114 Verified, 1 Measured, 4 Implemented, 11 Declared, 4 Out of Scope)
+  - `failure-modes.md` — honest accounting: 21 traceable defenses of 45 specified (12 Verified, 8 Implemented, 1 Declared)
+  - `security-model.md` — 8 security mechanisms with evidence bindings and 25 declared non-protections
+  - `readiness.md` — capstone trust surface with explicit non-proof boundaries
+- `scripts/verify-proof-pack.ts` — CI enforcement script verifying proof pack file:line references stay fresh
+- Eight progressive examples (01-hello through 08-governance-visible) replacing five original examples
+- Demo vs Production getting-started split in `docs/getting-started.md`
+
+### Changed
+- `createLimen()` config parameter is now optional (zero-config when omitted)
+- README restructured: zero-config hero section, "What's Running Underneath" reveal, Trust Surface with proof pack links
+- Comparison table dated (March 2026) with narrowed claims and ecosystem context
+- Invariant count corrected from 99 to 134 per proof pack evidence
+- Examples 04 and 08 updated to use zero-config pattern
+- CI workflow updated with proof pack freshness check
+
+### Fixed
+- Examples 04 (multi-provider) and 08 (governance-visible) no longer require explicit masterKey
+
 ## [1.0.0] - 2026-03-23
 
 ### Added

@@ -66,6 +66,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: 'Proof pack freshness'
+        run: npx tsx scripts/verify-proof-pack.ts
+
       - name: Coverage report
         if: matrix.node-version == 22
         run: npm run test:coverage || true
