@@ -27,8 +27,8 @@ describe('TEST-GAP-005: Budget Enforcement (S11, S22, FM-02)', () => {
   describe('S11/FM-02: BUDGET_EXCEEDED — consumption exceeds remaining', () => {
 
     it('consume() returns BUDGET_EXCEEDED when token cost exceeds remaining', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const budget = createBudgetGovernor();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const budget = createBudgetGovernor(transitionService);
 
       seedMission(conn, { id: 'budget-m1' });
       seedResource(conn, { missionId: 'budget-m1', tokenAllocated: 1000, tokenConsumed: 0 });
@@ -46,8 +46,8 @@ describe('TEST-GAP-005: Budget Enforcement (S11, S22, FM-02)', () => {
     });
 
     it('consume() succeeds when token cost equals remaining', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const budget = createBudgetGovernor();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const budget = createBudgetGovernor(transitionService);
 
       seedMission(conn, { id: 'budget-m2' });
       seedResource(conn, { missionId: 'budget-m2', tokenAllocated: 500, tokenConsumed: 0 });
@@ -66,7 +66,7 @@ describe('TEST-GAP-005: Budget Enforcement (S11, S22, FM-02)', () => {
     });
 
     it('remaining never goes negative — CHECK constraint enforced', () => {
-      const { deps: _deps, conn } = createTestOrchestrationDeps();
+      const { deps: _deps, conn, transitionService } = createTestOrchestrationDeps();
 
       seedMission(conn, { id: 'budget-m3' });
       seedResource(conn, { missionId: 'budget-m3', tokenAllocated: 100, tokenConsumed: 0 });
@@ -88,8 +88,8 @@ describe('TEST-GAP-005: Budget Enforcement (S11, S22, FM-02)', () => {
   describe('S22: Budget request from parent', () => {
 
     it('HUMAN_APPROVAL_REQUIRED for root mission budget request', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const budget = createBudgetGovernor();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const budget = createBudgetGovernor(transitionService);
 
       // Root mission (no parent)
       seedMission(conn, { id: 'root-budget' });
@@ -112,8 +112,8 @@ describe('TEST-GAP-005: Budget Enforcement (S11, S22, FM-02)', () => {
     });
 
     it('JUSTIFICATION_REQUIRED when justification is empty', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const budget = createBudgetGovernor();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const budget = createBudgetGovernor(transitionService);
 
       seedMission(conn, { id: 'justify-parent' });
       seedResource(conn, { missionId: 'justify-parent', tokenAllocated: 5000 });
@@ -137,8 +137,8 @@ describe('TEST-GAP-005: Budget Enforcement (S11, S22, FM-02)', () => {
     });
 
     it('PARENT_INSUFFICIENT when parent lacks sufficient remaining budget', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const budget = createBudgetGovernor();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const budget = createBudgetGovernor(transitionService);
 
       seedMission(conn, { id: 'poor-parent' });
       seedResource(conn, { missionId: 'poor-parent', tokenAllocated: 1000, tokenConsumed: 900 });
@@ -163,8 +163,8 @@ describe('TEST-GAP-005: Budget Enforcement (S11, S22, FM-02)', () => {
     });
 
     it('successful parent-to-child transfer is atomic', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const budget = createBudgetGovernor();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const budget = createBudgetGovernor(transitionService);
 
       seedMission(conn, { id: 'rich-parent' });
       seedResource(conn, { missionId: 'rich-parent', tokenAllocated: 10000, tokenConsumed: 0 });
@@ -208,8 +208,8 @@ describe('TEST-GAP-005: Budget Enforcement (S11, S22, FM-02)', () => {
   describe('S11: Budget check utility', () => {
 
     it('checkBudget returns true when estimated cost fits within remaining', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const budget = createBudgetGovernor();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const budget = createBudgetGovernor(transitionService);
 
       seedMission(conn, { id: 'check-m1' });
       seedResource(conn, { missionId: 'check-m1', tokenAllocated: 5000, tokenConsumed: 1000 });
@@ -222,8 +222,8 @@ describe('TEST-GAP-005: Budget Enforcement (S11, S22, FM-02)', () => {
     });
 
     it('checkBudget returns false when estimated cost exceeds remaining', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const budget = createBudgetGovernor();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const budget = createBudgetGovernor(transitionService);
 
       seedMission(conn, { id: 'check-m2' });
       seedResource(conn, { missionId: 'check-m2', tokenAllocated: 1000, tokenConsumed: 800 });

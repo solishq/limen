@@ -86,7 +86,7 @@ export function kahnsAlgorithm(
  * S16: Create the task graph engine module.
  * Factory function returns frozen object per C-07.
  */
-export function createTaskGraphEngine(transitionService?: OrchestrationTransitionService): TaskGraphEngine {
+export function createTaskGraphEngine(transitionService: OrchestrationTransitionService): TaskGraphEngine {
 
   /** S16: Validate and install a new task graph */
   function proposeGraph(
@@ -195,32 +195,25 @@ export function createTaskGraphEngine(transitionService?: OrchestrationTransitio
           'UPDATE core_task_graphs SET is_active = 0 WHERE id = ?',
           [prevGraph.id],
         );
-        // P0-A: Rewired to OrchestrationTransitionService bulk transition.
+        // P0-A: Sole transition mechanism via OrchestrationTransitionService bulk transition.
         // Query PENDING task IDs from the old graph, then cancel via the service.
-        if (transitionService) {
-          const pendingTasks = deps.conn.query<{ id: string }>(
-            `SELECT id FROM core_tasks WHERE graph_id = ? AND state = 'PENDING'`,
-            [prevGraph.id],
+        const pendingTasks = deps.conn.query<{ id: string }>(
+          `SELECT id FROM core_tasks WHERE graph_id = ? AND state = 'PENDING'`,
+          [prevGraph.id],
+        );
+        if (pendingTasks.length > 0) {
+          const bulkResult = transitionService.bulkTransitionTasks(
+            deps.conn,
+            pendingTasks.map(t => ({
+              taskId: t.id as TaskId,
+              from: 'PENDING' as TaskState,
+              to: 'CANCELLED' as TaskState,
+            })),
           );
-          if (pendingTasks.length > 0) {
-            const bulkResult = transitionService.bulkTransitionTasks(
-              deps.conn,
-              pendingTasks.map(t => ({
-                taskId: t.id as TaskId,
-                from: 'PENDING' as TaskState,
-                to: 'CANCELLED' as TaskState,
-              })),
-            );
-            // Bulk failure should not silently pass — throw to abort the transaction
-            if (!bulkResult.ok) {
-              throw new Error(`Bulk task cancellation failed: ${bulkResult.error.message}`);
-            }
+          // Bulk failure should not silently pass — throw to abort the transaction
+          if (!bulkResult.ok) {
+            throw new Error(`Bulk task cancellation failed: ${bulkResult.error.message}`);
           }
-        } else {
-          deps.conn.run(
-            `UPDATE core_tasks SET state = 'CANCELLED', updated_at = ?, completed_at = ? WHERE graph_id = ? AND state = 'PENDING'`,
-            [now, now, prevGraph.id],
-          );
         }
       }
 
@@ -262,16 +255,15 @@ export function createTaskGraphEngine(transitionService?: OrchestrationTransitio
         );
       }
 
-      // Update mission plan version (always) and state (CREATED→PLANNING only)
-      // F-RW-002: Wire through transitionService when available for governance enforcement.
-      // Legacy fallback uses inline CASE for backward compatibility.
-      if (transitionService && mission.state === 'CREATED') {
-        // Update plan_version first (this is data, not a state transition)
-        deps.conn.run(
-          `UPDATE core_missions SET plan_version = ?, updated_at = ? WHERE id = ?`,
-          [newPlanVersion, now, input.missionId],
-        );
-        // State transition through the service — gets CAS + audit + governance
+      // Update mission plan version (always)
+      deps.conn.run(
+        `UPDATE core_missions SET plan_version = ?, updated_at = ? WHERE id = ?`,
+        [newPlanVersion, now, input.missionId],
+      );
+
+      // State transition CREATED→PLANNING via OrchestrationTransitionService (sole mechanism).
+      // F-RW-002: Gets CAS + audit + governance enforcement.
+      if (mission.state === 'CREATED') {
         const transResult = transitionService.transitionMission(
           deps.conn, input.missionId, 'CREATED', 'PLANNING',
         );
@@ -292,12 +284,6 @@ export function createTaskGraphEngine(transitionService?: OrchestrationTransitio
             },
           });
         }
-      } else {
-        // Legacy path or non-CREATED state: plan_version update + conditional state change
-        deps.conn.run(
-          `UPDATE core_missions SET plan_version = ?, state = CASE WHEN state = 'CREATED' THEN 'PLANNING' ELSE state END, updated_at = ? WHERE id = ?`,
-          [newPlanVersion, now, input.missionId],
-        );
       }
 
       // I-03: Audit entry

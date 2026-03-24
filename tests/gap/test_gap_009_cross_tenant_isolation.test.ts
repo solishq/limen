@@ -27,6 +27,8 @@ import {
   createTestDatabase,
   createScopedTestDeps,
   createTestOperationContext,
+  createTestAuditTrail,
+  createTestTransitionService,
   seedMission,
   seedResource,
   tenantId,
@@ -45,6 +47,7 @@ import { createEventPropagator } from '../../src/orchestration/events/event_prop
 
 const TENANT_A = 'tenant-A';
 const TENANT_B = 'tenant-B';
+const transitionService = createTestTransitionService(createTestAuditTrail());
 
 // ─── Helper: create scoped test environment ───
 
@@ -269,7 +272,7 @@ describe('TEST-GAP-009: Cross-Tenant Isolation — artifact_store', () => {
 // ─── Module 3: task_store.ts (Queries #13-19) ───
 
 describe('TEST-GAP-009: Cross-Tenant Isolation — task_store', () => {
-  const taskGraph = createTaskGraphEngine();
+  const taskGraph = createTaskGraphEngine(transitionService);
 
   it('#13: getTask() — tenant B cannot read tenant A task', () => {
     const { rawConn, depsB } = createIsolationTestEnv();
@@ -384,7 +387,7 @@ describe('TEST-GAP-009: Cross-Tenant Isolation — task_store', () => {
 // ─── Module 4: budget_governance.ts (Queries #20-27) ───
 
 describe('TEST-GAP-009: Cross-Tenant Isolation — budget_governance', () => {
-  const budget = createBudgetGovernor();
+  const budget = createBudgetGovernor(transitionService);
 
   it('#20-21: consume() — tenant B cannot read/mutate tenant A budget', () => {
     const { rawConn, depsB } = createIsolationTestEnv();
@@ -450,7 +453,7 @@ describe('TEST-GAP-009: Cross-Tenant Isolation — budget_governance', () => {
 // ─── Module 5: checkpoint_coordinator.ts (Queries #28-30) ───
 
 describe('TEST-GAP-009: Cross-Tenant Isolation — checkpoint_coordinator', () => {
-  const checkpoints = createCheckpointCoordinator();
+  const checkpoints = createCheckpointCoordinator(transitionService);
 
   it('#28-30: processResponse() — tenant B cannot access/mutate tenant A checkpoints', () => {
     const { rawConn, depsB } = createIsolationTestEnv();
@@ -641,7 +644,7 @@ describe('TEST-GAP-009: Cross-Tenant Isolation — conversation_manager', () => 
 // ─── Module 9: task_graph.ts (Queries #48-54) — proposeGraph() ───
 
 describe('TEST-GAP-009: Cross-Tenant Isolation — task_graph proposeGraph', () => {
-  const taskGraph = createTaskGraphEngine();
+  const taskGraph = createTaskGraphEngine(transitionService);
 
   it('#48-54: proposeGraph() — tenant B cannot create graph for tenant A mission', () => {
     const { rawConn, depsB } = createIsolationTestEnv();

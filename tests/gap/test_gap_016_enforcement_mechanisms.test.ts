@@ -359,7 +359,7 @@ describe('CF-013: Artifact content size limit (10MB)', () => {
 
   it('#18: Artifact content > 10MB is rejected with INVALID_INPUT', () => {
     // CF-013: Artifact content has a hard cap of 10MB (10,485,760 bytes)
-    const { deps } = createTestOrchestrationDeps();
+    const { deps, transitionService } = createTestOrchestrationDeps();
     const ctx = createTestOperationContext();
     const artifacts = createArtifactStore();
 
@@ -393,7 +393,7 @@ describe('CF-013: Artifact content size limit (10MB)', () => {
 
   it('#19: Artifact content at 10MB boundary is accepted', () => {
     // 10MB exactly should pass the size check
-    const { deps } = createTestOrchestrationDeps();
+    const { deps, transitionService } = createTestOrchestrationDeps();
     const ctx = createTestOperationContext();
     const artifacts = createArtifactStore();
 
@@ -430,7 +430,7 @@ describe('CF-013: Event payload size limit (64KB)', () => {
 
   it('#20: Event payload > 64KB is rejected with INVALID_INPUT', () => {
     // CF-013: Event payload has a 64KB (65,536 bytes) limit
-    const { deps } = createTestOrchestrationDeps();
+    const { deps, transitionService } = createTestOrchestrationDeps();
     const ctx = createTestOperationContext();
     const events = createEventPropagator();
 
@@ -458,7 +458,7 @@ describe('CF-013: Event payload size limit (64KB)', () => {
   });
 
   it('#21: Event payload at 64KB boundary is accepted', () => {
-    const { deps } = createTestOrchestrationDeps();
+    const { deps, transitionService } = createTestOrchestrationDeps();
     const ctx = createTestOperationContext();
     const events = createEventPropagator();
 
@@ -491,8 +491,8 @@ describe('CF-013: Budget justification max length (10KB)', () => {
   it('#22: Justification > 10KB is rejected with INVALID_INPUT', () => {
     const conn = createTestDatabase();
     const ctx = createTestOperationContext();
-    const { deps } = createTestOrchestrationDeps();
-    const budget = createBudgetGovernor();
+    const { deps, transitionService } = createTestOrchestrationDeps();
+    const budget = createBudgetGovernor(transitionService);
     const events = createEventPropagator();
 
     seedMission(deps.conn, { id: 'mission-1' });
@@ -530,7 +530,7 @@ describe('CF-026: SC-1 agentId validation (DEV-003)', () => {
   it('#23: Empty agentId returns AGENT_NOT_FOUND', () => {
     // DEV-003: "AGENT_NOT_FOUND validates parent existence, not agent existence"
     // Fix: Empty agentId now returns AGENT_NOT_FOUND per S15
-    const { deps } = createTestOrchestrationDeps();
+    const { deps, transitionService } = createTestOrchestrationDeps();
     const ctx = createTestOperationContext();
     const missions = createMissionStore();
 
@@ -556,7 +556,7 @@ describe('CF-026: SC-1 agentId validation (DEV-003)', () => {
   it('#24: Missing parent mission returns MISSION_NOT_FOUND (not AGENT_NOT_FOUND)', () => {
     // DEV-003: Error code for missing parent was incorrectly AGENT_NOT_FOUND
     // Fix: Now returns MISSION_NOT_FOUND per spec semantics
-    const { deps } = createTestOrchestrationDeps();
+    const { deps, transitionService } = createTestOrchestrationDeps();
     const ctx = createTestOperationContext();
     const missions = createMissionStore();
 

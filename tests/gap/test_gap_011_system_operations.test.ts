@@ -18,6 +18,7 @@ import {
   createTestDatabase,
   createScopedTestDeps,
   createTestAuditTrail,
+  createTestTransitionService,
   seedMission,
   seedResource,
   tenantId,
@@ -53,7 +54,8 @@ describe('Layer 4: System Operations Verification (FM-10, DEC-CERT-001)', () => 
   it('#1: expireOverdue() expires checkpoints for both tenant-A and tenant-B', () => {
     const rawConn = createTestDatabase('row-level');
     const audit = createTestAuditTrail();
-    const coordinator = createCheckpointCoordinator();
+    const transitionService = createTestTransitionService(audit);
+    const coordinator = createCheckpointCoordinator(transitionService);
     const now = new Date().toISOString();
     const pastTime = new Date(Date.now() - 60000).toISOString(); // 1 minute ago
 
@@ -110,7 +112,8 @@ describe('Layer 4: System Operations Verification (FM-10, DEC-CERT-001)', () => 
   it('#2: expireOverdue() with raw deps works correctly', () => {
     const rawConn = createTestDatabase('row-level');
     const audit = createTestAuditTrail();
-    const coordinator = createCheckpointCoordinator();
+    const transitionService = createTestTransitionService(audit);
+    const coordinator = createCheckpointCoordinator(transitionService);
     const now = new Date().toISOString();
     const pastTime = new Date(Date.now() - 60000).toISOString();
 
@@ -286,7 +289,8 @@ describe('Layer 4: System Operations Verification (FM-10, DEC-CERT-001)', () => 
   it('#6: expireOverdue() only expires checkpoints past timeout, not future ones', () => {
     const rawConn = createTestDatabase('row-level');
     const audit = createTestAuditTrail();
-    const coordinator = createCheckpointCoordinator();
+    const transitionService = createTestTransitionService(audit);
+    const coordinator = createCheckpointCoordinator(transitionService);
     const now = new Date().toISOString();
     const pastTime = new Date(Date.now() - 60000).toISOString();
     const futureTime = new Date(Date.now() + 3600000).toISOString();

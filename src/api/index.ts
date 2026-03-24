@@ -356,7 +356,8 @@ function buildOrchestrationAdapter(
 
     // CF-004 / self-review: cleanup connection if orchestration construction fails
     // CF-007: Pass kernel.rateLimiter for persistent, SQLite-backed rate limiting
-    // P0-A: Pass kernel.time and transitionEnforcer for the OrchestrationTransitionService
+    // P0-A: Pass transitionEnforcer for the OrchestrationTransitionService.
+    // createOrchestration() uses a passthrough enforcer when undefined (test backward compat).
     try {
       return realCreateOrchestration(conn, substrate, kernel.audit, kernel.rateLimiter, kernel.time, transitionEnforcer);
     } catch (err) {
@@ -424,10 +425,8 @@ export async function createLimen(
   // R4C-004: Track orchestration connection for shutdown cleanup.
   let orchestrationConn: DatabaseConnection | null = null;
   // P0-A: When no external deps, build default wiring. The orchestration adapter
-  // is built without the TransitionEnforcer initially — it will be constructed
-  // after kernel creation when we can create the GovernanceSystem.
-  // For external deps (tests), use as-is.
-  const useProductionWiring = !deps;
+  // is built without TransitionEnforcer initially — Step 4 rebuilds it with the
+  // enforcer from GovernanceSystem. For external deps (tests), use as-is.
   const resolvedDeps = deps ?? Object.freeze({
     createKernel: realCreateKernel,
     destroyKernel: realDestroyKernel,
@@ -522,8 +521,9 @@ export async function createLimen(
   let orchestration: OrchestrationEngine;
   try {
     // P0-A: For production wiring, rebuild the orchestration adapter with the
-    // TransitionEnforcer from governance. For external deps (tests), use as-is.
-    if (useProductionWiring) {
+    // TransitionEnforcer from governance. For external deps (tests), use as-is —
+    // createOrchestration() factory provides a passthrough enforcer when none given.
+    if (!deps) {
       const orchestrationAdapterWithEnforcer = buildOrchestrationAdapter(
         (conn) => { orchestrationConn = conn; },
         earlyGovernanceSystem.transitionEnforcer,
@@ -581,7 +581,6 @@ export async function createLimen(
       ]);
       if (recoveryMigResult.ok) {
         // P0-A: Pass transition service to recovery for governance-enforced transitions.
-        // The orchestration.transitions may be undefined if external deps don't provide it.
         const recoveryResult = recoverMissions(recoveryConn, kernel.audit, kernel.time, orchestration.transitions);
         if (recoveryResult.ok && recoveryResult.value.recoveredCount > 0) {
           log({ level: 'info', category: 'recovery', message: `Mission recovery: ${recoveryResult.value.recoveredCount} missions transitioned to PAUSED` });

@@ -18,10 +18,9 @@
  * dispatch or reflection. This makes the routing auditable and prevents
  * injection of arbitrary method calls.
  *
- * Type safety note: A2A params arrive as untyped JSON. We cast through
- * `unknown` to the Limen input types. The Limen engine itself validates
- * the inputs and returns typed Result<T> errors if they are malformed.
- * The A2A layer does not duplicate that validation.
+ * Perimeter validation: All incoming JSON is validated through Zod schemas
+ * at the trust boundary. Structure is validated here; semantic validation
+ * (FK existence, state machine validity) is delegated to the Limen engine.
  */
 
 import type {
@@ -37,38 +36,34 @@ import type {
 import type { A2ATaskSendParams, A2ATaskResult, A2AMessage } from '../jsonrpc/types.js';
 import { TaskManager } from '../task_manager.js';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import {
+  A2ATaskSendParamsSchema,
+  ClaimCreateInputSchema,
+  ClaimQueryInputSchema,
+  WriteWorkingMemoryInputSchema,
+  ReadWorkingMemoryInputSchema,
+  DiscardWorkingMemoryInputSchema,
+  MissionCreateOptionsSchema,
+  MissionFilterSchema,
+  AgentRegisterSchema,
+  AgentGetSchema,
+  AgentPromoteSchema,
+  toBrandedInput,
+  formatZodError,
+} from '../validation/schemas.js';
 
 /**
- * Validate tasks/send params structure.
- * Returns typed params or throws with a descriptive message.
+ * Validate and parse the A2A task envelope using Zod.
+ * Returns typed params or throws ZodError.
  */
-function validateSendParams(raw: unknown): A2ATaskSendParams {
-  if (typeof raw !== 'object' || raw === null) {
-    throw new Error('params must be an object');
-  }
-
-  const obj = raw as Record<string, unknown>;
-
-  const id = typeof obj.id === 'string' && obj.id.length > 0
-    ? obj.id
-    : randomUUID();
-
-  if (typeof obj.message !== 'object' || obj.message === null) {
-    throw new Error('params.message is required');
-  }
-
-  const message = obj.message as Record<string, unknown>;
-  if (typeof message.role !== 'string') {
-    throw new Error('params.message.role is required');
-  }
-
-  const metadata = obj.metadata as Record<string, unknown> | undefined;
-
+function parseSendParams(raw: unknown): A2ATaskSendParams {
+  const parsed = A2ATaskSendParamsSchema.parse(raw);
   return {
-    id,
-    message: message as unknown as A2ATaskSendParams['message'],
-    metadata: metadata as A2ATaskSendParams['metadata'],
-  };
+    id: parsed.id ?? randomUUID(),
+    message: parsed.message,
+    metadata: parsed.metadata,
+  } satisfies A2ATaskSendParams;
 }
 
 /**
@@ -130,32 +125,25 @@ async function handleAgentManagement(
 ): Promise<unknown> {
   switch (action) {
     case 'register': {
-      if (!params?.name || typeof params.name !== 'string') {
-        throw new Error('agent-management/register requires params.name (string)');
-      }
-      const domains = Array.isArray(params.domains) ? params.domains as string[] : undefined;
-      return limen.agents.register({ name: params.name, domains });
+      const validated = AgentRegisterSchema.parse(params);
+      return limen.agents.register(validated);
     }
 
     case 'list':
       return limen.agents.list();
 
     case 'get': {
-      if (!params?.name || typeof params.name !== 'string') {
-        throw new Error('agent-management/get requires params.name (string)');
-      }
-      const agent = await limen.agents.get(params.name);
+      const validated = AgentGetSchema.parse(params);
+      const agent = await limen.agents.get(validated.name);
       if (agent === null) {
-        throw new Error(`Agent not found: ${params.name}`);
+        throw new Error(`Agent not found: ${validated.name}`);
       }
       return agent;
     }
 
     case 'promote': {
-      if (!params?.name || typeof params.name !== 'string') {
-        throw new Error('agent-management/promote requires params.name (string)');
-      }
-      return limen.agents.promote(params.name);
+      const validated = AgentPromoteSchema.parse(params);
+      return limen.agents.promote(validated.name);
     }
 
     default:
@@ -180,10 +168,8 @@ function handleClaimManagement(
   switch (action) {
     case 'assertClaim':
     case 'assert': {
-      if (!params) {
-        throw new Error('claim-management/assertClaim requires params');
-      }
-      const result = limen.claims.assertClaim(params as unknown as ClaimCreateInput);
+      const validated = ClaimCreateInputSchema.parse(params);
+      const result = limen.claims.assertClaim(toBrandedInput<ClaimCreateInput>(validated));
       if (!result.ok) {
         throw new Error(`assertClaim failed: ${result.error.message} (${result.error.code})`);
       }
@@ -192,10 +178,8 @@ function handleClaimManagement(
 
     case 'queryClaims':
     case 'query': {
-      if (!params) {
-        throw new Error('claim-management/queryClaims requires params');
-      }
-      const result = limen.claims.queryClaims(params as unknown as ClaimQueryInput);
+      const validated = ClaimQueryInputSchema.parse(params);
+      const result = limen.claims.queryClaims(toBrandedInput<ClaimQueryInput>(validated));
       if (!result.ok) {
         throw new Error(`queryClaims failed: ${result.error.message} (${result.error.code})`);
       }
@@ -222,10 +206,8 @@ function handleWorkingMemory(
 ): unknown {
   switch (action) {
     case 'write': {
-      if (!params) {
-        throw new Error('working-memory/write requires params');
-      }
-      const result = limen.workingMemory.write(params as unknown as WriteWorkingMemoryInput);
+      const validated = WriteWorkingMemoryInputSchema.parse(params);
+      const result = limen.workingMemory.write(toBrandedInput<WriteWorkingMemoryInput>(validated));
       if (!result.ok) {
         throw new Error(`workingMemory.write failed: ${result.error.message} (${result.error.code})`);
       }
@@ -233,10 +215,8 @@ function handleWorkingMemory(
     }
 
     case 'read': {
-      if (!params) {
-        throw new Error('working-memory/read requires params');
-      }
-      const result = limen.workingMemory.read(params as unknown as ReadWorkingMemoryInput);
+      const validated = ReadWorkingMemoryInputSchema.parse(params);
+      const result = limen.workingMemory.read(toBrandedInput<ReadWorkingMemoryInput>(validated));
       if (!result.ok) {
         throw new Error(`workingMemory.read failed: ${result.error.message} (${result.error.code})`);
       }
@@ -244,10 +224,8 @@ function handleWorkingMemory(
     }
 
     case 'discard': {
-      if (!params) {
-        throw new Error('working-memory/discard requires params');
-      }
-      const result = limen.workingMemory.discard(params as unknown as DiscardWorkingMemoryInput);
+      const validated = DiscardWorkingMemoryInputSchema.parse(params);
+      const result = limen.workingMemory.discard(toBrandedInput<DiscardWorkingMemoryInput>(validated));
       if (!result.ok) {
         throw new Error(`workingMemory.discard failed: ${result.error.message} (${result.error.code})`);
       }
@@ -272,17 +250,14 @@ async function handleMissionOrchestration(
 ): Promise<unknown> {
   switch (action) {
     case 'create': {
-      if (!params) {
-        throw new Error('mission-orchestration/create requires params');
-      }
-      const handle = await limen.missions.create(params as unknown as MissionCreateOptions);
-      // MissionHandle has id, state, budget — return a serializable view
+      const validated = MissionCreateOptionsSchema.parse(params);
+      const handle = await limen.missions.create(toBrandedInput<MissionCreateOptions>(validated));
       return { id: handle.id, state: handle.state, budget: handle.budget };
     }
 
     case 'list': {
-      const filter = params as unknown as MissionFilter | undefined;
-      return limen.missions.list(filter);
+      const validated = params ? MissionFilterSchema.parse(params) : undefined;
+      return limen.missions.list(validated ? toBrandedInput<MissionFilter>(validated) : undefined);
     }
 
     default:
@@ -311,8 +286,20 @@ export function createTaskSendHandler(
   taskManager: TaskManager,
 ): (params: unknown, id: string | number) => Promise<unknown> {
   return async function handleTaskSend(rawParams: unknown, _requestId: string | number): Promise<unknown> {
-    // Validate and parse the A2A task envelope
-    const sendParams = validateSendParams(rawParams);
+    let sendParams: A2ATaskSendParams;
+    try {
+      sendParams = parseSendParams(rawParams);
+    } catch (err: unknown) {
+      if (err instanceof z.ZodError) {
+        return buildError(
+          typeof rawParams === 'object' && rawParams !== null && 'id' in rawParams && typeof (rawParams as Record<string, unknown>).id === 'string'
+            ? (rawParams as Record<string, unknown>).id as string
+            : randomUUID(),
+          `Invalid A2A task params: ${formatZodError(err)}`,
+        );
+      }
+      throw err;
+    }
 
     const { skill, action } = extractRouting(sendParams);
     const actionParams = sendParams.metadata?.params;
@@ -352,6 +339,11 @@ export function createTaskSendHandler(
       return buildResult(sendParams.id, result);
 
     } catch (err: unknown) {
+      if (err instanceof z.ZodError) {
+        const errorMessage = `Invalid parameters: ${formatZodError(err)}`;
+        taskManager.fail(sendParams.id, skill, errorMessage);
+        return buildError(sendParams.id, errorMessage);
+      }
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       taskManager.fail(sendParams.id, skill, errorMessage);
       return buildError(sendParams.id, errorMessage);

@@ -32,7 +32,7 @@ const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
  * Factory function returns frozen object per C-07.
  * P0-A: Accepts optional transition service for state transitions.
  */
-export function createCheckpointCoordinator(transitionService?: OrchestrationTransitionService): CheckpointCoordinator {
+export function createCheckpointCoordinator(transitionService: OrchestrationTransitionService): CheckpointCoordinator {
 
   /**
    * S24: Fire a checkpoint for a mission.
@@ -212,13 +212,12 @@ export function createCheckpointCoordinator(transitionService?: OrchestrationTra
       );
 
       // Side effects based on system action
-      // P0-A: Rewired to OrchestrationTransitionService when available.
+      // P0-A: Sole transition mechanism via OrchestrationTransitionService.
       // F-RW-004: Use transitionMissionRecovery() — checkpoint escalation/abort are
       // system-level overrides that must work from ANY non-terminal state (not just EXECUTING).
       // Recovery skips transition map validation but keeps audit + CAS + governance.
       // F-RW-003: Check the Result — log failure via audit if transition fails.
-      // Legacy path retained for backward compatibility (tests without governance layer).
-      if (transitionService && (systemAction === 'escalated' || systemAction === 'aborted')) {
+      if (systemAction === 'escalated' || systemAction === 'aborted') {
         const cpMission = deps.conn.get<{ state: string }>(
           'SELECT state FROM core_missions WHERE id = ?',
           [checkpoint.mission_id],
@@ -250,41 +249,6 @@ export function createCheckpointCoordinator(transitionService?: OrchestrationTra
                 },
               });
             }
-          }
-        }
-      } else if (!transitionService) {
-        // Legacy path: direct SQL + audit (no governance enforcement)
-        if (systemAction === 'escalated') {
-          const escalateResult = deps.conn.run(
-            `UPDATE core_missions SET state = 'BLOCKED', updated_at = ? WHERE id = ? AND state NOT IN ('COMPLETED','FAILED','CANCELLED')`,
-            [isoNow, checkpoint.mission_id],
-          );
-          if (escalateResult.changes > 0) {
-            deps.audit.append(deps.conn, {
-              tenantId: cpTenantId,
-              actorType: 'system',
-              actorId: 'checkpoint_coordinator',
-              operation: 'mission_transition',
-              resourceType: 'mission',
-              resourceId: checkpoint.mission_id,
-              detail: { to: 'BLOCKED', reason: 'checkpoint_escalation', checkpointId: input.checkpointId },
-            });
-          }
-        } else if (systemAction === 'aborted') {
-          const abortResult = deps.conn.run(
-            `UPDATE core_missions SET state = 'CANCELLED', updated_at = ?, completed_at = ? WHERE id = ? AND state NOT IN ('COMPLETED','FAILED','CANCELLED')`,
-            [isoNow, isoNow, checkpoint.mission_id],
-          );
-          if (abortResult.changes > 0) {
-            deps.audit.append(deps.conn, {
-              tenantId: cpTenantId,
-              actorType: 'system',
-              actorId: 'checkpoint_coordinator',
-              operation: 'mission_transition',
-              resourceType: 'mission',
-              resourceId: checkpoint.mission_id,
-              detail: { to: 'CANCELLED', reason: 'checkpoint_abort', checkpointId: input.checkpointId },
-            });
           }
         }
       }

@@ -23,6 +23,7 @@ import assert from 'node:assert/strict';
 import {
   createTestDatabase,
   createTestAuditTrail,
+  createTestTransitionService,
   createScopedTestDeps,
   seedMission,
   seedResource,
@@ -164,7 +165,8 @@ describe('Layer 3: Mutation Tests — Proving facade IS the enforcement', () => 
   // Mutation 4: budget_governance.consume()
   it('#4: budget_governance.consume() — without facade, cross-tenant budget drain SUCCEEDS', () => {
     const rawConn = createTestDatabase('row-level');
-    const budget = createBudgetGovernor();
+    const transitionService = createTestTransitionService(createTestAuditTrail());
+    const budget = createBudgetGovernor(transitionService);
 
     seedMission(rawConn, { id: 'mission-mut-4', tenantId: TENANT_A });
     seedResource(rawConn, { missionId: 'mission-mut-4', tenantId: TENANT_A, tokenAllocated: 10000 });

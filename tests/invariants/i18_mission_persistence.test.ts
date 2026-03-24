@@ -28,7 +28,18 @@ import {
 import { createMissionStore } from '../../src/orchestration/missions/mission_store.js';
 import { createArtifactStore } from '../../src/orchestration/artifacts/artifact_store.js';
 import { recoverMissions } from '../../src/orchestration/missions/mission_recovery.js';
+import { createOrchestrationTransitionService } from '../../src/orchestration/transitions/transition_service.js';
+import type { TimeProvider } from '../../src/kernel/interfaces/time.js';
+import type { TransitionEnforcer } from '../../src/kernel/interfaces/lifecycle.js';
 import type { MissionId, TaskId, ArtifactId } from '../../src/kernel/interfaces/index.js';
+
+/** P0-A: Passthrough enforcer for tests — approves all transitions. */
+const passthroughEnforcer: TransitionEnforcer = {
+  enforceMissionTransition: () => ({ ok: true, value: { fromState: '', toState: '', timestamp: '2026-01-01T00:00:00.000Z' } }),
+  enforceTaskTransition: () => ({ ok: true, value: { fromState: '', toState: '', timestamp: '2026-01-01T00:00:00.000Z' } }),
+  enforceHandoffTransition: () => ({ ok: true, value: { fromState: '', toState: '', timestamp: '2026-01-01T00:00:00.000Z' } }),
+  enforceRunTransition: () => ({ ok: true, value: { fromState: '', toState: '', timestamp: '2026-01-01T00:00:00.000Z' } }),
+};
 
 describe('I-18: Mission Persistence', () => {
 
@@ -204,12 +215,12 @@ describe('I-18: Mission Persistence', () => {
        */
       const conn = createTestDatabase();
       const audit = createTestAuditTrail();
-      const time = { nowISO: () => '2026-01-01T00:00:00.000Z', nowMs: () => 1735689600000 };
+      const time: TimeProvider = { nowISO: () => '2026-01-01T00:00:00.000Z', nowMs: () => 1735689600000 };
 
       seedMission(conn, { id: 'restart-m1', state: 'EXECUTING' });
       seedResource(conn, { missionId: 'restart-m1' });
 
-      const result = recoverMissions(conn, audit, time);
+      const result = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
 
       assert.equal(result.ok, true, 'Recovery must succeed');
       assert.ok(result.value.recoveredCount >= 1,
@@ -232,12 +243,12 @@ describe('I-18: Mission Persistence', () => {
        */
       const conn = createTestDatabase();
       const audit = createTestAuditTrail();
-      const time = { nowISO: () => '2026-01-01T00:00:00.000Z', nowMs: () => 1735689600000 };
+      const time: TimeProvider = { nowISO: () => '2026-01-01T00:00:00.000Z', nowMs: () => 1735689600000 };
 
       seedMission(conn, { id: 'exec-m1', state: 'EXECUTING' });
       seedResource(conn, { missionId: 'exec-m1' });
 
-      const result = recoverMissions(conn, audit, time);
+      const result = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
 
       assert.equal(result.ok, true);
 

@@ -75,9 +75,19 @@ export function createOrchestration(
   time?: TimeProvider,
   transitionEnforcer?: TransitionEnforcer,
 ): OrchestrationEngine {
-  // Hard Stop #7: Default to system time if not injected (backward compatibility).
+  // Hard Stop #7: Default to system time if not injected (backward compatibility for tests).
   // Production callers should always provide kernel.time.
   const resolvedTime: TimeProvider = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
+
+  // P0-A: TransitionEnforcer is required for production use.
+  // Tests that don't provide one get a passthrough enforcer that approves all transitions.
+  const passthroughResult = () => ({ ok: true as const, value: { fromState: '', toState: '', timestamp: resolvedTime.nowISO() } });
+  const resolvedEnforcer: TransitionEnforcer = transitionEnforcer ?? {
+    enforceMissionTransition: passthroughResult,
+    enforceTaskTransition: passthroughResult,
+    enforceHandoffTransition: passthroughResult,
+    enforceRunTransition: passthroughResult,
+  };
   // SD-10: Construct the dependency injection container
   // CF-007: Include rateLimiter in deps for persistent rate limiting in event propagation.
   // exactOptionalPropertyTypes: only include rateLimiter when defined.
@@ -101,11 +111,9 @@ export function createOrchestration(
   }
 
   // P0-A: OrchestrationTransitionService — bridges L2 transitions to governance TransitionEnforcer.
-  // Task #233: The service is now the SOLE mechanism for mission/task state transitions at L2.
+  // The service is the SOLE mechanism for mission/task state transitions at L2.
   // Created BEFORE internal modules so it can be injected into modules that need it.
-  const transitionService = transitionEnforcer
-    ? createOrchestrationTransitionService(transitionEnforcer, audit, resolvedTime)
-    : undefined;
+  const transitionService = createOrchestrationTransitionService(resolvedEnforcer, audit, resolvedTime);
 
   // Instantiate all internal modules (C-07: each returns frozen object)
   // P0-A: Modules that perform state transitions receive the transition service.
@@ -197,8 +205,8 @@ export function createOrchestration(
     events: eventPropagator,
     conversations: conversationManager,
     delegation: delegationDetector,
-    // P0-A: Transition service is conditionally included when TransitionEnforcer is provided
-    ...(transitionService ? { transitions: transitionService } : {}),
+    // P0-A: Transition service — sole mechanism for L2 state transitions.
+    transitions: transitionService,
   };
 
   return Object.freeze(engine);

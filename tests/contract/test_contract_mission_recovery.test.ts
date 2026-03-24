@@ -28,11 +28,21 @@ import {
   seedResource,
 } from '../helpers/test_database.js';
 import { recoverMissions } from '../../src/orchestration/missions/mission_recovery.js';
+import { createOrchestrationTransitionService } from '../../src/orchestration/transitions/transition_service.js';
 import type { TimeProvider } from '../../src/kernel/interfaces/time.js';
+import type { TransitionEnforcer } from '../../src/kernel/interfaces/lifecycle.js';
 
 const time: TimeProvider = {
   nowISO: () => '2026-01-01T00:00:00.000Z',
   nowMs: () => 1735689600000,
+};
+
+/** P0-A: Passthrough enforcer for tests — approves all transitions. */
+const passthroughEnforcer: TransitionEnforcer = {
+  enforceMissionTransition: () => ({ ok: true, value: { fromState: '', toState: '', timestamp: time.nowISO() } }),
+  enforceTaskTransition: () => ({ ok: true, value: { fromState: '', toState: '', timestamp: time.nowISO() } }),
+  enforceHandoffTransition: () => ({ ok: true, value: { fromState: '', toState: '', timestamp: time.nowISO() } }),
+  enforceRunTransition: () => ({ ok: true, value: { fromState: '', toState: '', timestamp: time.nowISO() } }),
 };
 
 describe('Contract: Mission Recovery (I-18)', () => {
@@ -45,7 +55,7 @@ describe('Contract: Mission Recovery (I-18)', () => {
       seedMission(conn, { id: 'rec-exec', state: 'EXECUTING' });
       seedResource(conn, { missionId: 'rec-exec' });
 
-      const result = recoverMissions(conn, audit, time);
+      const result = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
       assert.equal(result.ok, true);
 
       const mission = result.value.missions.find(m => m.missionId === 'rec-exec');
@@ -67,7 +77,7 @@ describe('Contract: Mission Recovery (I-18)', () => {
       seedMission(conn, { id: 'rec-review', state: 'REVIEWING' });
       seedResource(conn, { missionId: 'rec-review' });
 
-      const result = recoverMissions(conn, audit, time);
+      const result = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
       assert.equal(result.ok, true);
 
       const mission = result.value.missions.find(m => m.missionId === 'rec-review');
@@ -88,7 +98,7 @@ describe('Contract: Mission Recovery (I-18)', () => {
       seedMission(conn, { id: 'rec-created', state: 'CREATED' });
       seedResource(conn, { missionId: 'rec-created' });
 
-      const result = recoverMissions(conn, audit, time);
+      const result = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
       assert.equal(result.ok, true);
 
       const mission = result.value.missions.find(m => m.missionId === 'rec-created');
@@ -108,7 +118,7 @@ describe('Contract: Mission Recovery (I-18)', () => {
       seedMission(conn, { id: 'rec-plan', state: 'PLANNING' });
       seedResource(conn, { missionId: 'rec-plan' });
 
-      const result = recoverMissions(conn, audit, time);
+      const result = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
       assert.equal(result.ok, true);
 
       const mission = result.value.missions.find(m => m.missionId === 'rec-plan');
@@ -124,7 +134,7 @@ describe('Contract: Mission Recovery (I-18)', () => {
       seedMission(conn, { id: 'rec-paused', state: 'PAUSED' });
       seedResource(conn, { missionId: 'rec-paused' });
 
-      const result = recoverMissions(conn, audit, time);
+      const result = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
       assert.equal(result.ok, true);
 
       const mission = result.value.missions.find(m => m.missionId === 'rec-paused');
@@ -140,7 +150,7 @@ describe('Contract: Mission Recovery (I-18)', () => {
       seedMission(conn, { id: 'rec-blocked', state: 'BLOCKED' });
       seedResource(conn, { missionId: 'rec-blocked' });
 
-      const result = recoverMissions(conn, audit, time);
+      const result = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
       assert.equal(result.ok, true);
 
       const mission = result.value.missions.find(m => m.missionId === 'rec-blocked');
@@ -156,7 +166,7 @@ describe('Contract: Mission Recovery (I-18)', () => {
       seedMission(conn, { id: 'rec-degraded', state: 'DEGRADED' });
       seedResource(conn, { missionId: 'rec-degraded' });
 
-      const result = recoverMissions(conn, audit, time);
+      const result = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
       assert.equal(result.ok, true);
 
       const mission = result.value.missions.find(m => m.missionId === 'rec-degraded');
@@ -173,7 +183,7 @@ describe('Contract: Mission Recovery (I-18)', () => {
       seedMission(conn, { id: 'rec-failed', state: 'FAILED' });
       seedMission(conn, { id: 'rec-cancelled', state: 'CANCELLED' });
 
-      const result = recoverMissions(conn, audit, time);
+      const result = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
       assert.equal(result.ok, true);
 
       // Terminal missions should not appear in recovery results at all
@@ -208,11 +218,13 @@ describe('Contract: Mission Recovery (I-18)', () => {
       seedMission(conn, { id: 'aud-m2', state: 'CREATED' });
       seedResource(conn, { missionId: 'aud-m2' });
 
-      recoverMissions(conn, audit, time);
+      recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
 
-      // Check audit entries for both missions
+      // Check audit entries for both missions.
+      // P0-A: Transitioned missions get 'mission_transition' from the transition service.
+      // Unchanged missions get 'mission_recovery' from the recovery function.
       const auditEntries = conn.query<{ resource_id: string; operation: string }>(
-        `SELECT resource_id, operation FROM core_audit_log WHERE operation = 'mission_recovery'`,
+        `SELECT resource_id, operation FROM core_audit_log WHERE operation IN ('mission_recovery', 'mission_transition')`,
       );
 
       assert.ok(auditEntries.length >= 2,
@@ -220,8 +232,8 @@ describe('Contract: Mission Recovery (I-18)', () => {
 
       const m1Entry = auditEntries.find(e => e.resource_id === 'aud-m1');
       const m2Entry = auditEntries.find(e => e.resource_id === 'aud-m2');
-      assert.ok(m1Entry, 'EXECUTING mission must have audit entry');
-      assert.ok(m2Entry, 'CREATED mission must have audit entry');
+      assert.ok(m1Entry, 'EXECUTING mission must have audit entry (mission_transition from transition service)');
+      assert.ok(m2Entry, 'CREATED mission must have audit entry (mission_recovery)');
 
       conn.close();
     });
@@ -236,12 +248,12 @@ describe('Contract: Mission Recovery (I-18)', () => {
       seedResource(conn, { missionId: 'idemp-m1' });
 
       // First recovery pass
-      const result1 = recoverMissions(conn, audit, time);
+      const result1 = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
       assert.equal(result1.ok, true);
       assert.equal(result1.value.recoveredCount, 1, 'First pass: one mission recovered');
 
       // Second recovery pass — mission is now PAUSED, plus it has an idempotency audit entry
-      const result2 = recoverMissions(conn, audit, time);
+      const result2 = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
       assert.equal(result2.ok, true);
 
       // On second pass, the mission is PAUSED (unchanged state) and has existing recovery audit
@@ -270,7 +282,7 @@ describe('Contract: Mission Recovery (I-18)', () => {
       seedMission(conn, { id: 'child-m1', state: 'EXECUTING', depth: 1, parentId: 'parent-m1' });
       seedResource(conn, { missionId: 'child-m1' });
 
-      const result = recoverMissions(conn, audit, time);
+      const result = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
       assert.equal(result.ok, true);
 
       // Both should be recovered
@@ -302,7 +314,7 @@ describe('Contract: Mission Recovery (I-18)', () => {
       seedMission(conn, { id: 'mix-m4', state: 'PAUSED' });
       seedResource(conn, { missionId: 'mix-m4' });
 
-      const result = recoverMissions(conn, audit, time);
+      const result = recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
       assert.equal(result.ok, true);
       assert.equal(result.value.recoveredCount, 2,
         'Only EXECUTING and REVIEWING should be recovered (2 transitions)');
@@ -325,7 +337,7 @@ describe('Contract: Mission Recovery (I-18)', () => {
       seedMission(conn, { id: 'noresume-m1', state: 'EXECUTING' });
       seedResource(conn, { missionId: 'noresume-m1' });
 
-      recoverMissions(conn, audit, time);
+      recoverMissions(conn, audit, time, createOrchestrationTransitionService(passthroughEnforcer, audit, time));
 
       const row = conn.get<{ state: string }>('SELECT state FROM core_missions WHERE id = ?', ['noresume-m1']);
       assert.notEqual(row!.state, 'EXECUTING',

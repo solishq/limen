@@ -524,6 +524,7 @@ export function createGovernedOrchestration(
     get events() { return inner.events; },
     get conversations() { return inner.conversations; },
     get delegation() { return inner.delegation; },
+    get transitions() { return inner.transitions; },
   };
 
   return Object.freeze({
