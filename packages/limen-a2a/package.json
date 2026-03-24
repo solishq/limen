@@ -1,0 +1,28 @@
+{
+  "name": "limen-a2a",
+  "version": "1.0.0",
+  "description": "A2A server for Limen Cognitive OS — Google Agent-to-Agent Protocol",
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "limen-a2a": "./dist/server.js"
+  },
+  "main": "./dist/server.js",
+  "files": [
+    "dist/"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "limen-ai": "file:../../"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

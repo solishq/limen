@@ -33,40 +33,41 @@ import { requirePermission } from '../enforcement/rbac_guard.js';
 import { requireRateLimit } from '../enforcement/rate_guard.js';
 
 // ============================================================================
-// ClaimApi — public facade interface
+// RawClaimFacade — internal facade interface (conn, ctx, input)
 // ============================================================================
 
 /**
- * Public claim API exposed on the Limen object.
+ * Internal claim facade requiring explicit DatabaseConnection and OperationContext.
+ * Used by orchestration layer. Consumers use ClaimApi (convenience wrapper).
  * SC-11 (assertClaim), SC-12 (relateClaims), SC-13 (queryClaims).
  * RBAC-gated, rate-limited, delegates to closure-local ClaimSystem.
  */
-export interface ClaimApi {
+export interface RawClaimFacade {
   assertClaim(conn: DatabaseConnection, ctx: OperationContext, input: ClaimCreateInput): Result<AssertClaimOutput>;
   relateClaims(conn: DatabaseConnection, ctx: OperationContext, input: RelationshipCreateInput): Result<RelateClaimsOutput>;
   queryClaims(conn: DatabaseConnection, ctx: OperationContext, input: ClaimQueryInput): Result<ClaimQueryResult>;
 }
 
 // ============================================================================
-// createClaimFacade — factory
+// createRawClaimFacade — factory
 // ============================================================================
 
 /**
- * Create a ClaimFacade that wraps ClaimSystem with RBAC + rate limiting.
+ * Create a RawClaimFacade that wraps ClaimSystem with RBAC + rate limiting.
  *
  * The raw ClaimSystem is closure-local — never leaked (DC-P4-406, C-SEC-05).
- * The returned facade is frozen and satisfies ClaimApi.
+ * The returned facade is frozen and satisfies RawClaimFacade.
  *
  * @param claimSystem - The raw ClaimSystem (closure-local, never exposed)
  * @param rbac - Kernel RBAC engine
  * @param rateLimiter - Kernel rate limiter
- * @returns Frozen ClaimApi facade
+ * @returns Frozen RawClaimFacade
  */
-export function createClaimFacade(
+export function createRawClaimFacade(
   claimSystem: ClaimSystem,
   rbac: RbacEngine,
   rateLimiter: RateLimiter,
-): ClaimApi {
+): RawClaimFacade {
   return Object.freeze({
     /**
      * SC-11: Assert a claim.

@@ -115,8 +115,10 @@ import { createClaimSystem } from '../claims/store/claim_stores.js';
 import { createWorkingMemorySystem } from '../working-memory/harness/wmp_harness.js';
 
 // Phase 4: Facade factories
-import { createClaimFacade } from './facades/claim_facade.js';
-import { createWorkingMemoryFacade } from './facades/working_memory_facade.js';
+import { createRawClaimFacade } from './facades/claim_facade.js';
+import { createRawWorkingMemoryFacade } from './facades/working_memory_facade.js';
+import { ClaimApiImpl } from './facades/claim_api_impl.js';
+import { WorkingMemoryApiImpl } from './facades/working_memory_api_impl.js';
 
 // ============================================================================
 // Re-export public types (convenience for consumers)
@@ -151,6 +153,12 @@ export type {
   HealthStatus, SubsystemHealth, MetricsApi, MetricsSnapshot, HistogramData,
   DataApi,
   BackpressureConfig,
+  ClaimApi, ClaimCreateInput, AssertClaimOutput,
+  RelationshipCreateInput, RelateClaimsOutput,
+  ClaimQueryInput, ClaimQueryResult,
+  WorkingMemoryApi, WriteWorkingMemoryInput, WriteWorkingMemoryOutput,
+  ReadWorkingMemoryInput, ReadWorkingMemoryOutput,
+  DiscardWorkingMemoryInput, DiscardWorkingMemoryOutput,
 } from './interfaces/api.js';
 
 export type {
@@ -798,8 +806,10 @@ export async function createLimen(
   );
 
   // Phase 4: Create facade instances (DC-P4-404, DC-P4-405, DC-P4-406)
-  const claimsFacade = createClaimFacade(claimSystem, rbac, rateLimiter);
-  const workingMemoryFacade = createWorkingMemoryFacade(wmpSystem, rbac, rateLimiter);
+  const rawClaimsFacade = createRawClaimFacade(claimSystem, rbac, rateLimiter);
+  const rawWmFacade = createRawWorkingMemoryFacade(wmpSystem, rbac, rateLimiter);
+  const claimsApi = new ClaimApiImpl(rawClaimsFacade, getConnection, getContext);
+  const wmApi = new WorkingMemoryApiImpl(rawWmFacade, getConnection, getContext);
 
   // Build the Limen object
   const engine: Limen = {
@@ -942,13 +952,13 @@ export async function createLimen(
     // I-02: Data management
     data: dataApi,
 
-    // Phase 4: Claim management (SC-11, SC-12, SC-13 via CCP facade)
-    // DC-P4-406: Only facade exposed — raw ClaimSystem is closure-local
-    claims: claimsFacade,
+    // Sprint 7: Claim management — consumer convenience wrapper (SC-11, SC-12, SC-13)
+    // DC-P4-406: Raw ClaimSystem is closure-local, wrapped by ClaimApiImpl
+    claims: claimsApi,
 
-    // Phase 4: Working memory management (SC-14, SC-15, SC-16 via WMP facade)
-    // DC-P4-406: Only facade exposed — raw WorkingMemorySystem is closure-local
-    workingMemory: workingMemoryFacade,
+    // Sprint 7: Working memory management — consumer convenience wrapper (SC-14, SC-15, SC-16)
+    // DC-P4-406: Raw WorkingMemorySystem is closure-local, wrapped by WorkingMemoryApiImpl
+    workingMemory: wmApi,
 
     // S3.4, I-05, SD-06: Graceful shutdown
     // CF-011: Each step wrapped in try/catch so that one failure

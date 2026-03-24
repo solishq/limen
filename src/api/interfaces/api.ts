@@ -21,7 +21,7 @@
 import type {
   TenantId, AgentId, MissionId, TaskId,
   EventId, ArtifactId, SessionId, Permission,
-  MissionContractId,
+  MissionContractId, Result,
 } from '../../kernel/interfaces/index.js';
 
 // Re-export branded ID types that consumers need
@@ -30,10 +30,46 @@ export type {
   EventId, ArtifactId, SessionId, MissionContractId,
 } from '../../kernel/interfaces/index.js';
 
-// Phase 4: Facade types for claims and working memory (DC-P4-406, C-SEC-05)
-import type { ClaimApi } from '../facades/claim_facade.js';
-import type { WorkingMemoryApi } from '../facades/working_memory_facade.js';
-export type { ClaimApi, WorkingMemoryApi };
+// Phase 4: CCP input/output types for consumer-facing ClaimApi
+import type {
+  ClaimCreateInput, AssertClaimOutput,
+  RelationshipCreateInput, RelateClaimsOutput,
+  ClaimQueryInput, ClaimQueryResult,
+} from '../../claims/interfaces/claim_types.js';
+
+// Phase 4: WMP input/output types for consumer-facing WorkingMemoryApi
+import type {
+  WriteWorkingMemoryInput, WriteWorkingMemoryOutput,
+  ReadWorkingMemoryInput, ReadWorkingMemoryOutput,
+  DiscardWorkingMemoryInput, DiscardWorkingMemoryOutput,
+} from '../../working-memory/interfaces/wmp_types.js';
+
+// Re-export CCP/WMP types so consumers can construct inputs
+export type {
+  ClaimCreateInput, AssertClaimOutput,
+  RelationshipCreateInput, RelateClaimsOutput,
+  ClaimQueryInput, ClaimQueryResult,
+} from '../../claims/interfaces/claim_types.js';
+
+export type {
+  WriteWorkingMemoryInput, WriteWorkingMemoryOutput,
+  ReadWorkingMemoryInput, ReadWorkingMemoryOutput,
+  DiscardWorkingMemoryInput, DiscardWorkingMemoryOutput,
+} from '../../working-memory/interfaces/wmp_types.js';
+
+// Sprint 7: Consumer-facing ClaimApi — no conn/ctx required (DC-P4-406, C-SEC-05)
+export interface ClaimApi {
+  assertClaim(input: ClaimCreateInput): Result<AssertClaimOutput>;
+  relateClaims(input: RelationshipCreateInput): Result<RelateClaimsOutput>;
+  queryClaims(input: ClaimQueryInput): Result<ClaimQueryResult>;
+}
+
+// Sprint 7: Consumer-facing WorkingMemoryApi — no conn/ctx required (DC-P4-406, C-SEC-05)
+export interface WorkingMemoryApi {
+  write(input: WriteWorkingMemoryInput): Result<WriteWorkingMemoryOutput>;
+  read(input: ReadWorkingMemoryInput): Result<ReadWorkingMemoryOutput>;
+  discard(input: DiscardWorkingMemoryInput): Result<DiscardWorkingMemoryOutput>;
+}
 
 // ============================================================================
 // §6.1: Configuration Types (S39 IP-4, S3.3)
