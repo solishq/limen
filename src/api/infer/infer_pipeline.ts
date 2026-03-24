@@ -351,7 +351,10 @@ export class InferPipeline {
       }
     }
 
-    // Should not reach here, but defensive
-    throw new LimenError('ENGINE_UNHEALTHY', 'Unexpected inference pipeline state.');
+    // Defensive: unreachable after retry loop exhaustion, but TypeScript
+    // requires a return/throw. Use SCHEMA_VALIDATION_FAILED (not ENGINE_UNHEALTHY)
+    // because this path is structurally equivalent to retry exhaustion, not engine failure.
+    throw new LimenError('SCHEMA_VALIDATION_FAILED',
+      'Inference pipeline exited retry loop without producing a result.');
   }
 }

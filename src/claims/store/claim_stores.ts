@@ -320,7 +320,7 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
     retract(conn: DatabaseConnection, ctx: OperationContext, claimId: ClaimId, _reason: string): Result<void> {
       try {
         conn.run(
-          `UPDATE claim_assertions SET status = 'retracted' WHERE id = ? AND tenant_id = ?`,
+          `UPDATE claim_assertions SET status = 'retracted' WHERE id = ? AND tenant_id IS ?`,
           [claimId, ctx.tenantId],
         );
         return ok(undefined);
@@ -1012,7 +1012,7 @@ function createAssertClaimHandlerImpl(
           // F-007: Include tenant_id in mission state query to prevent cross-tenant information leak.
           // Matches SC-12 (line 1305) and SC-13 (line 1462) which both scope by tenant_id.
           const missionRow = conn.get<Record<string, unknown>>(
-            'SELECT state FROM core_missions WHERE id = ? AND tenant_id = ?',
+            'SELECT state FROM core_missions WHERE id = ? AND tenant_id IS ?',
             [input.missionId, ctx.tenantId],
           );
           if (missionRow) {
@@ -1025,7 +1025,7 @@ function createAssertClaimHandlerImpl(
 
         // 12. Per-mission claim limit
         const countRow = conn.get<{ cnt: number }>(
-          'SELECT COUNT(*) as cnt FROM claim_assertions WHERE tenant_id = ? AND source_mission_id = ?',
+          'SELECT COUNT(*) as cnt FROM claim_assertions WHERE tenant_id IS ? AND source_mission_id = ?',
           [ctx.tenantId, input.missionId],
         );
         if ((countRow?.cnt ?? 0) >= CLAIM_PER_MISSION_LIMIT) {
@@ -1319,7 +1319,7 @@ function createRelateClaimsHandlerImpl(
         // 3. Mission state validation
         if (input.missionId) {
           const missionRow = conn.get<Record<string, unknown>>(
-            'SELECT state FROM core_missions WHERE id = ? AND tenant_id = ?',
+            'SELECT state FROM core_missions WHERE id = ? AND tenant_id IS ?',
             [input.missionId, ctx.tenantId],
           );
           if (missionRow) {
@@ -1476,7 +1476,7 @@ function createQueryClaimsHandlerImpl(
       // 5. Mission state validation for sourceMissionId filter
       if (input.sourceMissionId) {
         const missionRow = conn.get<Record<string, unknown>>(
-          'SELECT state FROM core_missions WHERE id = ? AND tenant_id = ?',
+          'SELECT state FROM core_missions WHERE id = ? AND tenant_id IS ?',
           [input.sourceMissionId, ctx.tenantId],
         );
         if (missionRow) {

@@ -617,8 +617,8 @@ describe('CF-015: data export .limen format', () => {
         'Format must be limen-archive-v1');
 
       const version = meta.find(m => m.key === 'limen_version');
-      assert.equal(version?.value, '3.2.0',
-        'Limen version must be 1.0.0');
+      assert.equal(version?.value, '1.0.0',
+        'Limen version must match package.json version');
 
       const schemaVer = meta.find(m => m.key === 'schema_version');
       assert.equal(schemaVer?.value, '35',

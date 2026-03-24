@@ -192,36 +192,40 @@ export function createVaultOperations(crypto: CryptoEngine, masterKey: Buffer): 
         const id = randomUUID();
         const tenantId = ctx.tenantId;
 
-        // Upsert into vault
-        conn.run(
-          `INSERT INTO core_vault (id, tenant_id, key_name, ciphertext, iv, auth_tag, algorithm, key_version, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-           ON CONFLICT(tenant_id, key_name) DO UPDATE SET
-             ciphertext = excluded.ciphertext,
-             iv = excluded.iv,
-             auth_tag = excluded.auth_tag,
-             key_version = key_version + 1,
-             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`,
-          [id, tenantId, keyName,
-           payload.ciphertext.toString('base64'),
-           payload.iv.toString('base64'),
-           payload.authTag.toString('base64'),
-           payload.algorithm, payload.keyVersion]
-        );
+        // Atomic upsert: both vault entry and key metadata in a single transaction.
+        // If either fails, both roll back — no partial vault entries (Critical #3).
+        conn.transaction(() => {
+          // Upsert into vault
+          conn.run(
+            `INSERT INTO core_vault (id, tenant_id, key_name, ciphertext, iv, auth_tag, algorithm, key_version, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+             ON CONFLICT(tenant_id, key_name) DO UPDATE SET
+               ciphertext = excluded.ciphertext,
+               iv = excluded.iv,
+               auth_tag = excluded.auth_tag,
+               key_version = key_version + 1,
+               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`,
+            [id, tenantId, keyName,
+             payload.ciphertext.toString('base64'),
+             payload.iv.toString('base64'),
+             payload.authTag.toString('base64'),
+             payload.algorithm, payload.keyVersion]
+          );
 
-        // Store key metadata (salt + iterations for re-derivation)
-        // SEC-003 fix: ON CONFLICT must UPDATE salt to match new encryption,
-        // otherwise retrieve() derives wrong key and decryption fails.
-        conn.run(
-          `INSERT INTO core_encryption_keys (id, tenant_id, purpose, salt, iterations, algorithm, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-           ON CONFLICT (tenant_id, purpose) DO UPDATE SET
-             salt = excluded.salt,
-             iterations = excluded.iterations,
-             algorithm = excluded.algorithm`,
-          [randomUUID(), tenantId, `vault:${keyName}`,
-           salt.toString('base64'), DEFAULT_PBKDF2_ITERATIONS, AES_256_GCM]
-        );
+          // Store key metadata (salt + iterations for re-derivation)
+          // SEC-003 fix: ON CONFLICT must UPDATE salt to match new encryption,
+          // otherwise retrieve() derives wrong key and decryption fails.
+          conn.run(
+            `INSERT INTO core_encryption_keys (id, tenant_id, purpose, salt, iterations, algorithm, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+             ON CONFLICT (tenant_id, purpose) DO UPDATE SET
+               salt = excluded.salt,
+               iterations = excluded.iterations,
+               algorithm = excluded.algorithm`,
+            [randomUUID(), tenantId, `vault:${keyName}`,
+             salt.toString('base64'), DEFAULT_PBKDF2_ITERATIONS, AES_256_GCM]
+          );
+        });
 
         return { ok: true, value: undefined };
       } catch (err) {
