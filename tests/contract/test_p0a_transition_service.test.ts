@@ -4,8 +4,8 @@
  *
  * Phase: P0-A (Structural Integrity Pass)
  *
- * Tests the OrchestrationTransitionService — the SOLE mechanism for changing
- * mission and task state at L2 (orchestration layer). The service bridges
+ * Tests the OrchestrationTransitionService — the canonical mechanism for
+ * changing mission and task state at L2 (orchestration layer). The service bridges
  * orchestration types (MissionState — 10 flat states) to governance types
  * (MissionLifecycleState — 6 states + substates) via the TransitionEnforcer.
  *
@@ -488,6 +488,304 @@ describe('P0-A: OrchestrationTransitionService', () => {
       // Mission should stay in PLANNING — the trigger only fires from EXECUTING
       assert.equal(getMissionState(mid), 'PLANNING',
         'REVIEWING trigger must not fire when mission is not in EXECUTING state');
+    });
+  });
+
+  // ── F-P0A-001: Bulk CAS rollback ──
+
+  describe('bulk CAS rollback (F-P0A-001)', () => {
+    it('F-001: bulk transition with CAS mismatch rolls back ALL tasks', () => {
+      const mid = 'mission-cas-bulk-001';
+      const graphId = 'graph-cas-bulk-001';
+
+      seedMissionAtState(mid, 'EXECUTING');
+      seedTaskGraph(graphId, mid);
+      // Seed two tasks at RUNNING
+      seedTask('task-cas-001', mid, graphId, 'RUNNING');
+      seedTask('task-cas-002', mid, graphId, 'RUNNING');
+
+      // Externally change task-cas-002 to CANCELLED before the bulk call.
+      // The bulk call will pass RUNNING as from, but the CAS will fail because
+      // the actual state is CANCELLED.
+      conn.run(
+        `UPDATE core_tasks SET state = 'CANCELLED', updated_at = ? WHERE id = ?`,
+        [new Date().toISOString(), 'task-cas-002'],
+      );
+
+      const result = service.bulkTransitionTasks(
+        conn,
+        [
+          { taskId: taskId('task-cas-001'), from: 'RUNNING', to: 'COMPLETED' },
+          { taskId: taskId('task-cas-002'), from: 'RUNNING', to: 'COMPLETED' }, // CAS will fail: actual state is CANCELLED
+        ],
+      );
+
+      // Entire bulk operation must fail
+      assert.equal(result.ok, false, 'Bulk must fail when CAS mismatch occurs');
+
+      // ALL tasks must remain in their original states (full rollback)
+      assert.equal(getTaskState('task-cas-001'), 'RUNNING',
+        'First task must be rolled back to RUNNING on bulk CAS failure');
+      assert.equal(getTaskState('task-cas-002'), 'CANCELLED',
+        'Second task must remain in CANCELLED (externally set)');
+    });
+  });
+
+  // ── F-P0A-002: Bulk governance enforcement ──
+
+  describe('bulk governance enforcement (F-P0A-002)', () => {
+    it('F-002: phantom task in bulk operation causes full rollback with LIFECYCLE_INVALID_TRANSITION', () => {
+      const mid = 'mission-gov-bulk-001';
+      const graphId = 'graph-gov-bulk-001';
+
+      seedMissionAtState(mid, 'EXECUTING');
+      seedTaskGraph(graphId, mid);
+      seedTask('task-gov-001', mid, graphId, 'RUNNING');
+      // task-phantom-001 is NOT seeded — it is a phantom entity
+
+      const result = service.bulkTransitionTasks(
+        conn,
+        [
+          { taskId: taskId('task-gov-001'), from: 'RUNNING', to: 'COMPLETED' },
+          { taskId: taskId('task-phantom-001'), from: 'RUNNING', to: 'COMPLETED' }, // phantom
+        ],
+      );
+
+      assert.equal(result.ok, false, 'Bulk must fail when phantom task is included');
+      if (!result.ok) {
+        assert.equal(result.error.code, 'LIFECYCLE_INVALID_TRANSITION',
+          'Phantom task should produce LIFECYCLE_INVALID_TRANSITION from governance enforcement');
+      }
+
+      // NO tasks should have been transitioned (full rollback)
+      assert.equal(getTaskState('task-gov-001'), 'RUNNING',
+        'Valid task must be rolled back when phantom causes batch failure');
+    });
+  });
+
+  // ── F-P0A-003: Bulk audit trail ──
+
+  describe('bulk audit trail (F-P0A-003)', () => {
+    it('F-003: successful bulk transition produces audit entries for each task', () => {
+      const mid = 'mission-bulk-audit-001';
+      const graphId = 'graph-bulk-audit-001';
+
+      seedMissionAtState(mid, 'EXECUTING');
+      seedTaskGraph(graphId, mid);
+      seedTask('task-baud-001', mid, graphId, 'RUNNING');
+      seedTask('task-baud-002', mid, graphId, 'RUNNING');
+      seedTask('task-baud-003', mid, graphId, 'RUNNING');
+
+      const result = service.bulkTransitionTasks(
+        conn,
+        [
+          { taskId: taskId('task-baud-001'), from: 'RUNNING', to: 'COMPLETED' },
+          { taskId: taskId('task-baud-002'), from: 'RUNNING', to: 'COMPLETED' },
+          { taskId: taskId('task-baud-003'), from: 'RUNNING', to: 'COMPLETED' },
+        ],
+      );
+
+      assert.ok(result.ok, `Bulk transition must succeed, got: ${!result.ok ? result.error.message : ''}`);
+
+      // Verify audit entries for each task
+      for (const tid of ['task-baud-001', 'task-baud-002', 'task-baud-003']) {
+        const audits = getAuditEntries(tid);
+        assert.ok(audits.length > 0, `Audit entry must exist for ${tid} after bulk transition`);
+        const entry = audits[0]!;
+        assert.equal(entry['operation'], 'task_transition',
+          `Audit operation must be 'task_transition' for ${tid}`);
+        const detail = JSON.parse(entry['detail'] as string);
+        assert.equal(detail.bulk, true, `Audit detail must include bulk:true for ${tid}`);
+        assert.equal(detail.from, 'RUNNING', `Audit detail.from must be RUNNING for ${tid}`);
+        assert.equal(detail.to, 'COMPLETED', `Audit detail.to must be COMPLETED for ${tid}`);
+      }
+    });
+  });
+
+  // ── F-P0A-005: Bulk REVIEWING trigger ──
+
+  describe('bulk REVIEWING trigger (F-P0A-005)', () => {
+    it('F-005: bulk transition of all running tasks to terminal triggers REVIEWING on mission', () => {
+      const mid = 'mission-bulk-rev-001';
+      const graphId = 'graph-bulk-rev-001';
+
+      seedMissionAtState(mid, 'EXECUTING');
+      seedTaskGraph(graphId, mid);
+      seedTask('task-brev-001', mid, graphId, 'RUNNING');
+      seedTask('task-brev-002', mid, graphId, 'RUNNING');
+      seedTask('task-brev-003', mid, graphId, 'RUNNING');
+
+      const result = service.bulkTransitionTasks(
+        conn,
+        [
+          { taskId: taskId('task-brev-001'), from: 'RUNNING', to: 'COMPLETED' },
+          { taskId: taskId('task-brev-002'), from: 'RUNNING', to: 'COMPLETED' },
+          { taskId: taskId('task-brev-003'), from: 'RUNNING', to: 'COMPLETED' },
+        ],
+      );
+
+      assert.ok(result.ok, `Bulk transition must succeed, got: ${!result.ok ? result.error.message : ''}`);
+
+      // Mission should auto-transition to REVIEWING since all 3 tasks are now terminal
+      assert.equal(getMissionState(mid), 'REVIEWING',
+        'Mission must auto-transition to REVIEWING when bulk transitions make all tasks terminal');
+    });
+
+    it('F-005b: bulk transition does NOT trigger REVIEWING when non-terminal tasks remain', () => {
+      const mid = 'mission-bulk-norev-001';
+      const graphId = 'graph-bulk-norev-001';
+
+      seedMissionAtState(mid, 'EXECUTING');
+      seedTaskGraph(graphId, mid);
+      seedTask('task-bnr-001', mid, graphId, 'RUNNING');
+      seedTask('task-bnr-002', mid, graphId, 'RUNNING');
+      seedTask('task-bnr-003', mid, graphId, 'PENDING'); // not in bulk, stays PENDING
+
+      const result = service.bulkTransitionTasks(
+        conn,
+        [
+          { taskId: taskId('task-bnr-001'), from: 'RUNNING', to: 'COMPLETED' },
+          { taskId: taskId('task-bnr-002'), from: 'RUNNING', to: 'COMPLETED' },
+        ],
+      );
+
+      assert.ok(result.ok);
+
+      // Mission should stay in EXECUTING (task-bnr-003 is still PENDING)
+      assert.equal(getMissionState(mid), 'EXECUTING',
+        'Mission must stay EXECUTING while non-terminal tasks remain after bulk');
+    });
+  });
+
+  // ── F-P0A-006: Task audit trail ──
+
+  describe('task audit trail (F-P0A-006)', () => {
+    it('F-006: transitionTask PENDING→SCHEDULED produces audit entry', () => {
+      const mid = 'mission-task-audit-001';
+      const graphId = 'graph-task-audit-001';
+      const tid = 'task-audit-001';
+
+      seedMissionAtState(mid, 'EXECUTING');
+      seedTaskGraph(graphId, mid);
+      seedTask(tid, mid, graphId, 'PENDING');
+
+      const result = service.transitionTask(
+        conn,
+        taskId(tid),
+        'PENDING',
+        'SCHEDULED',
+      );
+
+      assert.ok(result.ok, `Expected success, got: ${!result.ok ? result.error.message : ''}`);
+
+      // Verify audit entry for task transition
+      const audits = getAuditEntries(tid);
+      assert.ok(audits.length > 0, 'Audit entry must exist after task transition');
+      const entry = audits[0]!;
+      assert.equal(entry['operation'], 'task_transition',
+        "Audit operation must be 'task_transition'");
+      const detail = JSON.parse(entry['detail'] as string);
+      assert.equal(detail.from, 'PENDING', 'Audit detail.from must be PENDING');
+      assert.equal(detail.to, 'SCHEDULED', 'Audit detail.to must be SCHEDULED');
+    });
+  });
+
+  // ── F-P0A-007: REVIEWING trigger audit entry ──
+
+  describe('REVIEWING trigger audit (F-P0A-007)', () => {
+    it('F-007: auto-REVIEWING transition produces audit entry with trigger: all_tasks_terminal', () => {
+      const mid = 'mission-rev-audit-001';
+      const graphId = 'graph-rev-audit-001';
+
+      seedMissionAtState(mid, 'EXECUTING');
+      seedTaskGraph(graphId, mid);
+      seedTask('task-reva-001', mid, graphId, 'RUNNING');
+      seedTask('task-reva-002', mid, graphId, 'COMPLETED');
+
+      // Transition the last non-terminal task
+      const result = service.transitionTask(
+        conn,
+        taskId('task-reva-001'),
+        'RUNNING',
+        'COMPLETED',
+      );
+
+      assert.ok(result.ok);
+      assert.equal(getMissionState(mid), 'REVIEWING',
+        'Mission must auto-transition to REVIEWING');
+
+      // Verify the REVIEWING trigger audit entry
+      const missionAudits = getAuditEntries(mid);
+      assert.ok(missionAudits.length > 0, 'Mission must have audit entries');
+
+      // Find the auto-REVIEWING audit entry
+      const reviewingAudit = missionAudits.find(a => {
+        const detail = JSON.parse(a['detail'] as string);
+        return detail.trigger === 'all_tasks_terminal';
+      });
+      assert.ok(reviewingAudit, 'Must have audit entry with trigger: all_tasks_terminal');
+      assert.equal(reviewingAudit!['operation'], 'mission_transition');
+      const detail = JSON.parse(reviewingAudit!['detail'] as string);
+      assert.equal(detail.from, 'EXECUTING');
+      assert.equal(detail.to, 'REVIEWING');
+      assert.equal(detail.trigger, 'all_tasks_terminal');
+    });
+  });
+
+  // ── F-P0A-010: REVIEWING trigger governance rejection audit ──
+
+  describe('REVIEWING trigger governance rejection (F-P0A-010)', () => {
+    it('F-010: governance rejection of REVIEWING trigger produces audit trace', () => {
+      const mid = 'mission-rev-blocked-001';
+      const graphId = 'graph-rev-blocked-001';
+
+      // Create mission in COMPLETED (terminal) — governance will reject EXECUTING → REVIEWING
+      // because the mission is actually already terminal. But we need it in EXECUTING for the
+      // trigger to fire, and the enforcer to reject.
+      //
+      // Strategy: Seed the mission in EXECUTING, seed all tasks as RUNNING, then
+      // suspend the mission via gov_suspensions so the enforcer rejects the REVIEWING transition.
+      seedMissionAtState(mid, 'EXECUTING');
+      seedTaskGraph(graphId, mid);
+      seedTask('task-revb-001', mid, graphId, 'RUNNING');
+
+      // Create a suspension record that will cause the enforcer to reject.
+      // The reason column must be a JSON object with creatingDecisionId and origin
+      // (matches governance_stores.ts rowToSuspensionRecord parser).
+      const now = new Date().toISOString();
+      const reasonJson = JSON.stringify({ creatingDecisionId: 'decision-f010', origin: 'runtime' });
+      conn.run(
+        `INSERT INTO gov_suspension_records (suspension_record_id, target_type, target_id, tenant_id, reason, schema_version, created_at, state)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [`susp-${mid}`, 'mission', mid, 'test-tenant', reasonJson, '0.1.0', now, 'active'],
+      );
+
+      // Transition the only task to COMPLETED — this triggers REVIEWING check.
+      // The enforcer will reject because the mission is suspended.
+      const result = service.transitionTask(
+        conn,
+        taskId('task-revb-001'),
+        'RUNNING',
+        'COMPLETED',
+      );
+
+      assert.ok(result.ok, 'Task transition itself must succeed');
+
+      // Mission should stay in EXECUTING (governance blocked the REVIEWING trigger)
+      assert.equal(getMissionState(mid), 'EXECUTING',
+        'Mission must stay in EXECUTING when governance blocks REVIEWING trigger');
+
+      // F-P0A-010: Verify the blocked trigger left an audit trace
+      const missionAudits = getAuditEntries(mid);
+      const blockedAudit = missionAudits.find(a => {
+        return a['operation'] === 'reviewing_trigger_blocked';
+      });
+      assert.ok(blockedAudit, 'Must have audit entry for reviewing_trigger_blocked');
+      const detail = JSON.parse(blockedAudit!['detail'] as string);
+      assert.equal(detail.reason, 'governance_rejection',
+        'Audit detail must include reason: governance_rejection');
+      assert.equal(detail.missionId, mid,
+        'Audit detail must include the missionId');
     });
   });
 });

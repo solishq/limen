@@ -1,7 +1,8 @@
 /**
  * OrchestrationTransitionService — P0-A Structural Integrity Pass
  *
- * The SOLE mechanism for changing mission and task state at L2 (orchestration layer).
+ * The canonical mechanism for state transitions at L2 (orchestration layer).
+ * Becomes the SOLE mechanism when all callers are rewired (Task #233).
  * Bridges orchestration types (MissionState — 10 flat states) to governance types
  * (MissionLifecycleState — 6 states + substates) via the existing TransitionEnforcer.
  *
@@ -200,6 +201,11 @@ export function createOrchestrationTransitionService(
     }
 
     // Step 5: Read-back verification
+    // Defense-in-depth: In SQLite serialized mode (single-connection), the read-back
+    // after CAS within the same transaction is unreachable because the UPDATE + WHERE
+    // clause guarantees consistency. This check exists as a safety net for future
+    // multi-connection scenarios (e.g., WAL with concurrent readers) where the CAS
+    // guarantee could weaken. No test required — documented as defense-in-depth.
     const readBack = conn.get<{ state: string }>(
       'SELECT state FROM core_missions WHERE id = ?',
       [mid],
@@ -328,6 +334,8 @@ export function createOrchestrationTransitionService(
     }
 
     // Step 5: Read-back verification
+    // Defense-in-depth: Unreachable in SQLite serialized mode (see mission read-back comment).
+    // Safety net for future multi-connection scenarios.
     const readBack = conn.get<{ state: string }>(
       'SELECT state FROM core_tasks WHERE id = ?',
       [tid],
@@ -411,8 +419,18 @@ export function createOrchestrationTransitionService(
         govMapping.substate ?? undefined,
       );
 
-      // If governance rejects (e.g., suspended), do not transition — not an error for the task transition
+      // If governance rejects (e.g., suspended), do not transition — not an error for the task transition.
+      // F-P0A-010: Emit audit entry so rejection is traceable (previously silent).
       if (!enforceResult.ok) {
+        audit.append(conn, {
+          tenantId,
+          actorType: 'system',
+          actorId: 'orchestrator',
+          operation: 'reviewing_trigger_blocked',
+          resourceType: 'mission',
+          resourceId: mid,
+          detail: { missionId: mid, reason: 'governance_rejection', enforceError: enforceResult.error },
+        });
         return;
       }
 
@@ -533,6 +551,38 @@ export function createOrchestrationTransitionService(
               toState: t.to,
               timestamp: now,
             });
+          }
+
+          // F-P0A-005: After all bulk transitions complete, check REVIEWING trigger
+          // for each unique mission that had tasks transition to terminal states.
+          // This must happen within the same transaction — no async gap.
+          const missionsToCheck = new Set<string>();
+          for (const t of tasks) {
+            if (TASK_TERMINAL_STATES.has(t.to)) {
+              const taskRow = conn.get<{ mission_id: string }>(
+                'SELECT mission_id FROM core_tasks WHERE id = ?',
+                [t.taskId],
+              );
+              if (taskRow?.mission_id) {
+                missionsToCheck.add(taskRow.mission_id);
+              }
+            }
+          }
+          const now = time.nowISO();
+          for (const mid of missionsToCheck) {
+            // Derive tenant_id for audit (use first task's tenant)
+            const firstTaskForMission = tasks.find(t => {
+              const row = conn.get<{ mission_id: string }>(
+                'SELECT mission_id FROM core_tasks WHERE id = ?', [t.taskId]);
+              return row?.mission_id === mid;
+            });
+            let bulkTenantId: TenantId | null = null;
+            if (firstTaskForMission) {
+              const tRow = conn.get<{ tenant_id: string | null }>(
+                'SELECT tenant_id FROM core_tasks WHERE id = ?', [firstTaskForMission.taskId]);
+              bulkTenantId = (tRow?.tenant_id ?? null) as TenantId | null;
+            }
+            checkAndTriggerReviewing(conn, mid as MissionId, now, bulkTenantId);
           }
         });
       } catch (e) {
