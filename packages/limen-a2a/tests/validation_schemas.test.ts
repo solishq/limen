@@ -180,6 +180,14 @@ describe('DiscardWorkingMemoryInputSchema', () => {
     const result = DiscardWorkingMemoryInputSchema.parse({ taskId: 't-001', key: null });
     assert.equal(result.key, null);
   });
+
+  it('[A21: rejection] rejects missing taskId', () => {
+    assert.throws(() => DiscardWorkingMemoryInputSchema.parse({ key: 'notes' }), z.ZodError);
+  });
+
+  it('[A21: rejection] rejects unknown keys (strict)', () => {
+    assert.throws(() => DiscardWorkingMemoryInputSchema.parse({ taskId: 't-001', key: 'x', evil: true }), z.ZodError);
+  });
 });
 
 // ── Mission Schemas ──
