@@ -18,6 +18,7 @@ import type {
   TimeProvider,
 } from '../../kernel/interfaces/index.js';
 import type { Substrate } from '../../substrate/interfaces/substrate.js';
+import type { OrchestrationTransitionService } from '../transitions/transition_service.js';
 
 // ============================================================================
 // S6: Mission Lifecycle States
@@ -711,6 +712,8 @@ export interface OrchestrationEngine {
   readonly events: EventPropagator;
   readonly conversations: ConversationManager;
   readonly delegation: DelegationDetector;
+  /** P0-A: Sole mechanism for mission/task state transitions at L2. Optional until all callers rewired (Task #233). */
+  readonly transitions?: OrchestrationTransitionService;
 }
 
 // ============================================================================
