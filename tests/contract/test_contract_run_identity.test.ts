@@ -36,6 +36,41 @@ async function setup(): Promise<void> {
       [id, 'test-tenant', 'mission-001', 'active', now, '0.1.0', 'runtime'],
     );
   }
+
+  // P0-A Critical #6: Seed runs for BC-010 RunState tests (no more phantom auto-create)
+  const stateRunIds = ['run-state-active', 'run-state-completed', 'run-state-failed', 'run-state-abandoned'];
+  for (const id of stateRunIds) {
+    conn.run(
+      `INSERT INTO gov_runs (run_id, tenant_id, mission_id, state, started_at, schema_version, origin)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [id, 'test-tenant', 'mission-001', 'active', now, '0.1.0', 'runtime'],
+    );
+  }
+
+  // P0-A Critical #6: Seed attempts for ST-010 lifecycle transition tests
+  // Create a parent run for the attempts
+  conn.run(
+    `INSERT INTO gov_runs (run_id, tenant_id, mission_id, state, started_at, schema_version, origin)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ['run-for-st010', 'test-tenant', 'mission-001', 'active', now, '0.1.0', 'runtime'],
+  );
+  const attemptSeeds = [
+    { id: 'attempt-st010', state: 'started' },
+    { id: 'attempt-st010-exec', state: 'executing' },
+    { id: 'attempt-st010-fail', state: 'executing' },
+    { id: 'attempt-st010-aband', state: 'executing' },
+  ];
+  const pinnedVersions = JSON.stringify({
+    missionContractVersion: '1.0.0', traceGrammarVersion: '1.0.0',
+    evalSchemaVersion: '1.0.0', capabilityManifestSchemaVersion: '1.0.0',
+  });
+  for (const seed of attemptSeeds) {
+    conn.run(
+      `INSERT INTO gov_attempts (attempt_id, task_id, mission_id, run_id, state, pinned_versions, schema_version, origin, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [seed.id, 'task-001', 'mission-001', 'run-for-st010', seed.state, pinnedVersions, '0.1.0', 'runtime', now],
+    );
+  }
 }
 
 function makePinnedVersions(): AttemptPinnedVersions {

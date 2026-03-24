@@ -13,11 +13,12 @@
 
 import type { Result, OperationContext, TaskId, TenantId } from '../../kernel/interfaces/index.js';
 import type {
-  OrchestrationDeps, TaskGraphEngine,
+  OrchestrationDeps, TaskGraphEngine, TaskState,
   ProposeTaskGraphInput, ProposeTaskGraphOutput, TaskDefinition, TaskDependency,
 } from '../interfaces/orchestration.js';
 import { MISSION_TREE_DEFAULTS, generateId } from '../interfaces/orchestration.js';
 import { getTask, getActiveTasks, transitionTask, areDependenciesMet } from './task_store.js';
+import type { OrchestrationTransitionService } from '../transitions/transition_service.js';
 
 /**
  * SD-14: Kahn's algorithm for DAG acyclicity verification.
@@ -85,7 +86,7 @@ export function kahnsAlgorithm(
  * S16: Create the task graph engine module.
  * Factory function returns frozen object per C-07.
  */
-export function createTaskGraphEngine(): TaskGraphEngine {
+export function createTaskGraphEngine(transitionService?: OrchestrationTransitionService): TaskGraphEngine {
 
   /** S16: Validate and install a new task graph */
   function proposeGraph(
@@ -194,10 +195,33 @@ export function createTaskGraphEngine(): TaskGraphEngine {
           'UPDATE core_task_graphs SET is_active = 0 WHERE id = ?',
           [prevGraph.id],
         );
-        deps.conn.run(
-          `UPDATE core_tasks SET state = 'CANCELLED', updated_at = ?, completed_at = ? WHERE graph_id = ? AND state = 'PENDING'`,
-          [now, now, prevGraph.id],
-        );
+        // P0-A: Rewired to OrchestrationTransitionService bulk transition.
+        // Query PENDING task IDs from the old graph, then cancel via the service.
+        if (transitionService) {
+          const pendingTasks = deps.conn.query<{ id: string }>(
+            `SELECT id FROM core_tasks WHERE graph_id = ? AND state = 'PENDING'`,
+            [prevGraph.id],
+          );
+          if (pendingTasks.length > 0) {
+            const bulkResult = transitionService.bulkTransitionTasks(
+              deps.conn,
+              pendingTasks.map(t => ({
+                taskId: t.id as TaskId,
+                from: 'PENDING' as TaskState,
+                to: 'CANCELLED' as TaskState,
+              })),
+            );
+            // Bulk failure should not silently pass — throw to abort the transaction
+            if (!bulkResult.ok) {
+              throw new Error(`Bulk task cancellation failed: ${bulkResult.error.message}`);
+            }
+          }
+        } else {
+          deps.conn.run(
+            `UPDATE core_tasks SET state = 'CANCELLED', updated_at = ?, completed_at = ? WHERE graph_id = ? AND state = 'PENDING'`,
+            [now, now, prevGraph.id],
+          );
+        }
       }
 
       // Insert new graph metadata

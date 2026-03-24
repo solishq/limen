@@ -100,22 +100,23 @@ export function createOrchestration(
     });
   }
 
-  // Instantiate all internal modules (C-07: each returns frozen object)
-  const missionStore = createMissionStore();
-  const taskGraphEngine = createTaskGraphEngine();
-  const artifactStore = createArtifactStore();
-  const eventPropagator = createEventPropagator();
-  const budgetGovernor = createBudgetGovernor();
-  const checkpointCoordinator = createCheckpointCoordinator();
-  const conversationManager = createConversationManager();
-  const compactionEngine = createCompactionEngine();
-
   // P0-A: OrchestrationTransitionService — bridges L2 transitions to governance TransitionEnforcer.
-  // Optional until Task #233 rewires all callers. When transitionEnforcer is provided (from governance layer),
-  // the service is created and exposed on the engine. When absent, engine.transitions is undefined.
+  // Task #233: The service is now the SOLE mechanism for mission/task state transitions at L2.
+  // Created BEFORE internal modules so it can be injected into modules that need it.
   const transitionService = transitionEnforcer
     ? createOrchestrationTransitionService(transitionEnforcer, audit, resolvedTime)
     : undefined;
+
+  // Instantiate all internal modules (C-07: each returns frozen object)
+  // P0-A: Modules that perform state transitions receive the transition service.
+  const missionStore = createMissionStore();
+  const taskGraphEngine = createTaskGraphEngine(transitionService);
+  const artifactStore = createArtifactStore();
+  const eventPropagator = createEventPropagator();
+  const budgetGovernor = createBudgetGovernor(transitionService);
+  const checkpointCoordinator = createCheckpointCoordinator(transitionService);
+  const conversationManager = createConversationManager();
+  const compactionEngine = createCompactionEngine();
 
   // FM-19: Delegation detector uses mission store's chain
   const delegationDetector = Object.freeze({
@@ -144,8 +145,9 @@ export function createOrchestration(
     },
 
     // SC-3: propose_task_execution
+    // P0-A: Pass transition service for task state transitions
     proposeTaskExecution(ctx: OperationContext, input: ProposeTaskExecutionInput): Result<ProposeTaskExecutionOutput> {
-      return proposeTaskExecution(scopeDeps(ctx), ctx, input, taskGraphEngine, budgetGovernor, eventPropagator);
+      return proposeTaskExecution(scopeDeps(ctx), ctx, input, taskGraphEngine, budgetGovernor, eventPropagator, transitionService);
     },
 
     // SC-4: create_artifact
@@ -169,13 +171,15 @@ export function createOrchestration(
     },
 
     // SC-8: request_budget
+    // P0-A: Pass transition service for mission BLOCKED transition
     requestBudget(ctx: OperationContext, input: RequestBudgetInput): Result<RequestBudgetOutput> {
-      return requestBudget(scopeDeps(ctx), ctx, input, budgetGovernor, eventPropagator, missionStore);
+      return requestBudget(scopeDeps(ctx), ctx, input, budgetGovernor, eventPropagator, missionStore, transitionService);
     },
 
     // SC-9: submit_result
+    // P0-A: Pass transition service for REVIEWING -> COMPLETED transition
     submitResult(ctx: OperationContext, input: SubmitResultInput): Result<SubmitResultOutput> {
-      return submitResult(scopeDeps(ctx), ctx, input, missionStore, eventPropagator, compactionEngine);
+      return submitResult(scopeDeps(ctx), ctx, input, missionStore, eventPropagator, compactionEngine, transitionService);
     },
 
     // SC-10: respond_checkpoint
