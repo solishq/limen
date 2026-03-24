@@ -148,9 +148,9 @@ describe('I-24: Goal Anchoring', () => {
     });
 
     it('proposeGraph stores objective_alignment in task graph record (§16)', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
       const ctx = createTestOperationContext();
-      const taskGraph = createTaskGraphEngine();
+      const taskGraph = createTaskGraphEngine(transitionService);
 
       seedMission(conn, { id: 'ga-m1', agentId: 'agent-1', state: 'EXECUTING', capabilities: ['web_search'] });
       seedResource(conn, { missionId: 'ga-m1' });
@@ -195,8 +195,8 @@ describe('I-24: Goal Anchoring', () => {
        * compares the checkpoint's assessment text against the goal anchor.
        * The drift assessment is stored in core_drift_assessments.
        */
-      const { deps, conn } = createTestOrchestrationDeps();
-      const coordinator = createCheckpointCoordinator();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const coordinator = createCheckpointCoordinator(transitionService);
 
       seedMission(conn, {
         id: 'drift-m1', agentId: 'agent-1', state: 'EXECUTING',
@@ -238,8 +238,8 @@ describe('I-24: Goal Anchoring', () => {
        * I-24: Drift engine reads from core_mission_goals (trigger-protected table).
        * The original_objective in the drift assessment must match the goal anchor.
        */
-      const { deps, conn } = createTestOrchestrationDeps();
-      const coordinator = createCheckpointCoordinator();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const coordinator = createCheckpointCoordinator(transitionService);
 
       const objective = 'Build a recommendation engine for product suggestions';
       seedMission(conn, { id: 'cmp-m1', agentId: 'agent-1', state: 'EXECUTING', objective });
@@ -277,8 +277,8 @@ describe('I-24: Goal Anchoring', () => {
        * This ensures the mission is blocked for human review when
        * the agent has drifted far from the original objective.
        */
-      const { deps, conn } = createTestOrchestrationDeps();
-      const coordinator = createCheckpointCoordinator();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const coordinator = createCheckpointCoordinator(transitionService);
 
       seedMission(conn, {
         id: 'esc-m1', agentId: 'agent-1', state: 'EXECUTING',

@@ -450,11 +450,7 @@ export class MissionApiImpl implements MissionApi {
         const missionResult = impl.orchestration.missions.get(orchDeps, missionId);
         const mission = unwrapResult(missionResult);
 
-        const service = impl.orchestration.transitions;
-        if (!service) {
-          throw new Error('OrchestrationTransitionService not available');
-        }
-        const result = service.transitionMission(
+        const result = impl.orchestration.transitions.transitionMission(
           conn, missionId, mission.state, 'PAUSED',
         );
         unwrapResult(result);
@@ -468,11 +464,7 @@ export class MissionApiImpl implements MissionApi {
         requirePermission(impl.rbac, ctx, 'create_mission');
         requireRateLimit(impl.rateLimiter, conn, ctx, 'api_calls');
 
-        const service = impl.orchestration.transitions;
-        if (!service) {
-          throw new Error('OrchestrationTransitionService not available');
-        }
-        const result = service.transitionMission(
+        const result = impl.orchestration.transitions.transitionMission(
           conn, missionId, 'PAUSED', 'EXECUTING',
         );
         unwrapResult(result);
@@ -491,11 +483,7 @@ export class MissionApiImpl implements MissionApi {
         const missionResult = impl.orchestration.missions.get(deps, missionId);
         const mission = unwrapResult(missionResult);
 
-        const service = impl.orchestration.transitions;
-        if (!service) {
-          throw new Error('OrchestrationTransitionService not available');
-        }
-        const result = service.transitionMission(
+        const result = impl.orchestration.transitions.transitionMission(
           conn, missionId, mission.state, 'CANCELLED',
         );
         unwrapResult(result);

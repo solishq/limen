@@ -712,8 +712,8 @@ export interface OrchestrationEngine {
   readonly events: EventPropagator;
   readonly conversations: ConversationManager;
   readonly delegation: DelegationDetector;
-  /** P0-A: Sole mechanism for mission/task state transitions at L2. Optional until all callers rewired (Task #233). */
-  readonly transitions?: OrchestrationTransitionService;
+  /** P0-A: Sole mechanism for mission/task state transitions at L2. */
+  readonly transitions: OrchestrationTransitionService;
 }
 
 // ============================================================================

@@ -50,7 +50,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
   it('DFT-001: UPDATE on core_drift_assessments blocked by trigger [A21: rejection]', () => {
     // CATCHES: Without the BEFORE UPDATE trigger, drift_score could be retroactively
     // changed to hide evidence of drift. This is an audit integrity violation.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, { id: 'ao-m1', agentId: 'a1', state: 'EXECUTING', objective: 'Test objective' });
     seedCheckpoint(conn, deps, 'cp-ao1', 'ao-m1');
@@ -78,7 +78,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
   it('DFT-002: DELETE on core_drift_assessments blocked by trigger [A21: rejection]', () => {
     // CATCHES: Without the BEFORE DELETE trigger, drift assessment records could
     // be silently removed, destroying audit evidence.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, { id: 'ao2-m1', agentId: 'a1', state: 'EXECUTING', objective: 'Test' });
     seedCheckpoint(conn, deps, 'cp-ao2', 'ao2-m1');
@@ -104,7 +104,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
 
   it('DFT-003: UPDATE on action_taken blocked (cannot downgrade escalation) [A21: rejection]', () => {
     // CATCHES: Attacker changes action_taken from 'escalated' to 'none' to hide drift.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, { id: 'ao3-m1', agentId: 'a1', state: 'EXECUTING',
       objective: 'Build machine learning pipeline for customer analysis' });
@@ -137,7 +137,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
   it('DFT-004: drift assessment stores correct tenant_id', () => {
     // CATCHES: If tenant_id is omitted or wrong, drift assessments from one tenant
     // become visible to another in tenant-filtered queries.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, { id: 'ti-m1', agentId: 'a1', state: 'EXECUTING',
       objective: 'Tenant isolation test', tenantId: 'tenant-gamma' });
@@ -158,7 +158,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
   it('DFT-005: drift assessments for different tenants are isolated', () => {
     // CATCHES: Cross-tenant visibility — tenant A's assessments must not appear
     // in tenant B's queries.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     // Tenant Alpha
     seedMission(conn, { id: 'iso-m1', agentId: 'a1', state: 'EXECUTING',
@@ -203,7 +203,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
     // CATCHES T-S3-018: If the drift engine queries core_missions.objective,
     // an attacker who modifies core_missions.objective (possible since it's not
     // trigger-protected for UPDATE) can evade drift detection.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     const goalObjective = 'Immutable goal objective anchored in core_mission_goals';
 
@@ -242,7 +242,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
     // into its assessment. TF-IDF cosine similarity will be ~1.0, meaning drift ~0.
     // This is a known design limitation of TF-IDF similarity — this test documents
     // the vulnerability so it can be addressed when embedding-based similarity ships (FO-004).
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     const objective = 'Analyze customer feedback data and produce sentiment report';
     seedMission(conn, { id: 'stuff-m1', agentId: 'a1', state: 'EXECUTING', objective });
@@ -266,7 +266,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
     // CATCHES T-S3-007: Agent adds objective keywords into unrelated content.
     // "Analyze customer feedback data" keywords peppered into unrelated work.
     // TF-IDF partial overlap lowers drift score.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     const objective = 'Analyze customer feedback data and produce sentiment report';
     seedMission(conn, { id: 'kw-m1', agentId: 'a1', state: 'EXECUTING', objective });
@@ -304,7 +304,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
   it('DFT-009: empty assessment text → max drift (driftScore = 1.0)', () => {
     // CATCHES: Empty assessment has zero tokens. computeSimilarity returns 0.
     // driftScore = 1.0 - 0 = 1.0. Must trigger escalation.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, { id: 'empty-m1', agentId: 'a1', state: 'EXECUTING',
       objective: 'Non-empty objective for comparison' });
@@ -324,7 +324,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
 
   it('DFT-010: whitespace-only assessment → max drift', () => {
     // CATCHES: Whitespace tokenizes to empty after split/filter. Same as empty.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, { id: 'ws-m1', agentId: 'a1', state: 'EXECUTING',
       objective: 'Build recommendation engine' });
@@ -349,7 +349,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
   it('DFT-011: missing mission goal → graceful fallback (no drift)', () => {
     // CATCHES: If the code does not check for null goalRow, accessing
     // goalRow.objective would throw a TypeError.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     // Use nonexistent mission ID — no row in core_mission_goals
     const result = assessDrift('nonexistent-cp', missionId('nonexistent') as MissionId,
@@ -373,8 +373,8 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
   it('DFT-012: escalated drift overrides high-confidence continue [A21: success]', () => {
     // CATCHES: If drift override is missing in checkpoint_coordinator, an agent
     // with confidence=0.95 continues even though it has completely drifted.
-    const { deps, conn } = createTestOrchestrationDeps();
-    const coordinator = createCheckpointCoordinator();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const coordinator = createCheckpointCoordinator(transitionService);
 
     seedMission(conn, { id: 'ovr-m1', agentId: 'a1', state: 'EXECUTING',
       objective: 'Analyze customer feedback data and produce sentiment report' });
@@ -415,8 +415,8 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
     // CATCHES: If drift override logic is poorly written, it might downgrade
     // an already-escalated action to 'continue'. The override must only
     // work in one direction: continue → escalated.
-    const { deps, conn } = createTestOrchestrationDeps();
-    const coordinator = createCheckpointCoordinator();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const coordinator = createCheckpointCoordinator(transitionService);
 
     seedMission(conn, { id: 'noovr-m1', agentId: 'a1', state: 'EXECUTING',
       objective: 'Analyze customer feedback data and produce sentiment report' });
@@ -447,8 +447,8 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
 
   it('DFT-014: drift does NOT override agent-proposed abort [A21: rejection]', () => {
     // CATCHES: Abort is a terminal action — drift must not override it.
-    const { deps, conn } = createTestOrchestrationDeps();
-    const coordinator = createCheckpointCoordinator();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const coordinator = createCheckpointCoordinator(transitionService);
 
     seedMission(conn, { id: 'noab-m1', agentId: 'a1', state: 'EXECUTING',
       objective: 'Analyze customer feedback data' });
@@ -485,7 +485,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
   it('DFT-015: large assessment text (10KB) processes without error', () => {
     // CATCHES: If computeSimilarity has O(n^2) behavior on large inputs,
     // or if the INSERT statement fails on large text.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, { id: 'big-m1', agentId: 'a1', state: 'EXECUTING',
       objective: 'Build machine learning pipeline for data analysis' });
@@ -524,7 +524,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
   it('DFT-016: drift assessment stores all required fields', () => {
     // CATCHES: If any column is NULL when it should have a value, downstream
     // queries will produce incorrect results.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, { id: 'fields-m1', agentId: 'a1', state: 'EXECUTING',
       objective: 'Complete field storage test' });
@@ -572,7 +572,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
 
   it('DFT-017: drift assessment creates audit trail entry', () => {
     // CATCHES: Without audit entries, drift assessments are invisible to compliance.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, { id: 'daud-m1', agentId: 'a1', state: 'EXECUTING',
       objective: 'Audit trail test' });
@@ -610,7 +610,7 @@ describe('BREAKER: Sprint 3 Drift Engine Attacks', () => {
   it('DFT-018: invalid action_taken rejected by CHECK constraint [A21: rejection]', () => {
     // CATCHES: If the CHECK constraint is missing, arbitrary strings can be
     // stored in action_taken, breaking downstream logic that switches on it.
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, { id: 'chk-m1', agentId: 'a1', state: 'EXECUTING', objective: 'Check test' });
     seedCheckpoint(conn, deps, 'cp-chk', 'chk-m1');

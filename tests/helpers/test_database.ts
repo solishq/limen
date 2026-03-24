@@ -51,6 +51,9 @@ import type {
   Permission, OperationContext, AuditTrail, TenancyConfig, TimeProvider,
 } from '../../src/kernel/interfaces/index.js';
 import type { OrchestrationDeps } from '../../src/orchestration/interfaces/orchestration.js';
+import type { OrchestrationTransitionService } from '../../src/orchestration/transitions/transition_service.js';
+import { createOrchestrationTransitionService } from '../../src/orchestration/transitions/transition_service.js';
+import type { TransitionEnforcer } from '../../src/kernel/interfaces/lifecycle.js';
 
 // ─── Branded type constructors for tests ───
 
@@ -246,15 +249,33 @@ function createSubstrateStub(): OrchestrationDeps['substrate'] {
 }
 
 /**
+ * Create a test OrchestrationTransitionService with a passthrough enforcer.
+ * Uses real SQL transitions (UPDATE + CAS + audit) but approves all state changes.
+ * P0-A: Required by module factories (createBudgetGovernor, createCheckpointCoordinator, etc.).
+ */
+export function createTestTransitionService(audit: AuditTrail): OrchestrationTransitionService {
+  const time: TimeProvider = { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
+  const passthroughResult = () => ({ ok: true as const, value: { fromState: '', toState: '', timestamp: time.nowISO() } });
+  const enforcer: TransitionEnforcer = {
+    enforceMissionTransition: passthroughResult,
+    enforceTaskTransition: passthroughResult,
+    enforceHandoffTransition: passthroughResult,
+    enforceRunTransition: passthroughResult,
+  };
+  return createOrchestrationTransitionService(enforcer, audit, time);
+}
+
+/**
  * Create OrchestrationDeps with real database + audit trail, stubbed substrate.
  *
  * @param tenancyMode - Tenancy mode (default: 'single')
- * @returns { deps, conn, audit } — deps for orchestration calls, conn/audit for direct access
+ * @returns { deps, conn, audit, transitionService } — deps for orchestration calls, conn/audit for direct access
  */
 export function createTestOrchestrationDeps(tenancyMode: TenancyConfig['mode'] = 'single'): {
   deps: OrchestrationDeps;
   conn: DatabaseConnection;
   audit: AuditTrail;
+  transitionService: OrchestrationTransitionService;
 } {
   const conn = createTestDatabase(tenancyMode);
   const audit = createTestAuditTrail();
@@ -262,7 +283,8 @@ export function createTestOrchestrationDeps(tenancyMode: TenancyConfig['mode'] =
 
   const time: TimeProvider = { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   const deps: OrchestrationDeps = Object.freeze({ conn, substrate, audit, time });
-  return { deps, conn, audit };
+  const transitionService = createTestTransitionService(audit);
+  return { deps, conn, audit, transitionService };
 }
 
 // ─── Tenant-Scoped Connection Factory (Phase 4B — uses real facade) ───

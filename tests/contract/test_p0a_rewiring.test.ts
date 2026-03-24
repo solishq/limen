@@ -43,11 +43,13 @@ let conn: DatabaseConnection;
 let deps: OrchestrationDeps;
 let ctx: OperationContext;
 let gov: GovernanceSystem;
+let transitionService: OrchestrationTransitionService;
 
 function setup(): void {
   const testDeps = createTestOrchestrationDeps();
   conn = testDeps.conn;
   deps = testDeps.deps;
+  transitionService = testDeps.transitionService;
   ctx = createTestOperationContext();
   gov = createGovernanceSystem();
 }
@@ -144,7 +146,7 @@ describe('P0-A Critical #15: Task dependency cross-mission validation', () => {
       `UPDATE core_missions SET state = 'PLANNING' WHERE id = 'mission-dep-1'`,
     );
 
-    const engine = createTaskGraphEngine();
+    const engine = createTaskGraphEngine(transitionService);
 
     const result = engine.proposeGraph(deps, ctx, {
       missionId: missionId('mission-dep-1'),
@@ -306,8 +308,8 @@ describe('P0-A Critical #9: Task scheduling order (enqueue-first)', () => {
     // The substrate scheduler in test deps throws (not implemented in stub).
     // The enqueue-first ordering means the throw happens BEFORE any state transition,
     // so the task must remain PENDING (no zombie SCHEDULED task).
-    const taskGraph = createTaskGraphEngine();
-    const budget = createBudgetGovernor();
+    const taskGraph = createTaskGraphEngine(transitionService);
+    const budget = createBudgetGovernor(transitionService);
     const events = createEventPropagator();
 
     let threw = false;

@@ -236,7 +236,7 @@ describe('CF-009: data.purge() filter implementation', () => {
 
   // #8 (adversarial): purge does NOT delete audit entries (I-06)
   it('#8 [adversarial] purge does NOT delete audit log entries (I-06)', async () => {
-    const { deps, conn, audit } = createTestOrchestrationDeps();
+    const { deps, conn, audit, transitionService } = createTestOrchestrationDeps();
 
     // Seed mission and audit entries
     seedMission(conn, { id: 'audit-test-mission', state: 'COMPLETED' });
@@ -284,8 +284,8 @@ describe('CF-009: data.purge() filter implementation', () => {
 describe('CF-016: budget enforcement → mission BLOCKED', () => {
   // #10: consume with budget exceeded transitions mission to BLOCKED
   it('#10 BUDGET_EXCEEDED transitions mission to BLOCKED', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
-    const budgetGovernor = createBudgetGovernor();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const budgetGovernor = createBudgetGovernor(transitionService);
 
     seedMission(conn, { id: 'budget-mission', state: 'EXECUTING' });
     seedResource(conn, { missionId: 'budget-mission', tokenAllocated: 100 });
@@ -304,8 +304,8 @@ describe('CF-016: budget enforcement → mission BLOCKED', () => {
 
   // #11: consume with budget exceeded still returns BUDGET_EXCEEDED error
   it('#11 BUDGET_EXCEEDED error returned alongside state transition', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
-    const budgetGovernor = createBudgetGovernor();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const budgetGovernor = createBudgetGovernor(transitionService);
 
     seedMission(conn, { id: 'budget-error-m', state: 'EXECUTING' });
     seedResource(conn, { missionId: 'budget-error-m', tokenAllocated: 50 });
@@ -320,8 +320,8 @@ describe('CF-016: budget enforcement → mission BLOCKED', () => {
 
   // #12 (adversarial): consume on terminal mission does NOT change state
   it('#12 [adversarial] BUDGET_EXCEEDED on COMPLETED mission does not change state', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
-    const budgetGovernor = createBudgetGovernor();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const budgetGovernor = createBudgetGovernor(transitionService);
 
     seedMission(conn, { id: 'terminal-m', state: 'COMPLETED' });
     seedResource(conn, { missionId: 'terminal-m', tokenAllocated: 10 });
@@ -337,8 +337,8 @@ describe('CF-016: budget enforcement → mission BLOCKED', () => {
 
   // #13: consume with sufficient budget does NOT transition
   it('#13 successful consume does NOT transition mission state', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
-    const budgetGovernor = createBudgetGovernor();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const budgetGovernor = createBudgetGovernor(transitionService);
 
     seedMission(conn, { id: 'ok-budget-m', state: 'EXECUTING' });
     seedResource(conn, { missionId: 'ok-budget-m', tokenAllocated: 1000 });
@@ -354,15 +354,15 @@ describe('CF-016: budget enforcement → mission BLOCKED', () => {
 
   // #14: audit entry created on budget-exceeded transition
   it('#14 BUDGET_EXCEEDED creates audit entry for mission_transition', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
-    const budgetGovernor = createBudgetGovernor();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const budgetGovernor = createBudgetGovernor(transitionService);
 
     seedMission(conn, { id: 'audit-budget-m', state: 'EXECUTING' });
     seedResource(conn, { missionId: 'audit-budget-m', tokenAllocated: 10 });
 
     budgetGovernor.consume(deps, missionId('audit-budget-m'), { tokens: 100 });
 
-    // Check for mission_transition audit entry
+    // Check for mission_transition audit entry (P0-A: via OrchestrationTransitionService)
     const auditEntries = conn.query<{ operation: string; detail: string }>(
       `SELECT operation, detail FROM core_audit_log WHERE operation = 'mission_transition' AND resource_id = ?`,
       ['audit-budget-m'],
@@ -370,7 +370,9 @@ describe('CF-016: budget enforcement → mission BLOCKED', () => {
     assert.ok(auditEntries.length > 0, 'Should have mission_transition audit entry');
     const detail = JSON.parse(auditEntries[0]!.detail);
     assert.equal(detail.to, 'BLOCKED');
-    assert.equal(detail.reason, 'budget_exceeded');
+    // P0-A: transition service records { from, to, recovery } — the 'recovery: true' flag
+    // indicates this was a system-level override (budget enforcement), not a normal transition.
+    assert.equal(detail.recovery, true, 'Budget enforcement uses recovery override path');
 
     conn.close();
   });
@@ -383,8 +385,8 @@ describe('CF-016: budget enforcement → mission BLOCKED', () => {
 describe('CF-017: checkpoint auto-expiry', () => {
   // #15: expireOverdue expires past-due checkpoints
   it('#15 expireOverdue transitions overdue PENDING checkpoints to EXPIRED', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
-    const coordinator = createCheckpointCoordinator();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const coordinator = createCheckpointCoordinator(transitionService);
 
     seedMission(conn, { id: 'ckpt-mission', state: 'EXECUTING' });
 
@@ -410,8 +412,8 @@ describe('CF-017: checkpoint auto-expiry', () => {
 
   // #16 (adversarial): non-expired checkpoints are NOT affected
   it('#16 [adversarial] non-expired PENDING checkpoints are NOT affected', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
-    const coordinator = createCheckpointCoordinator();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const coordinator = createCheckpointCoordinator(transitionService);
 
     seedMission(conn, { id: 'ckpt-valid-m', state: 'EXECUTING' });
 
@@ -434,8 +436,8 @@ describe('CF-017: checkpoint auto-expiry', () => {
 
   // #17: expireOverdue only affects PENDING checkpoints (not RESPONDED, EXPIRED)
   it('#17 expireOverdue ignores non-PENDING checkpoints', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
-    const coordinator = createCheckpointCoordinator();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const coordinator = createCheckpointCoordinator(transitionService);
 
     seedMission(conn, { id: 'ckpt-states-m', state: 'EXECUTING' });
 

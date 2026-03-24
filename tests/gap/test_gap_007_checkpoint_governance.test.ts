@@ -28,8 +28,8 @@ describe('TEST-GAP-007: Checkpoint Governance (S24)', () => {
   describe('S24: Checkpoint fire and response lifecycle', () => {
 
     it('fire() creates a PENDING checkpoint and returns checkpoint ID', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const checkpoints = createCheckpointCoordinator();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const checkpoints = createCheckpointCoordinator(transitionService);
 
       seedMission(conn, { id: 'cp-m1', state: 'EXECUTING' });
       seedResource(conn, { missionId: 'cp-m1' });
@@ -54,8 +54,8 @@ describe('TEST-GAP-007: Checkpoint Governance (S24)', () => {
     });
 
     it('CHECKPOINT_EXPIRED for nonexistent checkpoint', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const checkpoints = createCheckpointCoordinator();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const checkpoints = createCheckpointCoordinator(transitionService);
 
       const result = checkpoints.processResponse(deps, {
         checkpointId: 'nonexistent-cp-id',
@@ -76,8 +76,8 @@ describe('TEST-GAP-007: Checkpoint Governance (S24)', () => {
     });
 
     it('CHECKPOINT_EXPIRED when response is after timeout', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const checkpoints = createCheckpointCoordinator();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const checkpoints = createCheckpointCoordinator(transitionService);
 
       seedMission(conn, { id: 'cp-timeout', state: 'EXECUTING' });
       seedResource(conn, { missionId: 'cp-timeout' });
@@ -113,8 +113,8 @@ describe('TEST-GAP-007: Checkpoint Governance (S24)', () => {
   describe('SD-23: Confidence-driven behavior thresholds', () => {
 
     it('high confidence (>= 0.8) results in continue action', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const checkpoints = createCheckpointCoordinator();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const checkpoints = createCheckpointCoordinator(transitionService);
 
       seedMission(conn, { id: 'cp-high', state: 'EXECUTING' });
       seedResource(conn, { missionId: 'cp-high' });
@@ -141,8 +141,8 @@ describe('TEST-GAP-007: Checkpoint Governance (S24)', () => {
     });
 
     it('low confidence (0.2-0.5) results in escalation', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const checkpoints = createCheckpointCoordinator();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const checkpoints = createCheckpointCoordinator(transitionService);
 
       seedMission(conn, { id: 'cp-low', state: 'EXECUTING' });
       seedResource(conn, { missionId: 'cp-low' });
@@ -176,8 +176,8 @@ describe('TEST-GAP-007: Checkpoint Governance (S24)', () => {
     });
 
     it('very low confidence (< 0.2) results in escalation with halt', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const checkpoints = createCheckpointCoordinator();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const checkpoints = createCheckpointCoordinator(transitionService);
 
       seedMission(conn, { id: 'cp-vlow', state: 'EXECUTING' });
       seedResource(conn, { missionId: 'cp-vlow' });
@@ -207,8 +207,8 @@ describe('TEST-GAP-007: Checkpoint Governance (S24)', () => {
   describe('S24: Agent-proposed actions', () => {
 
     it('abort action transitions mission to CANCELLED', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const checkpoints = createCheckpointCoordinator();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const checkpoints = createCheckpointCoordinator(transitionService);
 
       seedMission(conn, { id: 'cp-abort', state: 'EXECUTING' });
       seedResource(conn, { missionId: 'cp-abort' });
@@ -241,8 +241,8 @@ describe('TEST-GAP-007: Checkpoint Governance (S24)', () => {
     });
 
     it('escalate action with reason transitions mission to BLOCKED', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const checkpoints = createCheckpointCoordinator();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const checkpoints = createCheckpointCoordinator(transitionService);
 
       seedMission(conn, { id: 'cp-esc', state: 'EXECUTING' });
       seedResource(conn, { missionId: 'cp-esc' });
@@ -271,8 +271,8 @@ describe('TEST-GAP-007: Checkpoint Governance (S24)', () => {
   describe('S24: Bulk checkpoint expiry', () => {
 
     it('expireOverdue expires PENDING checkpoints past timeout', () => {
-      const { deps, conn } = createTestOrchestrationDeps();
-      const checkpoints = createCheckpointCoordinator();
+      const { deps, conn, transitionService } = createTestOrchestrationDeps();
+      const checkpoints = createCheckpointCoordinator(transitionService);
 
       seedMission(conn, { id: 'cp-expire', state: 'EXECUTING' });
       seedResource(conn, { missionId: 'cp-expire' });

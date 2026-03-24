@@ -67,8 +67,8 @@ describe('TEST-GAP-019: SC-2 propose_task_graph error codes', () => {
 
   it('CYCLE_DETECTED: rejects self-referencing dependency', () => {
     // S16: "CYCLE_DETECTED -- dependency graph contains cycle"
-    const { deps, conn } = createTestOrchestrationDeps();
-    const taskGraph = createTaskGraphEngine();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const taskGraph = createTaskGraphEngine(transitionService);
     const ctx = createTestOperationContext();
 
     seedMission(conn, { id: 'cycle-m1', agentId: 'agent-1', state: 'EXECUTING', capabilities: ['web_search'] });
@@ -92,8 +92,8 @@ describe('TEST-GAP-019: SC-2 propose_task_graph error codes', () => {
 
   it('TASK_LIMIT_EXCEEDED: rejects when task count exceeds maxTasks', () => {
     // S16/FM-17: "TASK_LIMIT_EXCEEDED -- count > mission.maxTasks"
-    const { deps, conn } = createTestOrchestrationDeps();
-    const taskGraph = createTaskGraphEngine();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const taskGraph = createTaskGraphEngine(transitionService);
     const ctx = createTestOperationContext();
 
     seedMission(conn, { id: 'limit-m1', agentId: 'agent-1', state: 'EXECUTING', capabilities: ['web_search'] });
@@ -123,8 +123,8 @@ describe('TEST-GAP-019: SC-2 propose_task_graph error codes', () => {
 
   it('INVALID_DEPENDENCY: rejects dependency referencing non-existent task', () => {
     // S16: "INVALID_DEPENDENCY -- edge references non-existent task"
-    const { deps, conn } = createTestOrchestrationDeps();
-    const taskGraph = createTaskGraphEngine();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const taskGraph = createTaskGraphEngine(transitionService);
     const ctx = createTestOperationContext();
 
     seedMission(conn, { id: 'dep-m1', agentId: 'agent-1', state: 'EXECUTING', capabilities: ['web_search'] });
@@ -148,8 +148,8 @@ describe('TEST-GAP-019: SC-2 propose_task_graph error codes', () => {
 
   it('MISSION_NOT_ACTIVE: rejects when mission is in terminal state', () => {
     // S16: "MISSION_NOT_ACTIVE -- mission state doesn't permit planning"
-    const { deps, conn } = createTestOrchestrationDeps();
-    const taskGraph = createTaskGraphEngine();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const taskGraph = createTaskGraphEngine(transitionService);
     const ctx = createTestOperationContext();
 
     // Seed mission in COMPLETED state (terminal)
@@ -174,8 +174,8 @@ describe('TEST-GAP-019: SC-2 propose_task_graph error codes', () => {
 
   it('PLAN_REVISION_LIMIT: rejects when plan version at maximum', () => {
     // S16/FM-17: "PLAN_REVISION_LIMIT -- revision count >= maxPlanRevisions"
-    const { deps, conn } = createTestOrchestrationDeps();
-    const taskGraph = createTaskGraphEngine();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const taskGraph = createTaskGraphEngine(transitionService);
     const ctx = createTestOperationContext();
 
     seedMission(conn, { id: 'rev-m1', agentId: 'agent-1', state: 'EXECUTING', capabilities: ['web_search'] });
@@ -212,9 +212,9 @@ describe('TEST-GAP-019: SC-3 propose_task_execution error codes', () => {
 
   it('TASK_NOT_PENDING: rejects when task is not in PENDING state', () => {
     // S17: task must be in PENDING state to be scheduled
-    const { deps, conn } = createTestOrchestrationDeps();
-    const taskGraph = createTaskGraphEngine();
-    const budget = createBudgetGovernor();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const taskGraph = createTaskGraphEngine(transitionService);
+    const budget = createBudgetGovernor(transitionService);
     const events = createEventPropagator();
     const ctx = createTestOperationContext();
 
@@ -253,9 +253,9 @@ describe('TEST-GAP-019: SC-3 propose_task_execution error codes', () => {
 
   it('DEPENDENCIES_UNMET: rejects when prerequisite tasks not completed', () => {
     // S17: "DEPENDENCIES_UNMET -- prerequisite tasks not COMPLETED"
-    const { deps, conn } = createTestOrchestrationDeps();
-    const taskGraph = createTaskGraphEngine();
-    const budget = createBudgetGovernor();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const taskGraph = createTaskGraphEngine(transitionService);
+    const budget = createBudgetGovernor(transitionService);
     const events = createEventPropagator();
     const ctx = createTestOperationContext();
 
@@ -289,9 +289,9 @@ describe('TEST-GAP-019: SC-3 propose_task_execution error codes', () => {
 
   it('CAPABILITY_DENIED: rejects when capability not in mission set', () => {
     // S17/I-22: "CAPABILITY_DENIED -- capability not in mission set"
-    const { deps, conn } = createTestOrchestrationDeps();
-    const taskGraph = createTaskGraphEngine();
-    const budget = createBudgetGovernor();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const taskGraph = createTaskGraphEngine(transitionService);
+    const budget = createBudgetGovernor(transitionService);
     const events = createEventPropagator();
     const ctx = createTestOperationContext();
 
@@ -324,9 +324,9 @@ describe('TEST-GAP-019: SC-3 propose_task_execution error codes', () => {
 
   it('WORKER_UNAVAILABLE: rejects when substrate scheduler fails', () => {
     // S17: "WORKER_UNAVAILABLE -- substrate scheduler enqueue failed"
-    const { conn, audit } = createTestOrchestrationDeps();
-    const taskGraph = createTaskGraphEngine();
-    const budget = createBudgetGovernor();
+    const { conn, audit, transitionService } = createTestOrchestrationDeps();
+    const taskGraph = createTaskGraphEngine(transitionService);
+    const budget = createBudgetGovernor(transitionService);
     const events = createEventPropagator();
     const ctx = createTestOperationContext();
 
@@ -386,7 +386,7 @@ describe('TEST-GAP-019: SC-4 create_artifact error codes', () => {
 
   it('ARTIFACT_LIMIT_EXCEEDED: rejects when artifact count at maximum', () => {
     // I-20/S18: "ARTIFACT_LIMIT_EXCEEDED -- count >= max"
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
     const artifacts = createArtifactStore();
     const ctx = createTestOperationContext();
 
@@ -425,7 +425,7 @@ describe('TEST-GAP-019: SC-4 create_artifact error codes', () => {
 
   it('STORAGE_EXCEEDED: rejects when content exceeds storage budget', () => {
     // S18: "STORAGE_EXCEEDED -- content size exceeds storage budget"
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
     const artifacts = createArtifactStore();
     const ctx = createTestOperationContext();
 
@@ -460,7 +460,7 @@ describe('TEST-GAP-019: SC-4 create_artifact error codes', () => {
 
   it('MISSION_NOT_ACTIVE: rejects artifact creation for completed mission', () => {
     // S18: "MISSION_NOT_ACTIVE -- mission in terminal state"
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
     const artifacts = createArtifactStore();
     const ctx = createTestOperationContext();
 
@@ -496,7 +496,7 @@ describe('TEST-GAP-019: SC-5 read_artifact error codes', () => {
 
   it('ARCHIVED: rejects read of archived artifact', () => {
     // S19: "ARCHIVED -- artifact in ARCHIVED or DELETED state"
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
     const artifacts = createArtifactStore();
     const ctx = createTestOperationContext();
 
@@ -534,7 +534,7 @@ describe('TEST-GAP-019: SC-9 submit_result error codes', () => {
 
   it('NO_ARTIFACTS: rejects when no deliverable artifacts specified', () => {
     // S23: "NO_ARTIFACTS -- no deliverables specified"
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
     const missions = createMissionStore();
     const events = createEventPropagator();
     const compaction = createCompactionEngine();
@@ -563,9 +563,9 @@ describe('TEST-GAP-019: SC-9 submit_result error codes', () => {
 
   it('TASKS_INCOMPLETE: rejects when tasks not in terminal state', () => {
     // S23: "TASKS_INCOMPLETE -- required tasks not COMPLETED/CANCELLED"
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
     const missions = createMissionStore();
-    const taskGraph = createTaskGraphEngine();
+    const taskGraph = createTaskGraphEngine(transitionService);
     const events = createEventPropagator();
     const compaction = createCompactionEngine();
     const ctx = createTestOperationContext();
@@ -609,7 +609,7 @@ describe('TEST-GAP-019: SC-9 submit_result error codes', () => {
 
   it('MISSION_NOT_ACTIVE: rejects when mission already completed', () => {
     // S23: "MISSION_NOT_ACTIVE -- mission in terminal state"
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
     const missions = createMissionStore();
     const events = createEventPropagator();
     const compaction = createCompactionEngine();
@@ -639,7 +639,7 @@ describe('TEST-GAP-019: SC-9 submit_result error codes', () => {
   // ─── Phase 4G Remediation: 5 additional SC error codes ───
 
   it('SC-5 NOT_FOUND: read_artifact returns NOT_FOUND for nonexistent artifact', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
     const ctx = createTestOperationContext();
     const artifacts = createArtifactStore();
     const events = createEventPropagator();
@@ -659,7 +659,7 @@ describe('TEST-GAP-019: SC-9 submit_result error codes', () => {
   });
 
   it('SC-6 INVALID_TYPE: emit_event rejects reserved system.* namespace (SD-09)', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
     const ctx = createTestOperationContext();
     const events = createEventPropagator();
 
@@ -683,7 +683,7 @@ describe('TEST-GAP-019: SC-9 submit_result error codes', () => {
   });
 
   it('SC-6 MISSION_NOT_FOUND: emit_event rejects event for nonexistent mission', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
     const ctx = createTestOperationContext();
     const events = createEventPropagator();
 
@@ -704,9 +704,9 @@ describe('TEST-GAP-019: SC-9 submit_result error codes', () => {
   });
 
   it('SC-7 CAPABILITY_DENIED: request_capability rejects capability not in mission set (I-22)', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
     const ctx = createTestOperationContext();
-    const budget = createBudgetGovernor();
+    const budget = createBudgetGovernor(transitionService);
 
     // Seed mission with only web_search capability
     seedMission(conn, { id: 'cap-m1', agentId: 'agent-1', state: 'EXECUTING', capabilities: ['web_search'] });
@@ -740,8 +740,8 @@ describe('TEST-GAP-019: SC-9 submit_result error codes', () => {
      * The code conflates NOT_FOUND with expired — acceptable since both
      * indicate the response window is closed.
      */
-    const { deps, conn } = createTestOrchestrationDeps();
-    const coordinator = createCheckpointCoordinator();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const coordinator = createCheckpointCoordinator(transitionService);
 
     const result = coordinator.processResponse(deps, {
       checkpointId: 'nonexistent-checkpoint-id',

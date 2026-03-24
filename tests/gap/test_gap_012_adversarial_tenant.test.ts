@@ -17,6 +17,8 @@ import assert from 'node:assert/strict';
 import {
   createTestDatabase,
   createScopedTestDeps,
+  createTestAuditTrail,
+  createTestTransitionService,
   seedMission,
   seedResource,
   tenantId,
@@ -288,7 +290,8 @@ describe('Layer 2B: Adversarial Tenant — Category 5: Resource ID guessing', ()
     seedResource(rawConn, { missionId: 'mission-budget-guess', tenantId: TENANT_A, tokenAllocated: 10000 });
 
     const { depsB } = createScopedTestDepsHelper(rawConn);
-    const budget = createBudgetGovernor();
+    const transitionService = createTestTransitionService(createTestAuditTrail());
+    const budget = createBudgetGovernor(transitionService);
 
     // Tenant-B tries to consume tenant-A's budget
     const result = budget.consume(depsB, 'mission-budget-guess' as MissionId, { tokens: 100 });

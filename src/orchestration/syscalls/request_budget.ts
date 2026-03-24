@@ -23,7 +23,7 @@ export function requestBudget(
   budget: BudgetGovernor,
   events: EventPropagator,
   missions: MissionStore,
-  transitionService?: OrchestrationTransitionService,
+  transitionService: OrchestrationTransitionService,
 ): Result<RequestBudgetOutput> {
   // S22: Justification required
   if (!input.justification || input.justification.trim().length === 0) {
@@ -55,16 +55,11 @@ export function requestBudget(
 
   if (!result.ok) {
     // If human approval required, transition mission to BLOCKED
-    // P0-A: Rewired to OrchestrationTransitionService when available.
-    // Legacy path retained for backward compatibility (tests without governance layer).
+    // P0-A: Sole transition mechanism via OrchestrationTransitionService.
     if (result.error.code === 'HUMAN_APPROVAL_REQUIRED') {
       const mission = missions.get(deps, input.missionId);
       if (mission.ok && mission.value.state === 'EXECUTING') {
-        if (transitionService) {
-          transitionService.transitionMission(deps.conn, input.missionId, 'EXECUTING', 'BLOCKED');
-        } else {
-          missions.transition(deps, input.missionId, 'EXECUTING', 'BLOCKED');
-        }
+        transitionService.transitionMission(deps.conn, input.missionId, 'EXECUTING', 'BLOCKED');
       }
     }
     return result;

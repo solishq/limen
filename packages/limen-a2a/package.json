@@ -19,7 +19,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "limen-ai": "file:../../"
+    "limen-ai": "file:../../",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

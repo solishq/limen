@@ -20,7 +20,7 @@
  *   - Each mission recovery in its own transaction
  *   - Non-fatal: one mission failure does not stop others
  *
- * Uses MISSION_TRANSITIONS to validate every state transition.
+ * Uses OrchestrationTransitionService for all state transitions.
  * Recovery is IDEMPOTENT — checks for existing recovery audit entries.
  *
  * Invariants enforced: I-18, I-05 (transactional consistency)
@@ -29,7 +29,6 @@
 
 import type { DatabaseConnection, Result, AuditTrail, MissionId } from '../../kernel/interfaces/index.js';
 import type { TimeProvider } from '../../kernel/interfaces/time.js';
-import { MISSION_TRANSITIONS } from '../interfaces/orchestration.js';
 import type { MissionState } from '../interfaces/orchestration.js';
 import type { OrchestrationTransitionService } from '../transitions/transition_service.js';
 
@@ -67,7 +66,7 @@ const RECOVERY_UNCHANGED_STATES: ReadonlySet<string> = new Set([
  *
  * Queries all non-terminal missions in root-first BFS ordering (depth ASC),
  * then applies conservative recovery rules:
- *   - EXECUTING/REVIEWING -> PAUSED (validated via MISSION_TRANSITIONS)
+ *   - EXECUTING/REVIEWING -> PAUSED (via OrchestrationTransitionService recovery path)
  *   - All other non-terminal states -> unchanged
  *
  * Each mission is recovered in its own transaction with audit entry.
@@ -86,7 +85,7 @@ export function recoverMissions(
   conn: DatabaseConnection,
   audit: AuditTrail,
   time: TimeProvider,
-  transitionService?: OrchestrationTransitionService,
+  transitionService: OrchestrationTransitionService,
 ): Result<RecoveryResult> {
   // Query non-terminal missions in root-first BFS ordering (depth ASC)
   // Uses the partial index idx_core_missions_non_terminal for efficiency
@@ -165,14 +164,16 @@ function recoverSingleMission(
   missionId: string,
   currentState: string,
   tenantId: string | null,
-  transitionService?: OrchestrationTransitionService,
+  transitionService: OrchestrationTransitionService,
 ): 'paused' | 'unchanged' {
-  // Idempotency check: look for existing recovery audit entry for this mission
+  // Idempotency check: look for existing recovery audit entry for this mission.
+  // P0-A: Transitioned missions get 'mission_transition' from OrchestrationTransitionService,
+  // unchanged missions get 'mission_recovery' from this function. Check both.
   const existingRecovery = conn.get<{ id: string }>(
     `SELECT id FROM core_audit_log
      WHERE resource_type = 'mission'
      AND resource_id = ?
-     AND operation = 'mission_recovery'
+     AND operation IN ('mission_recovery', 'mission_transition')
      ORDER BY timestamp DESC
      LIMIT 1`,
     [missionId],
@@ -185,39 +186,11 @@ function recoverSingleMission(
 
   // Determine action based on current state
   if (RECOVERY_TRANSITION_STATES.has(currentState)) {
-    // Validate transition via MISSION_TRANSITIONS (don't bypass state machine)
-    const validTargets = MISSION_TRANSITIONS[currentState as MissionState];
-    if (!validTargets.includes('PAUSED')) {
-      // REVIEWING -> PAUSED is not in the standard MISSION_TRANSITIONS.
-      // REVIEWING valid targets: ['COMPLETED', 'EXECUTING', 'FAILED']
-      // For REVIEWING, we use a special recovery path: direct UPDATE with audit.
-      // This is safe because recovery is a system-level operation, not a user-initiated transition.
-      // However, for EXECUTING -> PAUSED, MISSION_TRANSITIONS DOES allow it.
-      if (currentState === 'EXECUTING') {
-        // EXECUTING -> PAUSED is valid per MISSION_TRANSITIONS
-        // P0-A: Use transition service recovery path when available
-        if (transitionService) {
-          return transitionViaMissionRecoveryService(conn, audit, time, transitionService, missionId, currentState, tenantId);
-        }
-        return transitionToPaused(conn, audit, time, missionId, currentState, tenantId);
-      }
-
-      // For REVIEWING: The state machine doesn't have REVIEWING -> PAUSED.
-      // Recovery rule says REVIEWING -> PAUSED for safety (needs human re-review).
-      // This is a system-level recovery override, not a normal state transition.
-      // Record the override in the audit trail.
-      // P0-A: Use transitionMissionRecovery which skips the transition map
-      if (transitionService) {
-        return transitionViaMissionRecoveryService(conn, audit, time, transitionService, missionId, currentState, tenantId);
-      }
-      return transitionToPausedRecoveryOverride(conn, audit, time, missionId, currentState, tenantId);
-    }
-
-    // P0-A: Use transition service recovery path when available
-    if (transitionService) {
-      return transitionViaMissionRecoveryService(conn, audit, time, transitionService, missionId, currentState, tenantId);
-    }
-    return transitionToPaused(conn, audit, time, missionId, currentState, tenantId);
+    // P0-A: All recovery transitions go through the OrchestrationTransitionService.
+    // transitionMissionRecovery() skips the transition map validation (handles both
+    // EXECUTING→PAUSED which is in the map, and REVIEWING→PAUSED which is a
+    // system-level recovery override) but keeps audit + CAS + governance.
+    return transitionViaMissionRecoveryService(conn, audit, time, transitionService, missionId, currentState, tenantId);
   }
 
   if (RECOVERY_UNCHANGED_STATES.has(currentState)) {
@@ -285,91 +258,3 @@ function transitionViaMissionRecoveryService(
   return 'paused';
 }
 
-/**
- * Transition a mission to PAUSED via the standard state machine path.
- */
-function transitionToPaused(
-  conn: DatabaseConnection,
-  audit: AuditTrail,
-  time: TimeProvider,
-  missionId: string,
-  previousState: string,
-  tenantId: string | null,
-): 'paused' {
-  const now = time.nowISO();
-
-  conn.transaction(() => {
-    // F-S4-004 FIX: Check UPDATE result to detect TOCTOU race (concurrent state change)
-    const result = conn.run(
-      `UPDATE core_missions SET state = 'PAUSED', updated_at = ? WHERE id = ? AND state = ?`,
-      [now, missionId, previousState],
-    );
-
-    if (result.changes === 0) {
-      throw new Error(`Mission ${missionId} not in state ${previousState} (TOCTOU: state changed between query and recovery)`);
-    }
-
-    audit.append(conn, {
-      tenantId: tenantId as import('../../kernel/interfaces/index.js').TenantId | null,
-      actorType: 'system',
-      actorId: 'mission_recovery',
-      operation: 'mission_recovery',
-      resourceType: 'mission',
-      resourceId: missionId,
-      detail: {
-        previousState,
-        newState: 'PAUSED',
-        action: 'paused',
-        transitionPath: 'standard',
-      },
-    });
-  });
-
-  return 'paused';
-}
-
-/**
- * Transition REVIEWING -> PAUSED via recovery override.
- * REVIEWING -> PAUSED is not in the standard state machine, but recovery
- * rules require it for safety (needs human re-review after restart).
- */
-function transitionToPausedRecoveryOverride(
-  conn: DatabaseConnection,
-  audit: AuditTrail,
-  time: TimeProvider,
-  missionId: string,
-  previousState: string,
-  tenantId: string | null,
-): 'paused' {
-  const now = time.nowISO();
-
-  conn.transaction(() => {
-    // F-S4-004 FIX: Check UPDATE result to detect TOCTOU race
-    const result = conn.run(
-      `UPDATE core_missions SET state = 'PAUSED', updated_at = ? WHERE id = ? AND state = ?`,
-      [now, missionId, previousState],
-    );
-
-    if (result.changes === 0) {
-      throw new Error(`Mission ${missionId} not in state ${previousState} (TOCTOU: state changed between query and recovery)`);
-    }
-
-    audit.append(conn, {
-      tenantId: tenantId as import('../../kernel/interfaces/index.js').TenantId | null,
-      actorType: 'system',
-      actorId: 'mission_recovery',
-      operation: 'mission_recovery',
-      resourceType: 'mission',
-      resourceId: missionId,
-      detail: {
-        previousState,
-        newState: 'PAUSED',
-        action: 'paused',
-        transitionPath: 'recovery_override',
-        reason: `${previousState} -> PAUSED not in standard transitions; recovery override for safety`,
-      },
-    });
-  });
-
-  return 'paused';
-}

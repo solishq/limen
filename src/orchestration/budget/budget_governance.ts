@@ -23,7 +23,7 @@ import type { OrchestrationTransitionService } from '../transitions/transition_s
  * Factory function returns frozen object per C-07.
  * P0-A: Accepts optional transition service for state transitions.
  */
-export function createBudgetGovernor(transitionService?: OrchestrationTransitionService): BudgetGovernor {
+export function createBudgetGovernor(transitionService: OrchestrationTransitionService): BudgetGovernor {
 
   /** S11: Allocate budget for a new mission */
   function allocate(
@@ -91,62 +91,38 @@ export function createBudgetGovernor(transitionService?: OrchestrationTransition
     if (tokenCost > resource.token_remaining) {
       // CF-016: On BUDGET_EXCEEDED, transition mission to BLOCKED state.
       // FM-02: Defense against cost explosion — halt execution.
-      // P0-A: Rewired to OrchestrationTransitionService when available.
+      // P0-A: Sole transition mechanism via OrchestrationTransitionService.
       // F-RW-004: Use transitionMissionRecovery() — budget enforcement is a system-level
       // override that must work from ANY non-terminal state (not just EXECUTING).
       // Recovery skips transition map validation but keeps audit + CAS + governance.
       // F-RW-003: Check the Result — log failure via audit if transition fails.
-      // Legacy path retained for backward compatibility (tests without governance layer).
-      if (transitionService) {
-        const missionRow = deps.conn.get<{ state: string }>(
-          'SELECT state FROM core_missions WHERE id = ?',
-          [missionId],
-        );
-        if (missionRow) {
-          const currentState = missionRow.state as import('../interfaces/orchestration.js').MissionState;
-          const terminalStates = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'BLOCKED']);
-          if (!terminalStates.has(currentState)) {
-            const transitionResult = transitionService.transitionMissionRecovery(deps.conn, missionId, currentState, 'BLOCKED');
-            if (!transitionResult.ok) {
-              // F-RW-003: Log transition failure. Budget enforcement still succeeded
-              // (the budget IS exceeded) — this is a warning, not a fatal error.
-              deps.audit.append(deps.conn, {
-                tenantId: resource.tenant_id,
-                actorType: 'system',
-                actorId: 'budget_governor',
-                operation: 'transition_failed',
-                resourceType: 'mission',
-                resourceId: missionId,
-                detail: {
-                  attemptedTransition: { from: currentState, to: 'BLOCKED' },
-                  reason: 'budget_exceeded',
-                  error: transitionResult.error,
-                },
-              });
-            }
-          }
-        }
-      } else {
-        // Legacy path: direct SQL + audit (no governance enforcement)
-        const blockNow = deps.time.nowISO();
-        deps.conn.transaction(() => {
-          const blockResult = deps.conn.run(
-            `UPDATE core_missions SET state = 'BLOCKED', updated_at = ?
-             WHERE id = ? AND state NOT IN ('COMPLETED', 'FAILED', 'CANCELLED', 'BLOCKED')`,
-            [blockNow, missionId],
-          );
-          if (blockResult.changes > 0) {
+      const missionRow = deps.conn.get<{ state: string }>(
+        'SELECT state FROM core_missions WHERE id = ?',
+        [missionId],
+      );
+      if (missionRow) {
+        const currentState = missionRow.state as import('../interfaces/orchestration.js').MissionState;
+        const terminalStates = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'BLOCKED']);
+        if (!terminalStates.has(currentState)) {
+          const transitionResult = transitionService.transitionMissionRecovery(deps.conn, missionId, currentState, 'BLOCKED');
+          if (!transitionResult.ok) {
+            // F-RW-003: Log transition failure. Budget enforcement still succeeded
+            // (the budget IS exceeded) — this is a warning, not a fatal error.
             deps.audit.append(deps.conn, {
               tenantId: resource.tenant_id,
               actorType: 'system',
               actorId: 'budget_governor',
-              operation: 'mission_transition',
+              operation: 'transition_failed',
               resourceType: 'mission',
               resourceId: missionId,
-              detail: { to: 'BLOCKED', reason: 'budget_exceeded', tokenCost, tokenRemaining: resource.token_remaining },
+              detail: {
+                attemptedTransition: { from: currentState, to: 'BLOCKED' },
+                reason: 'budget_exceeded',
+                error: transitionResult.error,
+              },
             });
           }
-        });
+        }
       }
 
       return { ok: false, error: { code: 'BUDGET_EXCEEDED', message: `Token cost ${tokenCost} exceeds remaining ${resource.token_remaining}`, spec: 'S11' } };

@@ -593,10 +593,12 @@ describe('SC-10 Contract: respond_checkpoint (Facade-Level)', () => {
       const detail = JSON.parse(transitionAudit.detail) as Record<string, unknown>;
       assert.equal(detail.to, 'BLOCKED',
         'S24: Mission must transition to BLOCKED on escalation');
-      assert.equal(detail.reason, 'checkpoint_escalation',
-        'S24: Transition reason must be checkpoint_escalation');
-      assert.equal(detail.checkpointId, checkpointId,
-        'S24: Transition detail must reference the triggering checkpointId');
+      // P0-A: Transition service writes { from, to, recovery } format.
+      // The checkpoint context is recorded in the respond_checkpoint audit entry, not the transition.
+      assert.equal(detail.from, 'EXECUTING',
+        'S24: Transition must record from state');
+      assert.equal(detail.recovery, true,
+        'S24: Recovery path used for checkpoint escalation (system-level override)');
 
       // Verify mission is actually BLOCKED
       const mission = conn.get<{ state: string }>(
@@ -641,10 +643,12 @@ describe('SC-10 Contract: respond_checkpoint (Facade-Level)', () => {
       const detail = JSON.parse(transitionAudit.detail) as Record<string, unknown>;
       assert.equal(detail.to, 'CANCELLED',
         'S24: Mission must transition to CANCELLED on abort');
-      assert.equal(detail.reason, 'checkpoint_abort',
-        'S24: Transition reason must be checkpoint_abort');
-      assert.equal(detail.checkpointId, checkpointId,
-        'S24: Transition detail must reference the triggering checkpointId');
+      // P0-A: Transition service writes { from, to, recovery } format.
+      // The checkpoint context is recorded in the respond_checkpoint audit entry, not the transition.
+      assert.equal(detail.from, 'EXECUTING',
+        'S24: Transition must record from state');
+      assert.equal(detail.recovery, true,
+        'S24: Recovery path used for checkpoint abort (system-level override)');
 
       // Verify mission is actually CANCELLED
       const mission = conn.get<{ state: string }>(

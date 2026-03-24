@@ -36,7 +36,7 @@ describe('Contract: Drift Engine (I-24)', () => {
 
   // 1. Low drift → action='none'
   it('CT-DE-001: low drift (assessment matches objective) → action=none', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, {
       id: 'de1-m1', agentId: 'a1', state: 'EXECUTING',
@@ -70,7 +70,7 @@ describe('Contract: Drift Engine (I-24)', () => {
 
   // 2. Medium drift → action='flagged'
   it('CT-DE-002: medium drift (partial overlap) → action=flagged', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, {
       id: 'de2-m1', agentId: 'a1', state: 'EXECUTING',
@@ -103,7 +103,7 @@ describe('Contract: Drift Engine (I-24)', () => {
 
   // 3. High drift → action='escalated'
   it('CT-DE-003: high drift (no overlap) → action=escalated', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, {
       id: 'de3-m1', agentId: 'a1', state: 'EXECUTING',
@@ -137,7 +137,7 @@ describe('Contract: Drift Engine (I-24)', () => {
 
   // 4. Drift assessment stored in core_drift_assessments
   it('CT-DE-004: drift assessment stored in core_drift_assessments', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, {
       id: 'de4-m1', agentId: 'a1', state: 'EXECUTING',
@@ -189,7 +189,7 @@ describe('Contract: Drift Engine (I-24)', () => {
 
   // 5. Drift assessment is append-only (UPDATE blocked, DELETE blocked)
   it('CT-DE-005a: drift assessment UPDATE blocked (append-only)', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, {
       id: 'de5a-m1', agentId: 'a1', state: 'EXECUTING',
@@ -233,7 +233,7 @@ describe('Contract: Drift Engine (I-24)', () => {
   });
 
   it('CT-DE-005b: drift assessment DELETE blocked (append-only)', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, {
       id: 'de5b-m1', agentId: 'a1', state: 'EXECUTING',
@@ -278,7 +278,7 @@ describe('Contract: Drift Engine (I-24)', () => {
 
   // 6. Drift reads from core_mission_goals
   it('CT-DE-006: drift reads objective from core_mission_goals (not core_missions)', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     const goalObjective = 'The real goal anchor objective for drift comparison';
     const missionObjective = 'Build something different';
@@ -326,7 +326,7 @@ describe('Contract: Drift Engine (I-24)', () => {
 
   // 7. Missing goal anchor → no drift
   it('CT-DE-007: missing goal anchor → no drift (graceful)', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     // Create a mission but DELETE the goal anchor to simulate missing anchor
     seedMission(conn, {
@@ -361,8 +361,8 @@ describe('Contract: Drift Engine (I-24)', () => {
 
   // 8. Drift override on checkpoint
   it('CT-DE-008: escalated drift overrides continue on checkpoint', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
-    const coordinator = createCheckpointCoordinator();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
+    const coordinator = createCheckpointCoordinator(transitionService);
 
     seedMission(conn, {
       id: 'de8-m1', agentId: 'a1', state: 'EXECUTING',
@@ -398,7 +398,7 @@ describe('Contract: Drift Engine (I-24)', () => {
 
   // 9. Tenant isolation on drift assessments
   it('CT-DE-009: tenant isolation on drift assessments', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, {
       id: 'de9-m1', agentId: 'a1', state: 'EXECUTING',
@@ -440,7 +440,7 @@ describe('Contract: Drift Engine (I-24)', () => {
 
   // 10. Empty assessment handling
   it('CT-DE-010: empty assessment text computes drift against objective', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, {
       id: 'de10-m1', agentId: 'a1', state: 'EXECUTING',
@@ -475,7 +475,7 @@ describe('Contract: Drift Engine (I-24)', () => {
 
   // 11. Drift assessment audit trail
   it('CT-DE-011: drift assessment creates audit trail entry', () => {
-    const { deps, conn } = createTestOrchestrationDeps();
+    const { deps, conn, transitionService } = createTestOrchestrationDeps();
 
     seedMission(conn, {
       id: 'de11-m1', agentId: 'a1', state: 'EXECUTING',

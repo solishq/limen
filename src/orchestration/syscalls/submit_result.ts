@@ -25,7 +25,7 @@ export function submitResult(
   missions: MissionStore,
   events: EventPropagator,
   compaction: CompactionEngine,
-  transitionService?: OrchestrationTransitionService,
+  transitionService: OrchestrationTransitionService,
 ): Result<SubmitResultOutput> {
   // Verify mission exists and is active
   const missionResult = missions.get(deps, input.missionId);
@@ -91,22 +91,11 @@ export function submitResult(
     );
 
     // F-009/F-010 fix: State-guarded transition (no raw SQL bypass, TOCTOU protected)
-    // P0-A: Rewired to OrchestrationTransitionService (sole transition mechanism).
+    // P0-A: Sole transition mechanism via OrchestrationTransitionService.
     // The service provides CAS + governance enforcement + audit in one call.
-    if (transitionService) {
-      const transResult = transitionService.transitionMission(deps.conn, input.missionId, 'REVIEWING', 'COMPLETED');
-      if (!transResult.ok) {
-        throw new Error(`TOCTOU: Mission ${input.missionId} transition REVIEWING->COMPLETED failed: ${transResult.error.message}`);
-      }
-    } else {
-      // Legacy path: direct SQL (for backward compatibility in tests without governance)
-      const updateResult = deps.conn.run(
-        `UPDATE core_missions SET state = 'COMPLETED', updated_at = ?, completed_at = ? WHERE id = ? AND state = 'REVIEWING'`,
-        [now, now, input.missionId],
-      );
-      if (updateResult.changes === 0) {
-        throw new Error(`TOCTOU: Mission ${input.missionId} state changed from REVIEWING during transaction`);
-      }
+    const transResult = transitionService.transitionMission(deps.conn, input.missionId, 'REVIEWING', 'COMPLETED');
+    if (!transResult.ok) {
+      throw new Error(`TOCTOU: Mission ${input.missionId} transition REVIEWING->COMPLETED failed: ${transResult.error.message}`);
     }
 
     // I-03: Audit entry with full result

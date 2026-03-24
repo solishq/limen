@@ -23,7 +23,7 @@ export function proposeTaskExecution(
   taskGraph: TaskGraphEngine,
   budget: BudgetGovernor,
   events: EventPropagator,
-  transitionService?: OrchestrationTransitionService,
+  transitionService: OrchestrationTransitionService,
 ): Result<ProposeTaskExecutionOutput> {
   // Get the task
   const taskResult = taskGraph.getTask(deps, input.taskId);
@@ -89,17 +89,10 @@ export function proposeTaskExecution(
   }
 
   // Enqueue succeeded — now transition task: PENDING -> SCHEDULED
-  // P0-A: Rewired to OrchestrationTransitionService when available
-  if (transitionService) {
-    const transResult = transitionService.transitionTask(deps.conn, input.taskId, 'PENDING', 'SCHEDULED');
-    if (!transResult.ok) {
-      return { ok: false, error: { code: 'TASK_NOT_PENDING', message: transResult.error.message, spec: 'S17' } };
-    }
-  } else {
-    const transResult = taskGraph.transitionTask(deps, input.taskId, 'PENDING', 'SCHEDULED');
-    if (!transResult.ok) {
-      return { ok: false, error: { code: 'TASK_NOT_PENDING', message: transResult.error.message, spec: 'S17' } };
-    }
+  // P0-A: Sole transition mechanism via OrchestrationTransitionService.
+  const transResult = transitionService.transitionTask(deps.conn, input.taskId, 'PENDING', 'SCHEDULED');
+  if (!transResult.ok) {
+    return { ok: false, error: { code: 'TASK_NOT_PENDING', message: transResult.error.message, spec: 'S17' } };
   }
 
   // Emit TASK_SCHEDULED lifecycle event
