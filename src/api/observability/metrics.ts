@@ -200,20 +200,7 @@ export class MetricsCollector implements MetricsApi {
   }
 
   // ─── Recording Methods ──
-  //
-  // TODO: Wire these recording methods to the chat and infer pipelines.
-  // Each method has a clear instrumentation point:
-  //   - recordRequest: after ChatPipeline.execute() / InferPipeline.execute() completes
-  //   - recordTokens: after LLM response with usage data
-  //   - recordRetrievalLatency: after knowledge retrieval in chat pipeline
-  //   - recordTtft: after first streaming chunk from provider
-  //   - recordProviderError: on PROVIDER_UNAVAILABLE errors
-  //   - recordSafetyViolation: on safety gate rejections
-  //   - recordBackpressureEvent: on stream backpressure events
-  //
-  // Wiring requires passing MetricsCollector into pipeline constructors,
-  // which is a Class 3 enhancement (pipeline interface change).
-  // The methods are structurally correct and ready for wiring.
+  // Wired to ChatPipeline and InferPipeline via constructor injection (PRR-103).
 
   /** Record a completed request with its duration. SEC-018: Optional tenantId. */
   recordRequest(durationMs: number, tenantId?: string): void {

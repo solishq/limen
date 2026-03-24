@@ -172,6 +172,23 @@ export function createCryptoEngine(): CryptoEngine {
  * S ref: I-11 (encryption at rest), IP-1 (secure credential storage)
  */
 export function createVaultOperations(crypto: CryptoEngine, masterKey: Buffer): VaultOperations {
+  // PRR-106: Cache derived keys to avoid blocking the event loop on repeat retrieve().
+  // Key: hex(salt) + ':' + iterations. Value: derived key Buffer.
+  // Cache is bounded by number of unique vault entries (typically small).
+  const derivedKeyCache = new Map<string, Buffer>();
+
+  function cachedDeriveKey(salt: Buffer, iterations: number): Result<Buffer> {
+    const cacheKey = salt.toString('hex') + ':' + iterations;
+    const cached = derivedKeyCache.get(cacheKey);
+    if (cached) return { ok: true, value: cached };
+
+    const result = crypto.deriveKey(masterKey, salt, iterations);
+    if (result.ok) {
+      derivedKeyCache.set(cacheKey, result.value);
+    }
+    return result;
+  }
+
   return {
     /**
      * Store encrypted value in vault.
@@ -181,7 +198,7 @@ export function createVaultOperations(crypto: CryptoEngine, masterKey: Buffer): 
       try {
         // Derive a key for this vault entry
         const salt = randomBytes(32);
-        const derivedKeyResult = crypto.deriveKey(masterKey, salt, DEFAULT_PBKDF2_ITERATIONS);
+        const derivedKeyResult = cachedDeriveKey(salt, DEFAULT_PBKDF2_ITERATIONS);
         if (!derivedKeyResult.ok) return derivedKeyResult;
 
         // Encrypt the value
@@ -290,7 +307,7 @@ export function createVaultOperations(crypto: CryptoEngine, masterKey: Buffer): 
 
         // Re-derive key
         const salt = Buffer.from(keyRow.salt, 'base64');
-        const derivedKeyResult = crypto.deriveKey(masterKey, salt, keyRow.iterations);
+        const derivedKeyResult = cachedDeriveKey(salt, keyRow.iterations);
         if (!derivedKeyResult.ok) return derivedKeyResult;
 
         // Decrypt

@@ -8,10 +8,10 @@ Thank you for your interest in contributing to Limen. This document provides gui
 
 - Node.js >= 22.0.0
 - npm
-- C++ build tools (for `better-sqlite3` native compilation)
-  - macOS: `xcode-select --install`
+- C++ build tools and Python 3 (for `better-sqlite3` native compilation via node-gyp)
+  - macOS: `xcode-select --install` (Python 3 included)
   - Ubuntu/Debian: `sudo apt install build-essential python3`
-  - Windows: Install Visual Studio Build Tools
+  - Windows: Install Visual Studio Build Tools and Python 3
 
 ### Getting Started
 
@@ -20,7 +20,7 @@ git clone https://github.com/solishq/limen.git
 cd limen
 npm install
 npm run typecheck   # Verify TypeScript compilation
-npm test            # Run test suite (~2,400 tests)
+npm test            # Run full test suite (3,200+ tests)
 ```
 
 ## Architecture

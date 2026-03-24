@@ -24,6 +24,8 @@ import type {
   Result,
   TaskId,
   MissionId,
+  TenantId,
+  AgentId,
   KernelError,
   OperationContext,
   AuditCreateInput,
@@ -203,7 +205,7 @@ export function createTaskScheduler(audit?: AuditDep, time?: TimeProvider): Task
 
       // I-03: audit in same transaction as state mutation
       audit?.append(conn, {
-        tenantId: (row.tenant_id as any) ?? null, // lint-allow: as any — SQLite row typing
+        tenantId: (row.tenant_id as TenantId | null) ?? null,
         actorType: 'scheduler',
         actorId: 'substrate.scheduler',
         operation: 'task.schedule',
@@ -236,8 +238,8 @@ export function createTaskScheduler(audit?: AuditDep, time?: TimeProvider): Task
     return ok({
       taskId: result.task_id as TaskId,
       missionId: result.mission_id as MissionId,
-      tenantId: result.tenant_id as any, // lint-allow: as any — SQLite row typing
-      agentId: result.agent_id as any, // lint-allow: as any — SQLite row typing
+      tenantId: result.tenant_id as TenantId | null,
+      agentId: result.agent_id as AgentId,
       priority: result.priority,
       executionMode: result.execution_mode as 'deterministic' | 'stochastic' | 'hybrid',
       estimatedTokens: result.estimated_tokens,
@@ -335,7 +337,7 @@ export function createTaskScheduler(audit?: AuditDep, time?: TimeProvider): Task
 
       // I-03: audit in same transaction
       audit?.append(conn, {
-        tenantId: (task.tenant_id as any) ?? null, // lint-allow: as any — SQLite row typing
+        tenantId: (task.tenant_id as TenantId | null) ?? null,
         actorType: 'system',
         actorId: 'substrate.scheduler',
         operation: 'task.complete',
@@ -412,7 +414,7 @@ export function createTaskScheduler(audit?: AuditDep, time?: TimeProvider): Task
 
       // I-03: audit in same transaction (covers both retry and permanent fail paths)
       audit?.append(conn, {
-        tenantId: (task.tenant_id as any) ?? null, // lint-allow: as any — SQLite row typing
+        tenantId: (task.tenant_id as TenantId | null) ?? null,
         actorType: 'system',
         actorId: 'substrate.scheduler',
         operation: 'task.fail',
@@ -476,7 +478,7 @@ export function createTaskScheduler(audit?: AuditDep, time?: TimeProvider): Task
 
       // I-03: audit in same transaction
       audit?.append(conn, {
-        tenantId: (task.tenant_id as any) ?? null, // lint-allow: as any — SQLite row typing
+        tenantId: (task.tenant_id as TenantId | null) ?? null,
         actorType: 'system',
         actorId: 'substrate.scheduler',
         operation: 'task.cancel',
