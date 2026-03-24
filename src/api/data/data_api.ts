@@ -17,8 +17,10 @@
  * Invariants enforced: I-02 (user data ownership), I-13 (RBAC)
  */
 
-import { resolve, normalize } from 'node:path';
+import { resolve, normalize, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import type {
   OperationContext, DatabaseConnection, RateLimiter, RbacEngine,
 } from '../../kernel/interfaces/index.js';
@@ -89,6 +91,14 @@ export class DataApiImpl implements DataApi {
           close(): void;
         };
       };
+
+      // Read version dynamically from package.json (Critical #18: no stale hardcoded version).
+      // Navigate from this module (src/api/data/) up to the project root.
+      const thisDir = dirname(fileURLToPath(import.meta.url));
+      const pkgJsonPath = resolve(thisDir, '..', '..', '..', 'package.json');
+      const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as { version: string };
+      const limenVersion = pkg.version;
+
       const exportDb = new BetterSqlite3(archivePath);
 
       exportDb.exec(`
@@ -102,7 +112,7 @@ export class DataApiImpl implements DataApi {
         `INSERT OR REPLACE INTO _limen_export_metadata (key, value) VALUES (?, ?)`
       );
       insertMeta.run('format', 'limen-archive-v1');
-      insertMeta.run('limen_version', '3.2.0');
+      insertMeta.run('limen_version', limenVersion);
       insertMeta.run('schema_version', String(conn.schemaVersion));
       insertMeta.run('export_date', this.kernel.time.nowISO());
       insertMeta.run('tenant_id', ctx.tenantId ?? 'global');

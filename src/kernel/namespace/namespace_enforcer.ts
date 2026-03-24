@@ -17,7 +17,7 @@ import type { NamespaceEnforcer } from '../interfaces/namespace.js';
 
 /** Valid namespace prefixes per C-09 */
 const VALID_PREFIXES: readonly NamespacePrefix[] = [
-  'core_', 'memory_', 'agent_', 'obs_', 'hitl_', 'meter_',
+  'core_', 'memory_', 'agent_', 'obs_', 'hitl_', 'meter_', 'gov_',
 ] as const;
 
 /**

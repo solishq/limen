@@ -400,6 +400,14 @@ export function createAnthropicAdapter(
             if (usage_delta) {
               const outTokens = typeof usage_delta.output_tokens === 'number'
                 ? usage_delta.output_tokens : 0;
+
+              // CR-5: When thinking was detected, accumulate output tokens as
+              // thinking tokens. Anthropic reports thinking token consumption
+              // via the output_tokens field in message_delta usage.
+              if (thinkingDetected) {
+                thinkingTokensAccumulated += outTokens;
+              }
+
               // Emit usage with what we have
               yield {
                 type: 'usage',

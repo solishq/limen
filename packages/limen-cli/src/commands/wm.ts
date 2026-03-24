@@ -4,38 +4,12 @@
  * Subcommands: write, read, discard.
  * Working memory is task-local scratch space — entries are discarded
  * when the owning task reaches a terminal state.
- *
- * Type note: Same published-type vs runtime-behavior divergence as claim.ts.
- * The published limen-ai@1.0.0 declares WorkingMemoryApi with (conn, ctx, input).
- * At runtime, WorkingMemoryApiImpl wraps conn/ctx and accepts (input) only.
  */
 
 import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
 import { writeResult, writeError } from '../output.js';
-import type { Limen, TaskId } from 'limen-ai';
-
-/**
- * Runtime-accurate WorkingMemoryApi shape. The Limen object's `workingMemory`
- * property is a WorkingMemoryApiImpl that wraps conn/ctx internally.
- */
-interface WorkingMemoryApiConvenience {
-  write(input: {
-    readonly taskId: TaskId;
-    readonly key: string;
-    readonly value: string;
-  }): { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly error: { readonly message: string } };
-
-  read(input: {
-    readonly taskId: TaskId;
-    readonly key: string | null;
-  }): { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly error: { readonly message: string } };
-
-  discard(input: {
-    readonly taskId: TaskId;
-    readonly key: string | null;
-  }): { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly error: { readonly message: string } };
-}
+import type { Limen, TaskId, WorkingMemoryApi } from 'limen-ai';
 
 export function createWmCommand(): Command {
   const wm = new Command('wm')
@@ -61,8 +35,7 @@ export function createWmCommand(): Command {
 
         const result = await withEngine(
           (limen: Limen) => {
-            // Runtime: WorkingMemoryApiImpl accepts (input) only — see module doc
-            const api = limen.workingMemory as unknown as WorkingMemoryApiConvenience;
+            const api: WorkingMemoryApi = limen.workingMemory;
             const wmResult = api.write({
               taskId: options.taskId as TaskId,
               key: options.key,
@@ -105,8 +78,7 @@ export function createWmCommand(): Command {
 
         const result = await withEngine(
           (limen: Limen) => {
-            // Runtime: WorkingMemoryApiImpl accepts (input) only — see module doc
-            const api = limen.workingMemory as unknown as WorkingMemoryApiConvenience;
+            const api: WorkingMemoryApi = limen.workingMemory;
             const readResult = api.read({
               taskId: options.taskId as TaskId,
               key: options.key ?? null,
@@ -148,8 +120,7 @@ export function createWmCommand(): Command {
 
         const result = await withEngine(
           (limen: Limen) => {
-            // Runtime: WorkingMemoryApiImpl accepts (input) only — see module doc
-            const api = limen.workingMemory as unknown as WorkingMemoryApiConvenience;
+            const api: WorkingMemoryApi = limen.workingMemory;
             const discardResult = api.discard({
               taskId: options.taskId as TaskId,
               key: options.key ?? null,

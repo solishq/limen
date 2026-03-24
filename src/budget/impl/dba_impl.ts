@@ -107,16 +107,16 @@ function makeDimensionState(allocated: number): DimensionState {
 }
 
 // ============================================================================
-// Module-Level Admission Reservation State (PSD-14)
+// Admission Reservation State Types (PSD-14)
 // ============================================================================
 
 /**
- * Global admission reservation ledger.
+ * Per-instance admission reservation ledger.
  *
  * Keyed by missionId. Tracks cumulative token AND deliberation reservations
- * from admissibility checks. This state is module-level because the
- * reservation ledger is conceptually process-wide — you don't want
- * two DBA instances making conflicting reservations on the same mission.
+ * from admissibility checks. This state is per-instance (C-06 compliance):
+ * each createDBAImpl() call produces an independent DBA with its own
+ * reservation map. Two independent Limen instances never share admission state.
  *
  * Token reservations are hard commitments (exact envelope reserved).
  * Deliberation reservations enforce the hard cap: when cumulative
@@ -128,8 +128,6 @@ interface AdmissionState {
   tokenConsumed: number;
   deliberationConsumed: number;
 }
-
-const admissionReservations = new Map<string, AdmissionState>();
 
 // ============================================================================
 // ECB Computation Service — §7.3, DBA-I5, DBA-I14
@@ -477,17 +475,18 @@ function evaluateExceeded(
 // ============================================================================
 
 /**
- * Create the admissibility service using the module-level reservation ledger.
+ * Create the admissibility service using the per-instance reservation ledger.
  *
- * Token reservations persist across DBA instances (module-level) because
- * the admission ledger is conceptually process-wide. Two DBA facades
- * querying the same mission must see each other's reservations.
+ * C-06: Each DBA instance owns its own reservation map. Two independent
+ * createLimen() instances never share admission state.
  *
  * When tokenPass=true, the token envelope is reserved (committed).
  * When deliberationPass=true, the deliberation envelope is reserved
  * (hard cap enforcement at admissibility tier).
  */
-function createInvocationAdmissibilityImpl(): InvocationAdmissibilityService {
+function createInvocationAdmissibilityImpl(
+  admissionReservations: Map<string, AdmissionState>,
+): InvocationAdmissibilityService {
   return Object.freeze({
     checkAdmissibility(input: PreInvocationCheckInput): PreInvocationCheckResult {
       const missionId = input.missionId as string;
@@ -556,18 +555,26 @@ function createInvocationAdmissibilityImpl(): InvocationAdmissibilityService {
  * Create a fully functional DBA implementation.
  *
  * Three-tier budget model:
- *   - Admission tier (module-level): token reservation ledger per mission
+ *   - Admission tier (per-instance, C-06): token reservation ledger per mission
  *   - Mission tier (per-instance): threshold tracking per mission
  *   - Invocation tier (per-reconcile): fresh per-invocation task budget
+ *
+ * C-06: Every mutable state (admission reservations, mission thresholds)
+ * is scoped to the DBA instance. Two createDBAImpl() calls produce
+ * fully independent budget governors with no shared mutable state.
  *
  * Stateless services (ECB, PolicyGovernor, Overhead, Window, Estimator)
  * are created fresh per instance but have no mutable state.
  */
 export function createDBAImpl(): BudgetGovernanceAmendment {
+  // C-06: Per-instance admission reservation ledger.
+  // Each createLimen() → createDBAImpl() gets its own map.
+  const admissionReservations = new Map<string, AdmissionState>();
+
   return Object.freeze({
     ecb: createECBComputationImpl(),
     policyGovernor: createContextPolicyGovernorImpl(),
-    admissibility: createInvocationAdmissibilityImpl(),
+    admissibility: createInvocationAdmissibilityImpl(admissionReservations),
     reconciliation: createInvocationReconciliationImpl(),
     overhead: createSystemOverheadImpl(),
     window: createSubstrateWindowImpl(),

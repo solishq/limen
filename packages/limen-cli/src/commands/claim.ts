@@ -4,44 +4,12 @@
  * Subcommands: assert, query.
  * Claims are the knowledge primitive in Limen — structured assertions
  * with confidence scores and grounding evidence.
- *
- * Type note: The published limen-ai@1.0.0 dist declares ClaimApi methods
- * with (conn, ctx, input) — the raw facade signature. At runtime, the Limen
- * object actually holds a ClaimApiImpl wrapper that accepts (input) only,
- * handling conn/ctx internally. The type assertion below bridges this
- * published-type vs runtime-behavior divergence.
  */
 
 import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
 import { writeResult, writeError } from '../output.js';
-import type { Limen, MissionId, TaskId } from 'limen-ai';
-
-/**
- * Runtime-accurate ClaimApi shape. The Limen object's `claims` property
- * is a ClaimApiImpl that wraps conn/ctx internally — these methods
- * take only the input parameter at the call site.
- */
-interface ClaimApiConvenience {
-  assertClaim(input: {
-    readonly subject: string;
-    readonly predicate: string;
-    readonly object: { readonly type: string; readonly value: unknown };
-    readonly confidence: number;
-    readonly groundingMode: string;
-    readonly validAt: string;
-    readonly missionId: MissionId;
-    readonly taskId: TaskId | null;
-    readonly evidenceRefs: readonly { readonly type: string; readonly id: string }[];
-  }): { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly error: { readonly message: string } };
-
-  queryClaims(input: {
-    readonly subject?: string | null;
-    readonly predicate?: string | null;
-    readonly minConfidence?: number | null;
-    readonly limit?: number;
-  }): { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly error: { readonly message: string } };
-}
+import type { Limen, MissionId, TaskId, ClaimApi } from 'limen-ai';
 
 export function createClaimCommand(): Command {
   const claim = new Command('claim')
@@ -101,8 +69,10 @@ export function createClaimCommand(): Command {
 
         const result = await withEngine(
           (limen: Limen) => {
-            // Runtime: ClaimApiImpl accepts (input) only — see module doc
-            const api = limen.claims as unknown as ClaimApiConvenience;
+            const api: ClaimApi = limen.claims;
+            // ClaimCreateInput fields are typed with string literal unions
+            // (GroundingMode, ObjectType, EvidenceType) which are not exported.
+            // CLI string inputs are validated at runtime by the claim system.
             const claimResult = api.assertClaim({
               subject: options.subject,
               predicate: options.predicate,
@@ -113,7 +83,7 @@ export function createClaimCommand(): Command {
               missionId: options.missionId as MissionId,
               taskId: (options.taskId ?? null) as TaskId | null,
               evidenceRefs,
-            });
+            } as Parameters<ClaimApi['assertClaim']>[0]);
 
             if (!claimResult.ok) {
               throw new Error(`Claim assertion failed: ${claimResult.error.message}`);
@@ -155,8 +125,7 @@ export function createClaimCommand(): Command {
 
         const result = await withEngine(
           (limen: Limen) => {
-            // Runtime: ClaimApiImpl accepts (input) only — see module doc
-            const api = limen.claims as unknown as ClaimApiConvenience;
+            const api: ClaimApi = limen.claims;
             const queryResult = api.queryClaims({
               subject: options.subject ?? null,
               predicate: options.predicate ?? null,
