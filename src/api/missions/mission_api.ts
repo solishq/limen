@@ -436,34 +436,43 @@ export class MissionApiImpl implements MissionApi {
       },
 
       // S6: Pause mission (transition to PAUSED state)
+      // P0-A: Rewired to OrchestrationTransitionService (sole transition mechanism)
       async pause(): Promise<void> {
         const conn = impl.getConnection();
         const ctx = impl.getContext();
         requirePermission(impl.rbac, ctx, 'create_mission');
         requireRateLimit(impl.rateLimiter, conn, ctx, 'api_calls');
 
-        const deps = impl.buildOrchDeps();
-        const result = impl.orchestration.missions.transition(
-          deps, missionId, 'EXECUTING', 'PAUSED',
+        const service = impl.orchestration.transitions;
+        if (!service) {
+          throw new Error('OrchestrationTransitionService not available');
+        }
+        const result = service.transitionMission(
+          conn, missionId, 'EXECUTING', 'PAUSED',
         );
         unwrapResult(result);
       },
 
       // S6: Resume paused mission (transition to EXECUTING)
+      // P0-A: Rewired to OrchestrationTransitionService (sole transition mechanism)
       async resume(): Promise<void> {
         const conn = impl.getConnection();
         const ctx = impl.getContext();
         requirePermission(impl.rbac, ctx, 'create_mission');
         requireRateLimit(impl.rateLimiter, conn, ctx, 'api_calls');
 
-        const deps = impl.buildOrchDeps();
-        const result = impl.orchestration.missions.transition(
-          deps, missionId, 'PAUSED', 'EXECUTING',
+        const service = impl.orchestration.transitions;
+        if (!service) {
+          throw new Error('OrchestrationTransitionService not available');
+        }
+        const result = service.transitionMission(
+          conn, missionId, 'PAUSED', 'EXECUTING',
         );
         unwrapResult(result);
       },
 
       // S6: Cancel mission (transition to CANCELLED)
+      // P0-A: Rewired to OrchestrationTransitionService (sole transition mechanism)
       async cancel(): Promise<void> {
         const conn = impl.getConnection();
         const ctx = impl.getContext();
@@ -475,8 +484,12 @@ export class MissionApiImpl implements MissionApi {
         const missionResult = impl.orchestration.missions.get(deps, missionId);
         const mission = unwrapResult(missionResult);
 
-        const result = impl.orchestration.missions.transition(
-          deps, missionId, mission.state, 'CANCELLED',
+        const service = impl.orchestration.transitions;
+        if (!service) {
+          throw new Error('OrchestrationTransitionService not available');
+        }
+        const result = service.transitionMission(
+          conn, missionId, mission.state, 'CANCELLED',
         );
         unwrapResult(result);
       },

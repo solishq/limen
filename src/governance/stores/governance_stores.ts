@@ -171,18 +171,11 @@ export function createRunStoreImpl(): RunStore {
       const now = nowISO();
       const completedAt = state !== 'active' ? now : null;
 
-      // Ensure the run exists — create skeleton if needed (supports contract test pattern)
+      // P0-A Critical #6: No phantom creation. If entity doesn't exist, return error.
+      // Previous code auto-created skeleton runs which masked data integrity issues.
       const existing = conn.get<Record<string, unknown>>('SELECT run_id FROM gov_runs WHERE run_id = ?', [runId]);
       if (!existing) {
-        try {
-          conn.run(
-            `INSERT INTO gov_runs (run_id, tenant_id, mission_id, state, started_at, schema_version, origin)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [runId, 'system', 'unbound', 'active', now, '0.1.0', 'runtime'],
-          );
-        } catch (e: unknown) {
-          return err('RUN_CREATE_FAILED', e instanceof Error ? e.message : String(e), 'BC-010');
-        }
+        return err('RUN_NOT_FOUND', `Run ${runId} not found — cannot update state of non-existent run`, 'BC-010');
       }
 
       try {
@@ -298,31 +291,11 @@ export function createAttemptStoreImpl(): AttemptStore {
         return err('INVALID_ATTEMPT_STATE', `Invalid attempt state: ${state}`, 'ST-010');
       }
 
-      // Ensure the attempt exists — create skeleton if needed (supports contract test pattern)
+      // P0-A Critical #6: No phantom creation. If entity doesn't exist, return error.
+      // Previous code auto-created skeleton attempts + runs which masked data integrity issues.
       const existing = conn.get<Record<string, unknown>>('SELECT attempt_id FROM gov_attempts WHERE attempt_id = ?', [attemptId]);
       if (!existing) {
-        const now = nowISO();
-        // Ensure a skeleton run exists for FK constraint
-        const skeletonRunId = `run-for-${attemptId}` as RunId;
-        const runExists = conn.get<Record<string, unknown>>('SELECT run_id FROM gov_runs WHERE run_id = ?', [skeletonRunId]);
-        if (!runExists) {
-          try {
-            conn.run(
-              `INSERT INTO gov_runs (run_id, tenant_id, mission_id, state, started_at, schema_version, origin)
-               VALUES (?, ?, ?, ?, ?, ?, ?)`,
-              [skeletonRunId, 'system', 'unbound', 'active', now, '0.1.0', 'runtime'],
-            );
-          } catch { /* ignore */ }
-        }
-        try {
-          conn.run(
-            `INSERT INTO gov_attempts (attempt_id, task_id, mission_id, run_id, state, pinned_versions, schema_version, origin, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [attemptId, 'unbound', 'unbound', skeletonRunId, 'started',
-             JSON.stringify({ missionContractVersion: '1.0.0', traceGrammarVersion: '1.0.0', evalSchemaVersion: '1.0.0', capabilityManifestSchemaVersion: '1.0.0' }),
-             '0.1.0', 'runtime', now],
-          );
-        } catch { /* ignore */ }
+        return err('ATTEMPT_NOT_FOUND', `Attempt ${attemptId} not found — cannot update state of non-existent attempt`, 'BC-011');
       }
 
       conn.run('UPDATE gov_attempts SET state = ? WHERE attempt_id = ?', [state, attemptId]);

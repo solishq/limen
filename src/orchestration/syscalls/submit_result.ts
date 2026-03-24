@@ -15,6 +15,7 @@ import type {
   MissionStore, EventPropagator, CompactionEngine,
 } from '../interfaces/orchestration.js';
 import { generateId } from '../interfaces/orchestration.js';
+import type { OrchestrationTransitionService } from '../transitions/transition_service.js';
 
 /** SC-9: submit_result system call */
 export function submitResult(
@@ -24,6 +25,7 @@ export function submitResult(
   missions: MissionStore,
   events: EventPropagator,
   compaction: CompactionEngine,
+  transitionService?: OrchestrationTransitionService,
 ): Result<SubmitResultOutput> {
   // Verify mission exists and is active
   const missionResult = missions.get(deps, input.missionId);
@@ -89,12 +91,22 @@ export function submitResult(
     );
 
     // F-009/F-010 fix: State-guarded transition (no raw SQL bypass, TOCTOU protected)
-    const updateResult = deps.conn.run(
-      `UPDATE core_missions SET state = 'COMPLETED', updated_at = ?, completed_at = ? WHERE id = ? AND state = 'REVIEWING'`,
-      [now, now, input.missionId],
-    );
-    if (updateResult.changes === 0) {
-      throw new Error(`TOCTOU: Mission ${input.missionId} state changed from REVIEWING during transaction`);
+    // P0-A: Rewired to OrchestrationTransitionService (sole transition mechanism).
+    // The service provides CAS + governance enforcement + audit in one call.
+    if (transitionService) {
+      const transResult = transitionService.transitionMission(deps.conn, input.missionId, 'REVIEWING', 'COMPLETED');
+      if (!transResult.ok) {
+        throw new Error(`TOCTOU: Mission ${input.missionId} transition REVIEWING->COMPLETED failed: ${transResult.error.message}`);
+      }
+    } else {
+      // Legacy path: direct SQL (for backward compatibility in tests without governance)
+      const updateResult = deps.conn.run(
+        `UPDATE core_missions SET state = 'COMPLETED', updated_at = ?, completed_at = ? WHERE id = ? AND state = 'REVIEWING'`,
+        [now, now, input.missionId],
+      );
+      if (updateResult.changes === 0) {
+        throw new Error(`TOCTOU: Mission ${input.missionId} state changed from REVIEWING during transaction`);
+      }
     }
 
     // I-03: Audit entry with full result

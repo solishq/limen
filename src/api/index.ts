@@ -30,6 +30,7 @@ import type {
 import type { Substrate } from '../substrate/interfaces/substrate.js';
 import type { SubstrateConfig } from '../substrate/interfaces/substrate.js';
 import type { OrchestrationEngine } from '../orchestration/interfaces/orchestration.js';
+import type { TransitionEnforcer } from '../kernel/interfaces/lifecycle.js';
 
 // CF-004: Real factory functions for default wiring
 import { createKernel as realCreateKernel, destroyKernel as realDestroyKernel } from '../kernel/index.js';
@@ -273,6 +274,7 @@ function buildSubstrateAdapter(): LimenDeps['createSubstrate'] {
  */
 function buildOrchestrationAdapter(
   trackConn?: (conn: DatabaseConnection) => void,
+  transitionEnforcer?: TransitionEnforcer,
 ): LimenDeps['createOrchestration'] {
   return (kernel: Kernel, substrate: Substrate, config: LimenConfig): OrchestrationEngine => {
     // RDD-3: Translate public tenancy config to kernel tenancy mode
@@ -354,8 +356,9 @@ function buildOrchestrationAdapter(
 
     // CF-004 / self-review: cleanup connection if orchestration construction fails
     // CF-007: Pass kernel.rateLimiter for persistent, SQLite-backed rate limiting
+    // P0-A: Pass kernel.time and transitionEnforcer for the OrchestrationTransitionService
     try {
-      return realCreateOrchestration(conn, substrate, kernel.audit, kernel.rateLimiter);
+      return realCreateOrchestration(conn, substrate, kernel.audit, kernel.rateLimiter, kernel.time, transitionEnforcer);
     } catch (err) {
       conn.close();
       throw err;
@@ -420,6 +423,11 @@ export async function createLimen(
   // S3.3: Consumers call createLimen(config) — no internal imports needed.
   // R4C-004: Track orchestration connection for shutdown cleanup.
   let orchestrationConn: DatabaseConnection | null = null;
+  // P0-A: When no external deps, build default wiring. The orchestration adapter
+  // is built without the TransitionEnforcer initially — it will be constructed
+  // after kernel creation when we can create the GovernanceSystem.
+  // For external deps (tests), use as-is.
+  const useProductionWiring = !deps;
   const resolvedDeps = deps ?? Object.freeze({
     createKernel: realCreateKernel,
     destroyKernel: realDestroyKernel,
@@ -503,11 +511,27 @@ export async function createLimen(
     throw ensureLimenError(err);
   }
 
+  // ── Step 3.5: Create GovernanceSystem early for TransitionEnforcer (P0-A) ──
+  // The GovernanceSystem only needs kernel.time and has no dependencies on
+  // orchestration or substrate. Creating it before orchestration allows the
+  // TransitionEnforcer to be injected into the OrchestrationTransitionService.
+  const earlyGovernanceSystem = createGovernanceSystem(kernel.time);
+
   // ── Step 4: Create L2 Orchestration ──
 
   let orchestration: OrchestrationEngine;
   try {
-    orchestration = resolvedDeps.createOrchestration(kernel, substrate, config);
+    // P0-A: For production wiring, rebuild the orchestration adapter with the
+    // TransitionEnforcer from governance. For external deps (tests), use as-is.
+    if (useProductionWiring) {
+      const orchestrationAdapterWithEnforcer = buildOrchestrationAdapter(
+        (conn) => { orchestrationConn = conn; },
+        earlyGovernanceSystem.transitionEnforcer,
+      );
+      orchestration = orchestrationAdapterWithEnforcer(kernel, substrate, config);
+    } else {
+      orchestration = resolvedDeps.createOrchestration(kernel, substrate, config);
+    }
   } catch (err) {
     // R4C-005: Cleanup kernel on orchestration construction failure
     try { destroyKernel(kernel); } catch { /* ignore cleanup errors */ }
@@ -556,7 +580,9 @@ export async function createLimen(
         ...getReplayPipelineMigrations(),
       ]);
       if (recoveryMigResult.ok) {
-        const recoveryResult = recoverMissions(recoveryConn, kernel.audit, kernel.time);
+        // P0-A: Pass transition service to recovery for governance-enforced transitions.
+        // The orchestration.transitions may be undefined if external deps don't provide it.
+        const recoveryResult = recoverMissions(recoveryConn, kernel.audit, kernel.time, orchestration.transitions);
         if (recoveryResult.ok && recoveryResult.value.recoveredCount > 0) {
           log({ level: 'info', category: 'recovery', message: `Mission recovery: ${recoveryResult.value.recoveredCount} missions transitioned to PAUSED` });
         }
@@ -572,8 +598,10 @@ export async function createLimen(
   // Instantiation order: Phase 0A → EGP → InvocationGate → GovernedOrchestration
   // Design Source §Output 4, Architecture §4 (composition order)
 
-  // Phase 0A governance system (runs, traces, contracts, supervisor, suspension, eval, etc.)
-  const governanceSystem = createGovernanceSystem(kernel.time);
+  // Phase 0A governance system — reuse the instance created at step 3.5 (P0-A).
+  // Previously created here; moved earlier so TransitionEnforcer is available
+  // before orchestration creation.
+  const governanceSystem = earlyGovernanceSystem;
 
   // EGP execution governor
   // ExecutionGovernorDeps uses structural projections of audit/events that are

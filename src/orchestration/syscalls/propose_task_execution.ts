@@ -13,6 +13,7 @@ import type {
   TaskGraphEngine, BudgetGovernor, EventPropagator,
 } from '../interfaces/orchestration.js';
 import { generateId } from '../interfaces/orchestration.js';
+import type { OrchestrationTransitionService } from '../transitions/transition_service.js';
 
 /** SC-3: propose_task_execution system call */
 export function proposeTaskExecution(
@@ -22,6 +23,7 @@ export function proposeTaskExecution(
   taskGraph: TaskGraphEngine,
   budget: BudgetGovernor,
   events: EventPropagator,
+  transitionService?: OrchestrationTransitionService,
 ): Result<ProposeTaskExecutionOutput> {
   // Get the task
   const taskResult = taskGraph.getTask(deps, input.taskId);
@@ -67,13 +69,8 @@ export function proposeTaskExecution(
   const executionId = generateId();
   const now = deps.time.nowISO();
 
-  // Transition task: PENDING -> SCHEDULED
-  const transResult = taskGraph.transitionTask(deps, input.taskId, 'PENDING', 'SCHEDULED');
-  if (!transResult.ok) {
-    return { ok: false, error: { code: 'TASK_NOT_PENDING', message: transResult.error.message, spec: 'S17' } };
-  }
-
-  // Enqueue to substrate scheduler
+  // P0-A Critical #9: Enqueue FIRST, then transition. If enqueue fails, task stays PENDING.
+  // Previous order (broken): transition first, then enqueue — if enqueue failed, zombie SCHEDULED task.
   const enqueueResult = deps.substrate.scheduler.enqueue(deps.conn, ctx, {
     taskId: input.taskId,
     missionId: task.missionId,
@@ -89,6 +86,20 @@ export function proposeTaskExecution(
 
   if (!enqueueResult.ok) {
     return { ok: false, error: { code: 'WORKER_UNAVAILABLE', message: enqueueResult.error.message, spec: 'S17' } };
+  }
+
+  // Enqueue succeeded — now transition task: PENDING -> SCHEDULED
+  // P0-A: Rewired to OrchestrationTransitionService when available
+  if (transitionService) {
+    const transResult = transitionService.transitionTask(deps.conn, input.taskId, 'PENDING', 'SCHEDULED');
+    if (!transResult.ok) {
+      return { ok: false, error: { code: 'TASK_NOT_PENDING', message: transResult.error.message, spec: 'S17' } };
+    }
+  } else {
+    const transResult = taskGraph.transitionTask(deps, input.taskId, 'PENDING', 'SCHEDULED');
+    if (!transResult.ok) {
+      return { ok: false, error: { code: 'TASK_NOT_PENDING', message: transResult.error.message, spec: 'S17' } };
+    }
   }
 
   // Emit TASK_SCHEDULED lifecycle event

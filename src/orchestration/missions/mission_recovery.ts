@@ -27,10 +27,11 @@
  * Failure modes defended: FM-10 (cross-tenant leakage — not applicable, recovery is system-level)
  */
 
-import type { DatabaseConnection, Result, AuditTrail } from '../../kernel/interfaces/index.js';
+import type { DatabaseConnection, Result, AuditTrail, MissionId } from '../../kernel/interfaces/index.js';
 import type { TimeProvider } from '../../kernel/interfaces/time.js';
 import { MISSION_TRANSITIONS } from '../interfaces/orchestration.js';
 import type { MissionState } from '../interfaces/orchestration.js';
+import type { OrchestrationTransitionService } from '../transitions/transition_service.js';
 
 // ============================================================================
 // Types
@@ -85,6 +86,7 @@ export function recoverMissions(
   conn: DatabaseConnection,
   audit: AuditTrail,
   time: TimeProvider,
+  transitionService?: OrchestrationTransitionService,
 ): Result<RecoveryResult> {
   // Query non-terminal missions in root-first BFS ordering (depth ASC)
   // Uses the partial index idx_core_missions_non_terminal for efficiency
@@ -108,7 +110,7 @@ export function recoverMissions(
 
   for (const mission of missions) {
     try {
-      const action = recoverSingleMission(conn, audit, time, mission.id, mission.state, mission.tenant_id);
+      const action = recoverSingleMission(conn, audit, time, mission.id, mission.state, mission.tenant_id, transitionService);
       results.push({
         missionId: mission.id,
         previousState: mission.state,
@@ -163,6 +165,7 @@ function recoverSingleMission(
   missionId: string,
   currentState: string,
   tenantId: string | null,
+  transitionService?: OrchestrationTransitionService,
 ): 'paused' | 'unchanged' {
   // Idempotency check: look for existing recovery audit entry for this mission
   const existingRecovery = conn.get<{ id: string }>(
@@ -192,6 +195,10 @@ function recoverSingleMission(
       // However, for EXECUTING -> PAUSED, MISSION_TRANSITIONS DOES allow it.
       if (currentState === 'EXECUTING') {
         // EXECUTING -> PAUSED is valid per MISSION_TRANSITIONS
+        // P0-A: Use transition service recovery path when available
+        if (transitionService) {
+          return transitionViaMissionRecoveryService(conn, audit, time, transitionService, missionId, currentState, tenantId);
+        }
         return transitionToPaused(conn, audit, time, missionId, currentState, tenantId);
       }
 
@@ -199,9 +206,17 @@ function recoverSingleMission(
       // Recovery rule says REVIEWING -> PAUSED for safety (needs human re-review).
       // This is a system-level recovery override, not a normal state transition.
       // Record the override in the audit trail.
+      // P0-A: Use transitionMissionRecovery which skips the transition map
+      if (transitionService) {
+        return transitionViaMissionRecoveryService(conn, audit, time, transitionService, missionId, currentState, tenantId);
+      }
       return transitionToPausedRecoveryOverride(conn, audit, time, missionId, currentState, tenantId);
     }
 
+    // P0-A: Use transition service recovery path when available
+    if (transitionService) {
+      return transitionViaMissionRecoveryService(conn, audit, time, transitionService, missionId, currentState, tenantId);
+    }
     return transitionToPaused(conn, audit, time, missionId, currentState, tenantId);
   }
 
@@ -242,6 +257,32 @@ function recoverSingleMission(
     });
   });
   return 'unchanged';
+}
+
+/**
+ * P0-A: Transition a mission to PAUSED via the OrchestrationTransitionService recovery path.
+ * Uses transitionMissionRecovery which skips the transition map validation but
+ * keeps governance enforcement + CAS + audit.
+ */
+function transitionViaMissionRecoveryService(
+  conn: DatabaseConnection,
+  _audit: AuditTrail,
+  _time: TimeProvider,
+  transitionService: OrchestrationTransitionService,
+  missionId: string,
+  previousState: string,
+  _tenantId: string | null,
+): 'paused' {
+  const result = transitionService.transitionMissionRecovery(
+    conn,
+    missionId as MissionId,
+    previousState as MissionState,
+    'PAUSED',
+  );
+  if (!result.ok) {
+    throw new Error(`Recovery transition failed for mission ${missionId}: ${result.error.message}`);
+  }
+  return 'paused';
 }
 
 /**

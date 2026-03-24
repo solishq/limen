@@ -345,8 +345,15 @@ export function createMissionStore(): MissionStore {
   /** I-20: Get root mission id by walking up the parent chain */
   function getRootMissionId(deps: OrchestrationDeps, missionId: MissionId): Result<MissionId> {
     let currentId = missionId;
-    // Max depth is 5 per I-20, so this loop is bounded
+    // P0-A Critical #11/#14: Cycle detection via visited set.
+    // The bounded loop (maxDepth+1) is retained as a safety net, but a Set<string>
+    // catches cycles that the depth bound alone would silently produce wrong values for.
+    const visited = new Set<string>();
     for (let i = 0; i < MISSION_TREE_DEFAULTS.maxDepth + 1; i++) {
+      if (visited.has(currentId as string)) {
+        return { ok: false, error: { code: 'CYCLE_DETECTED', message: `Cycle detected in mission hierarchy at ${currentId}`, spec: 'I-20' } };
+      }
+      visited.add(currentId as string);
       const row = deps.conn.get<{ parent_id: string | null }>(
         'SELECT parent_id FROM core_missions WHERE id = ?',
         [currentId],
@@ -359,7 +366,9 @@ export function createMissionStore(): MissionStore {
       }
       currentId = row.parent_id as MissionId;
     }
-    return { ok: true, value: currentId };
+    // If we exhaust the loop without finding root and without cycle, something is deeply wrong.
+    // The visited set would have caught any cycle, so this is a depth overflow.
+    return { ok: false, error: { code: 'CYCLE_DETECTED', message: `Mission hierarchy exceeded max traversal depth at ${currentId}`, spec: 'I-20' } };
   }
 
   return Object.freeze({

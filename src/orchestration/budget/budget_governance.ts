@@ -16,12 +16,14 @@ import type { Result, MissionId, TenantId } from '../../kernel/interfaces/index.
 import type {
   OrchestrationDeps, BudgetGovernor, RequestBudgetOutput,
 } from '../interfaces/orchestration.js';
+import type { OrchestrationTransitionService } from '../transitions/transition_service.js';
 
 /**
  * S11: Create the budget governance module.
  * Factory function returns frozen object per C-07.
+ * P0-A: Accepts optional transition service for state transitions.
  */
-export function createBudgetGovernor(): BudgetGovernor {
+export function createBudgetGovernor(transitionService?: OrchestrationTransitionService): BudgetGovernor {
 
   /** S11: Allocate budget for a new mission */
   function allocate(
@@ -88,27 +90,43 @@ export function createBudgetGovernor(): BudgetGovernor {
 
     if (tokenCost > resource.token_remaining) {
       // CF-016: On BUDGET_EXCEEDED, transition mission to BLOCKED state.
-      // Same pattern as checkpoint_coordinator: direct SQL UPDATE + audit.
       // FM-02: Defense against cost explosion — halt execution.
-      const blockNow = deps.time.nowISO();
-      deps.conn.transaction(() => {
-        const blockResult = deps.conn.run(
-          `UPDATE core_missions SET state = 'BLOCKED', updated_at = ?
-           WHERE id = ? AND state NOT IN ('COMPLETED', 'FAILED', 'CANCELLED', 'BLOCKED')`,
-          [blockNow, missionId],
+      // P0-A: Rewired to OrchestrationTransitionService when available.
+      // Legacy path retained for backward compatibility (tests without governance layer).
+      if (transitionService) {
+        const missionRow = deps.conn.get<{ state: string }>(
+          'SELECT state FROM core_missions WHERE id = ?',
+          [missionId],
         );
-        if (blockResult.changes > 0) {
-          deps.audit.append(deps.conn, {
-            tenantId: resource.tenant_id,
-            actorType: 'system',
-            actorId: 'budget_governor',
-            operation: 'mission_transition',
-            resourceType: 'mission',
-            resourceId: missionId,
-            detail: { to: 'BLOCKED', reason: 'budget_exceeded', tokenCost, tokenRemaining: resource.token_remaining },
-          });
+        if (missionRow) {
+          const currentState = missionRow.state as import('../interfaces/orchestration.js').MissionState;
+          const terminalStates = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'BLOCKED']);
+          if (!terminalStates.has(currentState)) {
+            transitionService.transitionMission(deps.conn, missionId, currentState, 'BLOCKED');
+          }
         }
-      });
+      } else {
+        // Legacy path: direct SQL + audit (no governance enforcement)
+        const blockNow = deps.time.nowISO();
+        deps.conn.transaction(() => {
+          const blockResult = deps.conn.run(
+            `UPDATE core_missions SET state = 'BLOCKED', updated_at = ?
+             WHERE id = ? AND state NOT IN ('COMPLETED', 'FAILED', 'CANCELLED', 'BLOCKED')`,
+            [blockNow, missionId],
+          );
+          if (blockResult.changes > 0) {
+            deps.audit.append(deps.conn, {
+              tenantId: resource.tenant_id,
+              actorType: 'system',
+              actorId: 'budget_governor',
+              operation: 'mission_transition',
+              resourceType: 'mission',
+              resourceId: missionId,
+              detail: { to: 'BLOCKED', reason: 'budget_exceeded', tokenCost, tokenRemaining: resource.token_remaining },
+            });
+          }
+        });
+      }
 
       return { ok: false, error: { code: 'BUDGET_EXCEEDED', message: `Token cost ${tokenCost} exceeds remaining ${resource.token_remaining}`, spec: 'S11' } };
     }
