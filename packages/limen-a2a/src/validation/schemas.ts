@@ -30,7 +30,7 @@ export const A2ATaskSendParamsSchema = z.object({
     action: z.string().optional(),
     params: z.record(z.string(), z.unknown()).optional(),
   }).strict().optional(),
-});
+}).strict();
 
 // ── Claim Schemas ──
 
@@ -64,7 +64,7 @@ export const ClaimCreateInputSchema = z.object({
   groundingMode: z.enum(['evidence_path', 'runtime_witness']),
   runtimeWitness: RuntimeWitnessInputSchema.optional(),
   idempotencyKey: ClaimIdempotencyInputSchema.optional(),
-});
+}).strict();
 
 export const ClaimQueryInputSchema = z.object({
   subject: z.string().nullable().optional(),
@@ -80,7 +80,7 @@ export const ClaimQueryInputSchema = z.object({
   includeRelationships: z.boolean().optional(),
   limit: z.number().optional(),
   offset: z.number().optional(),
-});
+}).strict();
 
 // ── Working Memory Schemas ──
 
@@ -114,14 +114,14 @@ export const MissionCreateOptionsSchema = z.object({
     maxTasks: z.number().optional(),
     maxChildren: z.number().optional(),
     maxDepth: z.number().optional(),
-  }),
+  }).strict(),
   deliverables: z.array(z.object({
     type: z.string(),
     name: z.string(),
-  })).optional(),
+  }).strict()).optional(),
   parentMissionId: z.string().optional(),
   contractId: z.string().optional(),
-});
+}).strict();
 
 export const MissionFilterSchema = z.object({
   state: z.enum([
@@ -133,7 +133,7 @@ export const MissionFilterSchema = z.object({
   parentId: z.string().optional(),
   limit: z.number().optional(),
   offset: z.number().optional(),
-});
+}).strict();
 
 // ── Agent Management Schemas ──
 
@@ -149,23 +149,6 @@ export const AgentGetSchema = z.object({
 export const AgentPromoteSchema = z.object({
   name: z.string().min(1),
 }).strict();
-
-// ── Branded Type Bridge ──
-
-/**
- * Bridge Zod-validated data to Limen branded types.
- *
- * SAFETY INVARIANT: Call only AFTER Zod schema.parse() has validated structure.
- * Branded types (MissionId, TaskId, AgentId, etc.) are compile-time phantoms
- * with no runtime representation — this cast has zero runtime effect.
- *
- * This replaces the previous `params as unknown as T` pattern where T was
- * never validated. Now Zod validates structure, and this function bridges
- * the validated output to Limen's branded type system.
- */
-export function toBrandedInput<T>(validated: unknown): T {
-  return validated as T;
-}
 
 // ── Error Formatting ──
 
