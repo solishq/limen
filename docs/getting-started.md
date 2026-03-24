@@ -21,15 +21,48 @@ That's it. One production dependency (`better-sqlite3`). No provider SDKs.
 
 ---
 
-## 1. Your First Chat
+## Choose Your Path
+
+### Demo (Learning and Prototyping)
+
+Set one environment variable and call `createLimen()` with no arguments:
 
 ```typescript
 import { createLimen } from 'limen-ai';
-import crypto from 'node:crypto';
+
+const limen = await createLimen();
+console.log(await limen.chat('Hello, world!').text);
+await limen.shutdown();
+```
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... npx tsx app.ts
+```
+
+**What happens behind the scenes:**
+
+1. **Provider auto-detection** — Limen scans for `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, and `OLLAMA_HOST`. Every provider with a set env var is registered automatically. Set multiple keys and multi-provider routing works with zero configuration.
+2. **Dev master key** — A 32-byte encryption key is auto-generated and persisted to `~/.limen/dev.key`. A stderr warning reminds you this is not for production.
+3. **Temp data directory** — SQLite database goes to your OS temp directory (`/tmp/limen-dev` or equivalent). Data is ephemeral and cleaned on reboot.
+
+The full governance layer (audit trail, RBAC, encryption, budget enforcement, circuit breakers) runs with zero-config, identical to production. The only differences are the key source and data persistence.
+
+> **Warning**: Dev mode data is ephemeral (temp directory, cleared on reboot) and the dev key regenerates if `~/.limen/dev.key` is deleted. Do not use zero-config for data you need to keep.
+
+See [examples/01-hello.ts](../examples/01-hello.ts), [examples/02-streaming.ts](../examples/02-streaming.ts), and [examples/03-structured-output.ts](../examples/03-structured-output.ts) for runnable zero-config examples.
+
+---
+
+### Production
+
+For persistent data and managed encryption, provide explicit configuration:
+
+```typescript
+import { createLimen } from 'limen-ai';
 
 const limen = await createLimen({
-  dataDir: './my-app-data',
-  masterKey: crypto.randomBytes(32),
+  dataDir: '/var/lib/myapp/limen',
+  masterKey: Buffer.from(process.env.LIMEN_MASTER_KEY!, 'hex'),
   providers: [{
     type: 'anthropic',
     baseUrl: 'https://api.anthropic.com',
@@ -37,25 +70,24 @@ const limen = await createLimen({
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
   }],
 });
-
-const response = limen.chat('Hello, world!');
-console.log(await response.text);
-await limen.shutdown();
 ```
 
-Run it:
+**Production checklist:**
 
-```bash
-ANTHROPIC_API_KEY=sk-ant-... npx tsx app.ts
-```
+- **Key management** — Generate a 32-byte key (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) and store it in your secrets manager. Set `LIMEN_MASTER_KEY` or `LIMEN_MASTER_KEY_FILE` env var. Never commit keys to source control.
+- **Persistent storage** — Point `dataDir` to a durable filesystem path. Back it up. All engine state (SQLite databases, audit logs, session history) lives here.
+- **Shutdown handler** — Always call `limen.shutdown()` on process exit. This flushes WAL, closes database connections, and cleans up resources. Register it on `SIGTERM`/`SIGINT`.
+- **Monitoring** — Use `limen.health()` for readiness probes and `limen.metrics.snapshot()` for Prometheus-style metrics. Add a `logger` callback for structured event visibility.
 
-`createLimen()` creates an engine instance with a local SQLite database, configures encryption, and registers your providers. The returned object is deeply frozen and immutable.
+See [Deployment Guide](./deployment.md) for the full production setup (filesystem requirements, Docker, environment variables, backup strategy).
 
-> **Note**: `crypto.randomBytes(32)` generates a new key on every restart. In production, persist your master key. See the [Master Key Management](../README.md) section in the README.
+See [Security Model](./proof/security-model.md) for the encryption, audit, RBAC, and transport security posture.
 
 ---
 
-## 2. Streaming
+## Core Features
+
+### Streaming
 
 ```typescript
 const streamed = limen.chat('Explain emergence in three sentences.');
@@ -66,9 +98,7 @@ for await (const chunk of streamed.stream) {
 
 Streaming and non-streaming produce identical final results (Invariant I-26).
 
----
-
-## 3. Structured Output
+### Structured Output
 
 Get typed, validated JSON from any LLM. Limen validates against your JSON Schema and retries on validation failure.
 
@@ -98,9 +128,7 @@ const result = await limen.infer({
 console.log(result.data.languages); // Typed and validated
 ```
 
----
-
-## 4. Sessions
+### Sessions
 
 Sessions maintain conversation history across turns, scoped to a tenant and agent.
 
@@ -123,33 +151,21 @@ await session.close();
 
 When the context window fills, Limen automatically summarizes earlier turns to make room.
 
----
+### Multiple Providers
 
-## 5. Multiple Providers
-
-Configure multiple providers and let Limen route between them.
+Zero-config handles multi-provider automatically — set multiple API key env vars and Limen detects all of them. Use routing options to control provider selection:
 
 ```typescript
-const limen = await createLimen({
-  dataDir: './data',
-  masterKey: Buffer.from(process.env.LIMEN_MASTER_KEY!, 'hex'),
-  providers: [
-    { type: 'anthropic', baseUrl: 'https://api.anthropic.com', models: ['claude-sonnet-4-20250514'], apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
-    { type: 'openai', baseUrl: 'https://api.openai.com', models: ['gpt-4o'], apiKeyEnvVar: 'OPENAI_API_KEY' },
-    { type: 'ollama', baseUrl: 'http://localhost:11434', models: ['llama3.2'] },
-  ],
-});
-
-// Auto-routing
+// Auto-routing: engine picks the best available provider
 limen.chat('Hello', { routing: 'auto' });
 
-// Explicit model
+// Explicit model selection
 limen.chat('Hello', { routing: 'explicit', model: 'gpt-4o' });
 ```
 
----
+See [examples/04-multi-provider.ts](../examples/04-multi-provider.ts) for the full example.
 
-## 6. Standalone Transport
+### Standalone Transport
 
 If you only need reliable LLM communication (retry, circuit breakers, streaming safety) without the full engine:
 
@@ -170,9 +186,7 @@ const result = await engine.execute(adapter, {
 engine.shutdown();
 ```
 
----
-
-## 7. Health and Observability
+### Health and Observability
 
 ```typescript
 const health = await limen.health();
@@ -192,4 +206,4 @@ console.log(metrics.limen_tokens_cost_usd);
 - [Error Codes](./error-codes.md) — Complete error reference
 - [Security Model](./security-model.md) — Encryption, audit, RBAC, transport security
 - [Mission System](./missions.md) — Autonomous agent execution with governance
-- [Examples](../examples/) — Five runnable examples
+- [Examples](../examples/) — Eight runnable examples

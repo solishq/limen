@@ -1,6 +1,6 @@
 {
   "name": "limen-ai",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Cognitive Operating System — deterministic infrastructure hosting stochastic cognition",
   "type": "module",
   "license": "Apache-2.0",

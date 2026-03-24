@@ -47,6 +47,7 @@ import type {
 } from './interfaces/api.js';
 
 import { LimenError, ensureLimenError } from './errors/limen_error.js';
+import { resolveDefaults } from './defaults.js';
 import { buildOperationContext } from './enforcement/rbac_guard.js';
 import { SessionManager } from './sessions/session_manager.js';
 import { ChatPipeline } from './chat/chat_pipeline.js';
@@ -131,6 +132,7 @@ import { WorkingMemoryApiImpl } from './facades/working_memory_api_impl.js';
 export type { Limen, LimenConfig, LimenLogEvent, LimenLogger } from './interfaces/api.js';
 export { LimenError } from './errors/limen_error.js';
 export type { LimenErrorCode } from './interfaces/api.js';
+export { resolveDefaults, detectProviders, resolveMasterKey, resolveDataDir } from './defaults.js';
 
 // Re-export all public API types consumers need
 export type {
@@ -421,9 +423,14 @@ export function createDefaultDeps(): LimenDeps {
  * @throws LimenError with code ENGINE_UNHEALTHY if layer construction fails
  */
 export async function createLimen(
-  config: LimenConfig,
+  config?: LimenConfig,
   deps?: LimenDeps,
 ): Promise<Limen> {
+  // Zero-config: when called with no arguments, resolve defaults from environment.
+  // Provider auto-detection, dev master key, temp data dir.
+  // Throws INVALID_CONFIG with helpful message if no providers detected.
+  const resolvedConfig: LimenConfig = config ?? resolveDefaults();
+
   // CF-004: Default to production wiring when deps not provided.
   // S3.3: Consumers call createLimen(config) — no internal imports needed.
   // R4C-004: Track orchestration connection for shutdown cleanup.
@@ -442,28 +449,28 @@ export async function createLimen(
 
   // ── Step 1: Validate configuration ──
 
-  if (!config.dataDir || typeof config.dataDir !== 'string') {
+  if (!resolvedConfig.dataDir || typeof resolvedConfig.dataDir !== 'string') {
     throw new LimenError('INVALID_CONFIG', 'dataDir is required and must be a non-empty string.');
   }
 
-  if (!config.masterKey || !Buffer.isBuffer(config.masterKey) || config.masterKey.length < 32) {
+  if (!resolvedConfig.masterKey || !Buffer.isBuffer(resolvedConfig.masterKey) || resolvedConfig.masterKey.length < 32) {
     throw new LimenError('INVALID_CONFIG', 'masterKey is required and must be a Buffer of at least 32 bytes.');
   }
 
   // R4C-006: Validate tenancy mode (defense-in-depth for JavaScript consumers)
-  const tenancyModeRaw = config.tenancy?.mode as string | undefined;
+  const tenancyModeRaw = resolvedConfig.tenancy?.mode as string | undefined;
   if (tenancyModeRaw !== undefined && tenancyModeRaw !== 'single' && tenancyModeRaw !== 'multi') {
     throw new LimenError('INVALID_CONFIG',
       `tenancy.mode must be 'single' or 'multi', got '${tenancyModeRaw}'.`);
   }
 
-  const tenancyMode = config.tenancy?.mode ?? 'single';
-  const defaultTimeoutMs = config.defaultTimeoutMs ?? 60000;
-  const maxConcurrentStreams = config.rateLimiting?.maxConcurrentStreams ?? 50;
+  const tenancyMode = resolvedConfig.tenancy?.mode ?? 'single';
+  const defaultTimeoutMs = resolvedConfig.defaultTimeoutMs ?? 60000;
+  const maxConcurrentStreams = resolvedConfig.rateLimiting?.maxConcurrentStreams ?? 50;
 
   // CF-021: Logger callback (no-op if not configured — zero behavioral change)
-  const log = config.logger ?? (() => {});
-  log({ level: 'info', category: 'init', message: 'Limen initialization starting', context: { dataDir: config.dataDir, tenancyMode } });
+  const log = resolvedConfig.logger ?? (() => {});
+  log({ level: 'info', category: 'init', message: 'Limen initialization starting', context: { dataDir: resolvedConfig.dataDir, tenancyMode } });
 
   const backpressureConfig: BackpressureConfig = {
     bufferSizeBytes: 4096,        // S36: 4KB default
@@ -474,11 +481,11 @@ export async function createLimen(
   // ── Step 2: Create L1 Kernel ──
 
   const kernelResult = resolvedDeps.createKernel({
-    dataDir: config.dataDir,
+    dataDir: resolvedConfig.dataDir,
     tenancy: {
-      mode: tenancyMode === 'multi' ? (config.tenancy?.isolation ?? 'row-level') : 'single',
+      mode: tenancyMode === 'multi' ? (resolvedConfig.tenancy?.isolation ?? 'row-level') : 'single',
     },
-    masterKey: config.masterKey,
+    masterKey: resolvedConfig.masterKey,
   });
 
   if (!kernelResult.ok) {
@@ -507,7 +514,7 @@ export async function createLimen(
 
   let substrate: Substrate;
   try {
-    substrate = resolvedDeps.createSubstrate(kernel, config);
+    substrate = resolvedDeps.createSubstrate(kernel, resolvedConfig);
   } catch (err) {
     // R4C-005: Cleanup kernel on substrate construction failure
     try { destroyKernel(kernel); } catch { /* ignore cleanup errors */ }
@@ -532,9 +539,9 @@ export async function createLimen(
         (conn) => { orchestrationConn = conn; },
         earlyGovernanceSystem.transitionEnforcer,
       );
-      orchestration = orchestrationAdapterWithEnforcer(kernel, substrate, config);
+      orchestration = orchestrationAdapterWithEnforcer(kernel, substrate, resolvedConfig);
     } else {
-      orchestration = resolvedDeps.createOrchestration(kernel, substrate, config);
+      orchestration = resolvedDeps.createOrchestration(kernel, substrate, resolvedConfig);
     }
   } catch (err) {
     // R4C-005: Cleanup kernel on orchestration construction failure
@@ -550,8 +557,8 @@ export async function createLimen(
   try {
     // Open a recovery connection for the recovery pass
     const recoveryConnResult = kernel.database.open({
-      dataDir: config.dataDir,
-      tenancy: { mode: tenancyMode === 'multi' ? (config.tenancy?.isolation ?? 'row-level') : 'single' },
+      dataDir: resolvedConfig.dataDir,
+      tenancy: { mode: tenancyMode === 'multi' ? (resolvedConfig.tenancy?.isolation ?? 'row-level') : 'single' },
     });
     if (recoveryConnResult.ok) {
       const recoveryConn = recoveryConnResult.value;
@@ -707,8 +714,8 @@ export async function createLimen(
     if (!activeConn) {
       // Open a connection via the database lifecycle
       const openResult = kernel.database.open({
-        dataDir: config.dataDir,
-        tenancy: { mode: tenancyMode === 'multi' ? (config.tenancy?.isolation ?? 'row-level') : 'single' },
+        dataDir: resolvedConfig.dataDir,
+        tenancy: { mode: tenancyMode === 'multi' ? (resolvedConfig.tenancy?.isolation ?? 'row-level') : 'single' },
       });
       if (!openResult.ok) {
         throw new LimenError('ENGINE_UNHEALTHY', 'Failed to open database connection.');
@@ -773,7 +780,7 @@ export async function createLimen(
   }, 300_000); // 5 minutes
 
   // Determine default model from providers config
-  const defaultModel = config.providers?.[0]?.models[0] ?? 'default';
+  const defaultModel = resolvedConfig.providers?.[0]?.models[0] ?? 'default';
 
   // Phase 2B: TGP ↔ Pipeline — create learning system for technique injection.
   // The applicator is wired as the technique reader into the chat pipeline.

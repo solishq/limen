@@ -15,11 +15,34 @@
 
 # Limen
 
-Your AI agents don't have a reliability problem. They have an infrastructure problem.
+```typescript
+import { createLimen } from 'limen-ai';
+const limen = await createLimen();
+const response = limen.chat('What is quantum computing?');
+console.log(await response.text);
+await limen.shutdown();
+```
 
-Limen is a Cognitive Operating System. It does for AI agents what a kernel does for processes: isolation, resource control, lifecycle management, and deterministic behavior contracts. One production dependency. 16 system calls. 99 continuously enforced invariants backed by dedicated tests. Every execution path typed and tested.
+```bash
+ANTHROPIC_API_KEY=sk-ant-... npx tsx examples/01-hello.ts
+```
 
-The name is Latin for *threshold* -- the architectural boundary where deterministic infrastructure meets stochastic cognition.
+Set an API key environment variable. That is the only setup. `createLimen()` auto-detects your provider, generates a dev encryption key, and provisions a local SQLite database. Three lines to chat.
+
+---
+
+## What's Running Underneath
+
+That three-line example is not a thin wrapper around an API call. When you ran it, the engine:
+
+- **Created an AES-256-GCM encrypted SQLite database** with WAL mode and ACID transactions
+- **Recorded an append-only, hash-chained audit entry** for every state mutation
+- **Enforced RBAC authorization** on the operation
+- **Tracked token usage and cost** against a budget ledger
+- **Ran the request through circuit breakers and stall detection** over raw HTTP (no provider SDK)
+- **Isolated your data by tenant** (single-tenant by default, multi-tenant by configuration)
+
+None of this required configuration. The governance layer runs whether you configure it or not. The difference between the three-line demo and a production deployment is explicit configuration -- not a different code path.
 
 ---
 
@@ -31,70 +54,27 @@ Limen replaces that entire stack with a single engine. Provider communication ha
 
 The result: AI infrastructure with the reliability guarantees of a database engine and the operational simplicity of a single `npm install`.
 
----
-
-## How Limen Compares
-
-|  | Limen | Vercel AI SDK | LangChain.js |
-|---|---|---|---|
-| **Production deps** | 1 | ~50+ | ~50+ |
-| **Provider SDKs required** | No (raw HTTP) | Yes (`@ai-sdk/*`) | Yes (`@langchain/*`) |
-| **Built-in persistence** | SQLite (WAL, local) | No | Optional (external DB) |
-| **Audit trail** | Hash-chained, append-only | No | LangSmith (paid SaaS) |
-| **Budget enforcement** | Per-mission token budgets | No | No |
-| **Agent governance** | 16 system calls, RBAC | No | No |
-| **Multi-tenant isolation** | Row-level or database-level | No | No |
-| **Encryption at rest** | AES-256-GCM | No | No |
-| **Streaming** | Yes (stall detection, timeouts) | Yes | Yes |
-| **Structured output** | JSON Schema + auto-retry | Zod schemas | Output parsers |
-| **Deterministic replay** | Yes (from recorded LLM outputs) | No | No |
-
-Limen is not a wrapper around LLM APIs. It is an operating system for AI agents. If you need a lightweight way to call an LLM, the Vercel AI SDK is excellent. If you need your agents to operate within enforced boundaries with full auditability, that is what Limen was built for.
+The name is Latin for *threshold* -- the architectural boundary where deterministic infrastructure meets stochastic cognition.
 
 ---
 
-## Install
+## Progressive Examples
 
-```bash
-npm install limen-ai
-```
-
-Requires Node.js >= 22. Single production dependency: `better-sqlite3`.
-
----
-
-## Quick Start
+### Streaming
 
 ```typescript
-import { createLimen } from 'limen-ai';
-import crypto from 'node:crypto';
-
-const limen = await createLimen({
-  dataDir: './my-app-data',
-  masterKey: crypto.randomBytes(32),
-  providers: [{
-    type: 'anthropic',
-    baseUrl: 'https://api.anthropic.com',
-    models: ['claude-sonnet-4-20250514'],
-    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-  }],
-});
-
-// Chat -- returns synchronously, fields resolve async
-const response = limen.chat('What are the key trends in renewable energy?');
-const text = await response.text;
-const metadata = await response.metadata;
-console.log(text);
-console.log(`${metadata.tokens.input} in / ${metadata.tokens.output} out`);
-
-// Stream
-const streamed = limen.chat('Explain quantum computing', { stream: true });
-for await (const chunk of streamed.stream) {
+const result = limen.chat('Explain how neural networks learn', { stream: true });
+for await (const chunk of result.stream) {
   if (chunk.type === 'content_delta') process.stdout.write(chunk.delta);
 }
+```
 
-// Structured output with schema validation and auto-retry
-const analysis = await limen.infer({
+Streaming and non-streaming produce identical final results (Invariant I-26).
+
+### Structured Output
+
+```typescript
+const result = await limen.infer({
   input: 'List the top 3 programming languages by popularity',
   outputSchema: {
     type: 'object',
@@ -103,10 +83,7 @@ const analysis = await limen.infer({
         type: 'array',
         items: {
           type: 'object',
-          properties: {
-            name: { type: 'string' },
-            reason: { type: 'string' },
-          },
+          properties: { name: { type: 'string' }, reason: { type: 'string' } },
           required: ['name', 'reason'],
         },
       },
@@ -115,34 +92,76 @@ const analysis = await limen.infer({
   },
   maxRetries: 2,
 });
-console.log(analysis.data); // Typed, validated, guaranteed to match schema
-
-// Cleanup — closes sessions, flushes webhooks, checkpoints WAL, closes DB
-await limen.shutdown();
+console.log(result.data); // Typed, validated, guaranteed to match schema
 ```
 
-> **Shutdown behavior:** `shutdown()` closes all active sessions (which terminates open streams with error chunks), flushes pending webhook deliveries, stops the substrate worker pool, and closes database connections. In-flight LLM requests that have already been dispatched to providers will complete or time out independently — they are not forcibly aborted. Ensure all `chat()` and `infer()` calls have resolved before calling `shutdown()` for a clean exit.
+### Sessions
 
-`createLimen()` returns a deeply frozen object. Every method is immutable. Two calls produce fully independent instances -- no shared state, no cross-contamination.
+```typescript
+const session = await limen.session({
+  agentName: 'tutor',
+  user: { id: 'student-1', role: 'learner' },
+});
 
-> **Important: Master Key Management**
->
-> The `masterKey` is used for AES-256-GCM encryption at rest. If you lose the key, encrypted data in the SQLite database becomes permanently unreadable. Do **not** use `crypto.randomBytes(32)` in production — that generates a new key on every startup.
->
-> ```bash
-> # Generate once, store securely
-> node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" > master.key
-> chmod 600 master.key
-> ```
->
-> ```typescript
-> // Load from file or environment
-> const masterKey = Buffer.from(process.env.LIMEN_MASTER_KEY!, 'hex');
-> // or
-> const masterKey = Buffer.from(fs.readFileSync('./master.key', 'utf8').trim(), 'hex');
-> ```
->
-> Keep the key out of version control. Rotate by re-encrypting: create a new engine instance with the new key and migrate data through the public API.
+session.chat('What is photosynthesis?');
+session.chat('What role does chlorophyll play in it?'); // Sees prior context
+session.chat('Summarize what we discussed');
+
+const branch = await session.fork(2); // Fork at turn 2
+branch.chat('What about artificial photosynthesis?');
+
+await branch.close();
+await session.close();
+```
+
+Context window is managed automatically -- including summarization when the window fills.
+
+### Missions
+
+```typescript
+await limen.agents.register({
+  name: 'researcher',
+  capabilities: ['web', 'data'],
+});
+
+const mission = await limen.missions.create({
+  agent: 'researcher',
+  objective: 'Analyze the renewable energy market in Europe',
+  constraints: {
+    tokenBudget: 50_000,
+    deadline: new Date(Date.now() + 3_600_000).toISOString(),
+    capabilities: ['web', 'data'],
+    maxTasks: 10,
+  },
+  deliverables: [
+    { type: 'report', name: 'market-analysis' },
+  ],
+});
+
+mission.on('checkpoint', (payload) => console.log('Checkpoint:', payload));
+const result = await mission.wait();
+```
+
+Missions are budget-governed, deadline-enforced, and operate exclusively through the 16 system calls. The lifecycle transitions through: `CREATED` -> `PLANNING` -> `EXECUTING` -> `REVIEWING` -> `COMPLETED`.
+
+See [`examples/`](examples/) for full runnable code.
+
+---
+
+## Trust Surface
+
+Every claim in this section links to a proof document with file-and-line-number evidence. Every gap is declared.
+
+| Claim | Status | Proof |
+|---|---|---|
+| 16 system calls | All Verified | [system-calls.md](docs/proof/system-calls.md) |
+| 134 invariants across 3 tiers | 114 Verified, 1 Measured, 4 Implemented, 11 Declared, 4 Out of Scope | [invariants.md](docs/proof/invariants.md) |
+| 21 failure mode defenses (of 45 specified) | 12 Verified, 8 Implemented, 1 Declared -- [24 have zero code presence](docs/proof/failure-modes.md) | [failure-modes.md](docs/proof/failure-modes.md) |
+| 8 security mechanisms | All Verified at mechanism level -- [25 declared non-protections](docs/proof/security-model.md) | [security-model.md](docs/proof/security-model.md) |
+
+Full evidence summary, including an explicit "What Is NOT Proven" section: [readiness.md](docs/proof/readiness.md).
+
+Evidence classes: **Verified** = source enforcement + meaningful tests. **Implemented** = source enforcement, weak/no tests. **Measured** = quantitative measurement with threshold. **Declared** = spec/documentation only. **Out of Scope** = not applicable to current version.
 
 ---
 
@@ -173,6 +192,73 @@ Limen is built as four layers, each with a strict dependency direction: down onl
 **Orchestration** is where cognition meets governance. Agents propose missions, task graphs, artifact creation, budget requests, and checkpoint responses through 16 formally defined system calls. The orchestration layer validates every proposal before any state mutation occurs. This is the governance boundary: intelligence proposes, infrastructure decides.
 
 **API Surface** composes these layers into the public `Limen` object. A single factory call -- `createLimen(config)` -- wires kernel, substrate, and orchestration into a frozen, immutable engine instance.
+
+---
+
+## Providers
+
+Six providers, zero SDKs. All communication is raw HTTP via `fetch`.
+
+| Provider | Adapter Factory | Streaming | Auth |
+|---|---|---|---|
+| **Anthropic** | `createAnthropicAdapter(apiKey, baseUrl?)` | SSE | Bearer token |
+| **OpenAI** | `createOpenAIAdapter(apiKey, baseUrl?)` | SSE | Bearer token |
+| **Google Gemini** | `createGeminiAdapter(apiKey, baseUrl?)` | SSE | Query param |
+| **Groq** | `createGroqAdapter(apiKey, baseUrl?)` | SSE | Bearer token |
+| **Mistral** | `createMistralAdapter(apiKey, baseUrl?)` | SSE | Bearer token |
+| **Ollama** | `createOllamaAdapter(baseUrl?)` | NDJSON | None (local) |
+
+Each provider also has a `*FromEnv()` variant that reads the API key from the environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`). Ollama runs locally and requires no authentication.
+
+Configure multiple providers at the engine level:
+
+```typescript
+const limen = await createLimen({
+  dataDir: './data',
+  masterKey: Buffer.from(process.env.LIMEN_MASTER_KEY!, 'hex'),
+  providers: [
+    {
+      type: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      models: ['claude-sonnet-4-20250514'],
+      apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+      maxConcurrent: 5,
+    },
+    {
+      type: 'openai',
+      baseUrl: 'https://api.openai.com',
+      models: ['gpt-4o'],
+      apiKeyEnvVar: 'OPENAI_API_KEY',
+    },
+    {
+      type: 'ollama',
+      baseUrl: 'http://localhost:11434',
+      models: ['llama3.2'],
+    },
+  ],
+});
+```
+
+---
+
+## How Limen Compares
+
+*As of March 2026. Limen is a new project with near-zero community adoption. Vercel AI SDK and LangChain are mature ecosystems with large communities, extensive integrations, and production deployment track records that Limen does not have.*
+
+|  | Limen | Vercel AI SDK | LangChain.js |
+|---|---|---|---|
+| **Production deps** | 1 | ~50+ | ~50+ |
+| **Provider communication** | Raw HTTP (no provider SDKs) | Provider SDK packages (`@ai-sdk/*`) | Provider SDK packages (`@langchain/*`) |
+| **Built-in persistence** | SQLite (WAL, local) | No | Optional (external DB) |
+| **Audit trail** | Hash-chained, append-only | No | LangSmith (paid SaaS) |
+| **Budget enforcement** | Per-mission token budgets | No | No |
+| **Agent governance** | 16 system calls, RBAC | No | No |
+| **Multi-tenant isolation** | Row-level or database-level | No | No |
+| **Encryption at rest** | AES-256-GCM (per-field vault) | No | No |
+| **Streaming** | SSE/NDJSON with stall detection and timeouts | SSE | SSE |
+| **Structured output** | JSON Schema + auto-retry | Zod schemas | Output parsers |
+
+Limen occupies a different architectural position than these tools. Vercel AI SDK is an excellent lightweight interface for LLM communication. LangChain provides a broad ecosystem of integrations, agents, and retrieval patterns. Limen is an operating system for agent governance -- it enforces boundaries, tracks budgets, audits mutations, and isolates tenants. If your primary need is calling an LLM or composing a retrieval pipeline, those tools are more appropriate. If your primary need is enforced governance over agent behavior with full auditability, that is what Limen was built for.
 
 ---
 
@@ -253,127 +339,11 @@ engine.shutdown(); // Aborts in-flight, rejects new requests
 
 ---
 
-## Providers
-
-Six providers, zero SDKs. All communication is raw HTTP via `fetch`.
-
-| Provider | Adapter Factory | Streaming | Auth |
-|---|---|---|---|
-| **Anthropic** | `createAnthropicAdapter(apiKey, baseUrl?)` | SSE | Bearer token |
-| **OpenAI** | `createOpenAIAdapter(apiKey, baseUrl?)` | SSE | Bearer token |
-| **Google Gemini** | `createGeminiAdapter(apiKey, baseUrl?)` | SSE | Query param |
-| **Groq** | `createGroqAdapter(apiKey, baseUrl?)` | SSE | Bearer token |
-| **Mistral** | `createMistralAdapter(apiKey, baseUrl?)` | SSE | Bearer token |
-| **Ollama** | `createOllamaAdapter(baseUrl?)` | NDJSON | None (local) |
-
-Each provider also has a `*FromEnv()` variant that reads the API key from the environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`). Ollama runs locally and requires no authentication.
-
-Configure providers at the engine level:
-
-```typescript
-const limen = await createLimen({
-  dataDir: './data',
-  masterKey: crypto.randomBytes(32),
-  providers: [
-    {
-      type: 'anthropic',
-      baseUrl: 'https://api.anthropic.com',
-      models: ['claude-sonnet-4-20250514'],
-      apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-      maxConcurrent: 5,
-    },
-    {
-      type: 'openai',
-      baseUrl: 'https://api.openai.com',
-      models: ['gpt-4o'],
-      apiKeyEnvVar: 'OPENAI_API_KEY',
-    },
-    {
-      type: 'ollama',
-      baseUrl: 'http://localhost:11434',
-      models: ['llama3.2'],
-    },
-  ],
-});
-```
-
----
-
-## Sessions and Conversations
-
-Sessions bind a conversation to an agent and tenant context. Within a session, conversation history is maintained, turns are recorded, and the context window is managed automatically -- including summarization when the window fills.
-
-> **Concurrency note:** `chat()` and `infer()` calls on the same session are not serialized. If you need to send multiple messages in sequence, `await` each call before starting the next. Concurrent calls on the same session will produce interleaved conversation history.
-
-```typescript
-const session = await limen.session({
-  agentName: 'researcher',
-  tenantId: 'tenant-1' as TenantId,
-  user: { id: 'user-42', role: 'analyst' },
-});
-
-// Chat within session context
-const r1 = session.chat('What were last quarter earnings?');
-const r2 = session.chat('Compare that to the previous year');
-
-// Structured inference within the same conversation
-const summary = await session.infer({
-  input: 'Summarize our conversation so far',
-  outputSchema: SummarySchema,
-});
-
-// Fork conversation at a specific turn
-const branch = await session.fork(3);
-
-// Review history
-const turns = await session.history();
-
-await session.close();
-```
-
----
-
-## Autonomous Missions
-
-Missions are how agents do complex, multi-step work within enforced boundaries. An agent proposes an objective with a token budget and deadline. The system validates the proposal, and the agent then works through a cycle of planning (task graphs), execution, artifact creation, checkpoints, and result submission -- all through the 16 system calls.
-
-```typescript
-const mission = await limen.missions.create({
-  agent: 'researcher',
-  objective: 'Produce a competitive analysis report',
-  constraints: {
-    tokenBudget: 100_000,
-    deadline: '2026-12-31T23:59:59Z',
-    capabilities: ['web', 'data', 'code'],
-    maxTasks: 20,
-  },
-  deliverables: [
-    { type: 'report', name: 'competitive-analysis' },
-    { type: 'data', name: 'market-data' },
-  ],
-});
-
-// Monitor
-mission.on('checkpoint', (payload) => {
-  console.log('Checkpoint:', payload);
-});
-
-// Wait for completion
-const result = await mission.wait();
-console.log(result.summary);
-console.log(`Confidence: ${result.confidence}`);
-console.log(`Tokens used: ${result.resourcesConsumed.tokens}`);
-```
-
-The mission lifecycle transitions through: `CREATED` -> `PLANNING` -> `EXECUTING` -> `REVIEWING` -> `COMPLETED`. At any point, a mission can be paused, resumed, or cancelled. Budget enforcement is continuous -- if a mission exceeds its allocation, it is blocked until more budget is requested and approved.
-
----
-
 ## The 16 System Calls
 
 Every agent interaction with the engine passes through exactly 16 system calls. This is the governance boundary. Agents propose; the system validates and executes.
 
-**Orchestration** — mission lifecycle and task governance:
+**Orchestration** -- mission lifecycle and task governance:
 
 | # | Call | What It Does |
 |---|---|---|
@@ -388,7 +358,7 @@ Every agent interaction with the engine passes through exactly 16 system calls. 
 | SC-9 | `submit_result` | Deliver final results with confidence score |
 | SC-10 | `respond_checkpoint` | Answer a system checkpoint with assessment |
 
-**Claim Protocol** — structured knowledge with provenance:
+**Claim Protocol** -- structured knowledge with provenance:
 
 | # | Call | What It Does |
 |---|---|---|
@@ -396,7 +366,7 @@ Every agent interaction with the engine passes through exactly 16 system calls. 
 | SC-12 | `relate_claims` | Create typed relationships between claims |
 | SC-13 | `query_claims` | Query claims by subject, predicate, mission, or artifact |
 
-**Working Memory** — task-scoped ephemeral state:
+**Working Memory** -- task-scoped ephemeral state:
 
 | # | Call | What It Does |
 |---|---|---|
@@ -405,55 +375,6 @@ Every agent interaction with the engine passes through exactly 16 system calls. 
 | SC-16 | `discard_working_memory` | Discard entries from task-local memory |
 
 An agent cannot bypass these calls. It cannot write to the database, emit lifecycle events, modify its own capabilities, or mutate completed artifacts. The system call boundary is structural, not conventional -- enforced by the type system and the layer architecture.
-
----
-
-## The Invariant System
-
-Limen enforces 99 invariants continuously. These are not guidelines or best practices. They are machine-verified properties of the running system, each backed by dedicated tests. A violation of any invariant is a system defect.
-
-| Invariant | Guarantee |
-|---|---|
-| **I-01** | Single production dependency (`better-sqlite3`) |
-| **I-02** | User owns all data. Export and delete at any time. |
-| **I-03** | Every state mutation includes its audit entry in the same transaction |
-| **I-04** | Provider independence. Swap providers without code changes. |
-| **I-05** | All multi-step mutations are transactional |
-| **I-06** | Audit trail is append-only and hash-chained. Cannot be modified or deleted. |
-| **I-07** | Multi-tenant isolation at row or database level |
-| **I-11** | Encryption at rest (AES-256-GCM) |
-| **I-13** | Authorization checked on every operation (RBAC completeness) |
-| **I-17** | Governance boundary: agent output never directly mutates state |
-| **I-19** | Artifacts are immutable after creation. Version, never modify. |
-| **I-20** | Mission trees are bounded (depth 5, children 10, total 50) |
-| **I-24** | Every task graph requires objective alignment proof |
-| **I-25** | Deterministic replay: record LLM outputs, replay to identical state |
-| **I-26** | Streaming and non-streaming produce identical results |
-| **I-28** | Pipeline phases execute in fixed, deterministic order |
-
-These invariants are what make AI infrastructure trustworthy. When your agent runs a mission overnight, I-03 guarantees you can audit every action it took. I-17 guarantees it never bypassed the governance layer. I-20 guarantees it didn't spawn an unbounded tree of sub-missions. I-19 guarantees no artifact was silently modified after creation.
-
----
-
-## Observability
-
-```typescript
-// Health: three-state (healthy, degraded, unhealthy)
-const health = await limen.health();
-console.log(health.status);           // 'healthy' | 'degraded' | 'unhealthy'
-console.log(health.uptime_ms);
-console.log(health.subsystems);       // Per-subsystem status
-console.log(health.throughput);       // requests/s, active streams, error rate
-
-// Metrics: structured snapshot
-const metrics = limen.metrics.snapshot();
-console.log(metrics.limen_requests_total);
-console.log(metrics.limen_tokens_cost_usd);
-console.log(metrics.limen_audit_chain_valid);
-console.log(metrics.limen_db_size_bytes);
-```
-
-Health distinguishes between three states: **healthy** (all subsystems operational, LLM providers reachable), **degraded** (engine functional but LLM connectivity impaired), and **unhealthy** (critical subsystem failure). Subsystem health covers database, audit, providers, sessions, missions, learning, and memory.
 
 ---
 
@@ -493,6 +414,100 @@ interface LimenConfig {
 }
 ```
 
+All fields except `dataDir` and `masterKey` are optional. When `createLimen()` is called with no arguments, provider detection, key generation, and data directory are resolved automatically from environment variables. See [getting-started.md](docs/getting-started.md) for details.
+
+---
+
+## Quick Start Paths
+
+### Demo (zero-config)
+
+```bash
+npm install limen-ai
+export ANTHROPIC_API_KEY=sk-ant-...  # or OPENAI_API_KEY, GEMINI_API_KEY, etc.
+npx tsx examples/01-hello.ts
+```
+
+Auto-detects provider, generates a dev encryption key (`~/.limen/dev.key`), stores data in OS temp directory. No configuration file needed.
+
+### Production (explicit config)
+
+```typescript
+import { createLimen } from 'limen-ai';
+
+const limen = await createLimen({
+  dataDir: '/var/lib/myapp/limen',
+  masterKey: Buffer.from(process.env.LIMEN_MASTER_KEY!, 'hex'),
+  providers: [{
+    type: 'anthropic',
+    baseUrl: 'https://api.anthropic.com',
+    models: ['claude-sonnet-4-20250514'],
+    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+  }],
+  tenancy: { mode: 'multi', isolation: 'row-level' },
+});
+```
+
+> **Master key management:** The `masterKey` is used for AES-256-GCM encryption at rest. If you lose the key, encrypted data becomes permanently unreadable. Generate once, store securely:
+>
+> ```bash
+> node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" > master.key
+> chmod 600 master.key
+> ```
+>
+> Keep the key out of version control. Rotate by re-encrypting: create a new engine instance with the new key and migrate data through the public API.
+
+See [getting-started.md](docs/getting-started.md) for the full walkthrough.
+
+---
+
+## Invariant System
+
+Limen defines 134 invariants across 3 tiers. 114 are Verified (source enforcement with dedicated tests), 1 Measured, and 19 carry lower evidence classes — see the [full evidence index](docs/proof/invariants.md). A violation of any enforced invariant is a system defect.
+
+| Invariant | Guarantee |
+|---|---|
+| **I-01** | Single production dependency (`better-sqlite3`) |
+| **I-02** | User owns all data. Export and delete at any time. |
+| **I-03** | Every state mutation includes its audit entry in the same transaction |
+| **I-04** | Provider independence. Swap providers without code changes. |
+| **I-05** | All multi-step mutations are transactional |
+| **I-06** | Audit trail is append-only and hash-chained. Cannot be modified or deleted. |
+| **I-07** | Multi-tenant isolation at row or database level |
+| **I-11** | Encryption at rest (AES-256-GCM) |
+| **I-13** | Authorization checked on every operation (RBAC completeness) |
+| **I-17** | Governance boundary: agent output never directly mutates state |
+| **I-19** | Artifacts are immutable after creation. Version, never modify. |
+| **I-20** | Mission trees are bounded (depth 5, children 10, total 50) |
+| **I-24** | Every task graph requires objective alignment proof |
+| **I-25** | Deterministic replay: record LLM outputs, replay to identical state |
+| **I-26** | Streaming and non-streaming produce identical results |
+| **I-28** | Pipeline phases execute in fixed, deterministic order |
+
+These invariants are what make AI infrastructure trustworthy. When your agent runs a mission overnight, I-03 guarantees you can audit every action it took. I-17 guarantees it never bypassed the governance layer. I-20 guarantees it did not spawn an unbounded tree of sub-missions. I-19 guarantees no artifact was silently modified after creation.
+
+---
+
+## Observability
+
+```typescript
+// Health: three-state (healthy, degraded, unhealthy)
+const health = await limen.health();
+console.log(health.status);           // 'healthy' | 'degraded' | 'unhealthy'
+console.log(health.uptime_ms);
+console.log(health.subsystems);       // Per-subsystem status
+console.log(health.throughput);       // requests/s, active streams, error rate
+
+// Metrics: structured snapshot
+const metrics = limen.metrics.snapshot();
+console.log(metrics.limen_requests_total);
+console.log(metrics.limen_tokens_cost_usd);
+console.log(metrics.limen_audit_chain_valid);
+console.log(metrics.limen_db_size_bytes);
+```
+
+Health distinguishes between three states: **healthy** (all subsystems operational, LLM providers reachable), **degraded** (engine functional but LLM connectivity impaired), and **unhealthy** (critical subsystem failure). Subsystem health covers database, audit, providers, sessions, missions, learning, and memory.
+
 ---
 
 ## Error Handling
@@ -527,7 +542,7 @@ npm install
 
 npm run typecheck    # TypeScript strict mode, zero errors
 npm run build        # Compile to dist/
-npm test             # Full test suite
+npm test             # Full test suite (2,447+ tests)
 npm run ci           # typecheck + build + test
 ```
 

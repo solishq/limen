@@ -1,0 +1,3439 @@
+{
+  "version": "2.0.0",
+  "identity": {
+    "organization": "SolisHQ",
+    "project": "limen-ai",
+    "version": "1.1.0",
+    "publicKey": "302a300506032b6570032100fd3fe476020a2e938c12bf3350993abdb3cded41c52bdb6c0544e51cb51c24eb"
+  },
+  "modules": [
+    {
+      "path": ".claude/bootstrap.md",
+      "hash": "f0d23710466a3bcf980a3935a9f3d557ae0e9ceedfb206787db09c0060d1dcc7",
+      "size": 10661
+    },
+    {
+      "path": ".claude/breaker.md",
+      "hash": "aa79b6bd200df0467c55dc8c20822385a248ce2c11364abe55ef7e1553c6d15e",
+      "size": 18466
+    },
+    {
+      "path": ".claude/builder.md",
+      "hash": "d7df6ad158cc42627028cc56ef7c37ac3d8d7b480d2493315aec4ac9b000cca0",
+      "size": 24576
+    },
+    {
+      "path": ".claude/certifier.md",
+      "hash": "1d42e7b9f147b1375450c633be0413bd0e67c157ed04fdafd5a61bb038eb6ee2",
+      "size": 15099
+    },
+    {
+      "path": ".claude/evolution-triggers.md",
+      "hash": "91ffb9565a131e1fe5ad170a6c7a96f1800c4403cb1fd2b5dead81cf8d904b20",
+      "size": 5159
+    },
+    {
+      "path": ".claude/findings-log.md",
+      "hash": "d363823761476af8165141572cf10d7591b65b0de1fa2fee056135fb2bb4937a",
+      "size": 13230
+    },
+    {
+      "path": ".claude/orchestrator.md",
+      "hash": "e6915eb790c5810d49f06d8a95dba457ae92ec5404c2cc4011bd045b7962b88b",
+      "size": 19256
+    },
+    {
+      "path": ".claude/settings.local.json",
+      "hash": "f6a9cda6b4775b99249c9d3c4c1f8c67a1f71b3de518103bb9cf5219a6d3a7a1",
+      "size": 2813
+    },
+    {
+      "path": ".claude/threat-registry.md",
+      "hash": "33c965417dbab8531dbf41b0404571555160cc21a984e35ea65f084d3aa20557",
+      "size": 3045
+    },
+    {
+      "path": ".github/CODEOWNERS",
+      "hash": "57147f8c661859b96e13e1b3ea32ff0c9447928ca9457251eaeed4f2017b2f19",
+      "size": 11
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug_report.md",
+      "hash": "be5f41f6dd416f43e3bc48939c172c2cbfbf95b2510ac9262fffec70e724c14a",
+      "size": 522
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/feature_request.md",
+      "hash": "06022925af6bbf713b60f69a58207d6d676b7dae4dacc4abe67ce5a5a132f9e7",
+      "size": 362
+    },
+    {
+      "path": ".github/pull_request_template.md",
+      "hash": "968f9f879b2ee52b61a6a7c4fa1d4029748db2e7081584375c79169b994c62a3",
+      "size": 379
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "hash": "6df8f5c2f7fe92466930eeba80ccf569639ab4143501eeef69a4295b9996a799",
+      "size": 5179
+    },
+    {
+      "path": ".github/workflows/docs.yml",
+      "hash": "2d9fff5d27870c2fcb1d159567de376a62c240356fe4e9c71d3795bc34bcee2c",
+      "size": 752
+    },
+    {
+      "path": ".gitignore",
+      "hash": "c992b6c89045feb647051a99d188c2fd2cd1f649aab6c24af934285d8d859eb9",
+      "size": 464
+    },
+    {
+      "path": ".nvmrc",
+      "hash": "049e450d3cda874ff895b74a7aaca986c4222355efb1edceaa52d718c7d4120b",
+      "size": 4
+    },
+    {
+      "path": ".provenance.pub",
+      "hash": "0cadc8893066d602a030554dadd3e3143439e304d34dd191ac3cebb63bedd112",
+      "size": 88
+    },
+    {
+      "path": ".provenanceignore",
+      "hash": "c710a755f24053dbc291a0bcdcf87d45c99d94e5314e680b5edb03efb3ed805c",
+      "size": 192
+    },
+    {
+      "path": "AGENT_CONTEXT.md",
+      "hash": "0cd6869b27eec086785a4289e9377bdf98095f0c60e58b5b5116b5a9df951e94",
+      "size": 2802
+    },
+    {
+      "path": "CHANGELOG.md",
+      "hash": "d184add1918029fbe98680fe94ca546b93b0daceb4a6279fc4e785dc4e6a56cc",
+      "size": 4651
+    },
+    {
+      "path": "CLAUDE.md",
+      "hash": "80657c903f941d6c15de9044dcbe39a19562953a3e27538c2ba469114c8eadc2",
+      "size": 17825
+    },
+    {
+      "path": "CODE_OF_CONDUCT.md",
+      "hash": "679b90ebe40b9c6ddc1d507c9f230888588392c55d6a6b8a0a8b0a797c8d9380",
+      "size": 2566
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "hash": "1990f8cd80c170b605afbde61ec78b3b56f649f50e10dc517cc83ab422a17e2a",
+      "size": 3595
+    },
+    {
+      "path": "DECISIONS.md",
+      "hash": "05ada3fddfb85685f9b9c46a05e140fe94d947a4ff14c14d20b86f6dc7b342cf",
+      "size": 8648
+    },
+    {
+      "path": "LICENSE",
+      "hash": "57bafacf2cbdff50fb16de980082edf7a6a2aaa8da7bccf3db867cbb21ce653f",
+      "size": 10763
+    },
+    {
+      "path": "NOTICE",
+      "hash": "3363150f15398dca1452e1ddca7aa0f5fcca829b644400468f389d2a8dcd943f",
+      "size": 83
+    },
+    {
+      "path": "README.md",
+      "hash": "d9f72582d206e7f775255e77966499e7dc979c21e5fd20a6c84946f117be96d2",
+      "size": 25472
+    },
+    {
+      "path": "SECURITY.md",
+      "hash": "ff7403f841df577a951d52cad7b86fdc24fc6ebd96ebae26b58682bb87b2c860",
+      "size": 1101
+    },
+    {
+      "path": "STATE.md",
+      "hash": "67ad185be9394ba957880d13e897e141fbb81fd61d709658db557eb785fcd24d",
+      "size": 1727
+    },
+    {
+      "path": "docs/SPRINT_1_CHIEF_ENGINEER_DESIGN.md",
+      "hash": "93140b32c5768cf14e1bac4d75797f5b7d0960eb646f06ca9e2c95495a89efa4",
+      "size": 39981
+    },
+    {
+      "path": "docs/SPRINT_4_ANALYSIS_ENGINEER_REPORT.md",
+      "hash": "a0a28e6fd38d9469eeae310f40437ed7bee126e6d82489b9ec2e514bbc9a95ef",
+      "size": 33596
+    },
+    {
+      "path": "docs/SPRINT_4_SECURITY_THREAT_MODEL.md",
+      "hash": "8930bb24056ba466a5c10233f2c094c0a20daecf939733aaff135e285441c56b",
+      "size": 50952
+    },
+    {
+      "path": "docs/api/.nojekyll",
+      "hash": "e6e837fc9ba0257470e27149f0602a4d9679507fad383294d7515d58c1408e92",
+      "size": 143
+    },
+    {
+      "path": "docs/api/assets/hierarchy.js",
+      "hash": "2e4dacf1a6fe19c320670f9ec86098c2af8217d3e6a3e38a358644f7a086699e",
+      "size": 73
+    },
+    {
+      "path": "docs/api/assets/highlight.css",
+      "hash": "34e8a9c086446b346c74b46c83beacdef0439ad2737457bc59a819cf9af76b29",
+      "size": 2779
+    },
+    {
+      "path": "docs/api/assets/icons.js",
+      "hash": "ffca9daa90a17b603e218da13577b3a5c054eed06fc1b19b51c6cfddf867567f",
+      "size": 12561
+    },
+    {
+      "path": "docs/api/assets/icons.svg",
+      "hash": "2bc038eb7e1b490366d3ea6a9dacd97c3328818d4a9c011a7a216ca071696a93",
+      "size": 11919
+    },
+    {
+      "path": "docs/api/assets/main.js",
+      "hash": "c1b898e77cd78ed756fd2dd166b8a5fc54a846dc5cd98d517ad8a8e3789c1d59",
+      "size": 51305
+    },
+    {
+      "path": "docs/api/assets/navigation.js",
+      "hash": "db0305dcd977cf18ddaaf4b97c33cf094f6148b6597d190df3327713ef70639f",
+      "size": 3682
+    },
+    {
+      "path": "docs/api/assets/search.js",
+      "hash": "55f326071ec16f4c7c9cefbcaada5220254ef84c35b460bfa31a3ec8baf4d680",
+      "size": 31339
+    },
+    {
+      "path": "docs/api/assets/style.css",
+      "hash": "8442da1bbddf04d4ee0521ce4bbea2b47eaa2363e48dbf9b5325b57e59907fe4",
+      "size": 49406
+    },
+    {
+      "path": "docs/api/classes/api_errors_limen_error.LimenError.html",
+      "hash": "2909855d94b17baf3cda263979fe2ca919807aec2e2fd08f77fa26d488181530",
+      "size": 18002
+    },
+    {
+      "path": "docs/api/classes/reference-agent.ReferenceAgent.html",
+      "hash": "7549193defb00e102a29fc47ef3c9e2608c5baa318582138e253f970ebdecb44",
+      "size": 30671
+    },
+    {
+      "path": "docs/api/functions/api.createDefaultDeps.html",
+      "hash": "b92574059b8322459c0ca466deda231d968d5eaa2da11ce3edd073e6cdc24e17",
+      "size": 5882
+    },
+    {
+      "path": "docs/api/functions/api.createLimen.html",
+      "hash": "65a408ff8399f4fd7628e6a6df483d47d42568e62059df06e64b8f412d66e0d3",
+      "size": 8459
+    },
+    {
+      "path": "docs/api/functions/api_errors_limen_error.ensureLimenError.html",
+      "hash": "5272faadbade9aa52c15b8a5e52a72aa451f7c38b3e5c34c7da93887014ba835",
+      "size": 6370
+    },
+    {
+      "path": "docs/api/functions/api_errors_limen_error.mapKernelError.html",
+      "hash": "97e73894e3cbf9fb619134d61475e60cf66cefcb677a7406e4a8eefe64bfbbed",
+      "size": 6317
+    },
+    {
+      "path": "docs/api/functions/api_errors_limen_error.unwrapResult.html",
+      "hash": "7acf582d6594176a717d9b754b2edeb0f25690b4b9e6652c316de183f486be28",
+      "size": 7327
+    },
+    {
+      "path": "docs/api/functions/reference-agent.createReferenceAgent.html",
+      "hash": "f6ca130ab5fee4e0fe7a22063ed883dfe02903cbc56c40577fa26e32670f7dec",
+      "size": 6972
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.buildOpenAICompatRequest.html",
+      "hash": "882ac74e4c52f7f616e06c18acef39f8928cdf7d904c6794743c8fcab5604efc",
+      "size": 8062
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.createAnthropicAdapter.html",
+      "hash": "4b7ae4c4c1393575dfa199bf4a0282e1cd2ed62f50533fca867002fc4bf149d4",
+      "size": 7531
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.createAnthropicAdapterFromEnv.html",
+      "hash": "72d9611d6eff667c302ebb447fa7e1864c63af68db33ccfd0f577024ca54d5bd",
+      "size": 8077
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.createGeminiAdapter.html",
+      "hash": "6549f40f2dad55da1778daa3b72bbdbee1c8a525c01bc7069fafaed26d87aeef",
+      "size": 7611
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.createGeminiAdapterFromEnv.html",
+      "hash": "987403c041e25feb7f7dad59a632059083d2911eb76a0cb5624d42909329bc48",
+      "size": 8091
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.createGroqAdapter.html",
+      "hash": "792d7e2e1569aca96659c1b3397cf452fb192b83314adfd0ea82cd68f868d19b",
+      "size": 7550
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.createGroqAdapterFromEnv.html",
+      "hash": "59faba9dd45a31aafae9266c51796df193d4d86377447d0b3f6f6eafbf112318",
+      "size": 7257
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.createMistralAdapter.html",
+      "hash": "073f0b881b28563c1479563d38ddf301eabba5476fb56f150e8b09b623daba9f",
+      "size": 7584
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.createMistralAdapterFromEnv.html",
+      "hash": "76876fef788f449389948773a0baa1edacfacc39133c22bf6f6b0bdc55dcff27",
+      "size": 7293
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.createOllamaAdapter.html",
+      "hash": "33f032efc573db20fc90d45fd79c304480ab4565ba90fcd7ee5f86e81f90e996",
+      "size": 7722
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.createOpenAIAdapter.html",
+      "hash": "f63209dac6baadf6e44bd5b3bb99c962f34f292904e70f12cbf026057e150d39",
+      "size": 7965
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.createOpenAIAdapterFromEnv.html",
+      "hash": "f3f7e50e5a7d570a9bc552749726088365420b52206ca14fb07a62d8e290ba44",
+      "size": 8420
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.createTransportEngine.html",
+      "hash": "452c9989e7b789dac7392e4c0a5e1092ea9d17ad99bfd08477134be90caade6a",
+      "size": 6510
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.parseNDJSONStream.html",
+      "hash": "7555591d73e90951bf09ee0a23b0997b8b7da12d194fb8cd96d778e347956ffc",
+      "size": 8591
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.parseOpenAICompatResponse.html",
+      "hash": "d6218c165f2cd3b2cc817b9428f8bb49b5772ee6f6baff71127455100765a32e",
+      "size": 7394
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.parseSSEStream.html",
+      "hash": "27f5517ef152f9a961f2b035a6d70bb5ebea45f5d57271a6a63933084fc1e6c3",
+      "size": 8604
+    },
+    {
+      "path": "docs/api/functions/substrate_transport.scrubUrl.html",
+      "hash": "7b1ebc391412de9856da852305298a6f5ae75c855c227ef463a805cc81b49fa0",
+      "size": 5961
+    },
+    {
+      "path": "docs/api/hierarchy.html",
+      "hash": "b5d3caed0102d368e1b5585a131049abff655752630a83c6ef7808f7a4b8eb19",
+      "size": 4206
+    },
+    {
+      "path": "docs/api/index.html",
+      "hash": "a98f00a19c6bbb47e25309bca5189517ec098e8c13aea2c09f25312f4c31ace0",
+      "size": 74742
+    },
+    {
+      "path": "docs/api/interfaces/api.LimenDeps.html",
+      "hash": "7e9d513be1a2371e42e85bb550d54e9401a474344a7aa03cd2fec3d64e1bc0cd",
+      "size": 14693
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.AgentApi.html",
+      "hash": "add0a60cc3afb8859fef68bae392fa75028637e6d88b2e38e0ac05f2820ccf5e",
+      "size": 34766
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.AgentPipeline.html",
+      "hash": "63adbf1d77efec7f355f3529f08571a607c6433b8ce1bd7678c125c22356584f",
+      "size": 10007
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.AgentRegistration.html",
+      "hash": "a529bafbeeffd026e6abb41f3067ffbdbed256d956238e5d7cf9e7ad9d56156d",
+      "size": 14794
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.AgentView.html",
+      "hash": "cf6a57bef57bcb8ad0d2f99a89315504ba5ce321dc8b3863da0775da9777d20d",
+      "size": 18347
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ArtifactCreateInput.html",
+      "hash": "e1aa357c407babf16a7b1f7386af9f34c28450a16a4b612a4033b7d386bf6d88",
+      "size": 20139
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ArtifactCreateOutput.html",
+      "hash": "f7d572addbea8bf1aa99b21c33f76a1dfa00268d45677fb80476e75f257bd4bc",
+      "size": 9143
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ArtifactReadInput.html",
+      "hash": "a10e0a4606c4444e4b81b0c7427272fb4d9f2a6f788624eb2e7f0779f7767a5a",
+      "size": 9378
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ArtifactReadOutput.html",
+      "hash": "402f88ee9c38a0f9c41efd019b8a16831d4419d4beeae878d1e79997cdaba198",
+      "size": 12444
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.BackpressureConfig.html",
+      "hash": "89c5b163eaf63f84e9545780ad6474ac7a256aaca54e9029a3580fefbb8fe595",
+      "size": 10825
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.BudgetRequestInput.html",
+      "hash": "00b7c8e4996ffb318b31ede10e98174ad4a82411e1f518ee259eaddddd5d2920",
+      "size": 12003
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.BudgetRequestOutput.html",
+      "hash": "6be1b3ce8c4a1ac7c22e642db49f8615dcfd8035b98c6b30bbec1ccadb84b3fa",
+      "size": 12172
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.CapabilityRequestInput.html",
+      "hash": "613e1ade050dbe816d4bebe8fab6f0f8bec6aa1dda29a9cc4ec9f2d2585814d4",
+      "size": 12335
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.CapabilityRequestOutput.html",
+      "hash": "9c8eb247b9176a4b0b5c13d27ed1cedfdc0a1e76d3f151bbdf65a55482eb0c09",
+      "size": 10775
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ChatMessage.html",
+      "hash": "35b5de1019cbb5ae9aa5ac0d08db4461e8bea1f0e1357c6bb16a5fa979d58699",
+      "size": 10448
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ChatOptions.html",
+      "hash": "22d5069aa564995de44274821dd338f94e2ea8520a0d53bd9fad793d5b86c638",
+      "size": 20017
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ChatResult.html",
+      "hash": "8ef42392204c6d4efa287735f063a04c1a4d51ec24a54d7e5348ab45ac993ffe",
+      "size": 12057
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.CheckpointResponseInput.html",
+      "hash": "4d00b87d9f56620f7038109bfd63d40d8e9f82fe61f789c09a33046654687a0e",
+      "size": 15299
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.CheckpointResponseOutput.html",
+      "hash": "3d5e6259bc418525045e9fbf7d0ff3d0c5ead02652dc29f9d80ee65097132587",
+      "size": 10127
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ClaimApi.html",
+      "hash": "e6f006fe2c388076351f84115ab4e6b2c89caf663c50cf503e9fcc235b5cc712",
+      "size": 18852
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ConversationTurnView.html",
+      "hash": "c3816fe07d5ec6fd76a733fdf745179748d0a06e7e0c01f5bc2f3e60749fe387",
+      "size": 14962
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.DataApi.html",
+      "hash": "e301def34454ca4f206b62177a01eee12f2f1527794bd2359c9c1225152d7e14",
+      "size": 16225
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.EventEmitInput.html",
+      "hash": "5816bc5e6ba9542d3bbd816c3d26c41d4b881155eb71e0d0e8a557cb75fb35ef",
+      "size": 12626
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.EventEmitOutput.html",
+      "hash": "6eba6d86fe356d8a0f481dadef91bbe022e495fbaff2f42f3dc108d867dc0250",
+      "size": 9103
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.HealthStatus.html",
+      "hash": "25236d69c66ec5b7911eb03a1c2ceaea263a81e8d4ac2e677887c932a4f9ea5c",
+      "size": 20534
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.HistogramData.html",
+      "hash": "6ec74778633f9c43709451075223153a43c9757bf4f67387232e7d8d59925b5a",
+      "size": 11351
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.HitlConfig.html",
+      "hash": "927c671b645df6dc39e9d94308aab3fce2befd2c75643cd713e29d688d294e83",
+      "size": 12052
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.InferOptions.html",
+      "hash": "6eaa63bdfe7b0570474ab9a467ae8e8760f8e5e8895ad4b279b9a3382c5f875d",
+      "size": 22661
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.InferResult.html",
+      "hash": "4ca43b185de184a42f1e2ffc0bd895a7ef26b03f0e45978171d2720cacbd7b6d",
+      "size": 15556
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.IngestOptions.html",
+      "hash": "d221c3ad75f76f4238dc58b87894826474703fb37350eabbb3d0d64bd1278f7b",
+      "size": 12644
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.IngestResult.html",
+      "hash": "65b394b9d28a81a19c1814608a54851e4470171e58ff7fd7aa0ee2900e15d283",
+      "size": 10470
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.KnowledgeApi.html",
+      "hash": "c15fdfa9f2532b25d518416569158bf32bb36c67091faaae8c12326020c68dd2",
+      "size": 17398
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.Limen.html",
+      "hash": "e198060bacbe585d370871eb09b4c22031086ae4ebf07e7a779e630bf9140635",
+      "size": 35558
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.LimenConfig.html",
+      "hash": "f8b3e0efcc67fd309bd763d4006fcebce1d47918e1ccc950024d407ac6600519",
+      "size": 30891
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.LimenError.html",
+      "hash": "e1354d1412b75b1defbe435a02fc3972a9ec9f55d47e04ebbdd71c00d2bd595f",
+      "size": 13628
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.LimenLogEvent.html",
+      "hash": "9d3bc102c6bc145a8d55e42b29e182c7f3f4ad71c312576fb6a116d5d0174f58",
+      "size": 13149
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.MemoryView.html",
+      "hash": "d26a53d1c5a77c32e40ad3a3b3c90cdf67534e4ea69c8fca4f76f3eafcd53d37",
+      "size": 14645
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.MetricsApi.html",
+      "hash": "bf316a0bbf9adc46e1e98ee24e8ec920ef1067584a7a59d96dc07d84b026998b",
+      "size": 9264
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.MetricsSnapshot.html",
+      "hash": "ec6cbeb4b9e820013c0462f14f8095b012d113c34ae0c5bd71c1bd4ecb7d9f5b",
+      "size": 30975
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.MissionApi.html",
+      "hash": "6270a52d203ab5b95f69345cbdb1762f6ba2ffceb8baab5832ca30c58e5fff55",
+      "size": 16714
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.MissionCreateOptions.html",
+      "hash": "13230f5ecd01c72bba4edd3622a127b455580d64fd783a1a8b0842670d6a6655",
+      "size": 21436
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.MissionFilter.html",
+      "hash": "8b16fbc59e72cdf68fac07b2fffd750d65df68bfd91d27d00cd838c2a32aeabf",
+      "size": 13213
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.MissionHandle.html",
+      "hash": "349bb685a8959b7c4d3b2e62e10151c90cfa4778b53ff91b89df605aa5f1e8b7",
+      "size": 56290
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.MissionResult.html",
+      "hash": "466d9c029b844f3ede5a561f3ce4578655cd312d2db11686d8cc566257e93451",
+      "size": 21253
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.MissionView.html",
+      "hash": "765e4e2b33fb1ee78af61915668c172540f4b1d2798ff813fc7de63fe472a8a2",
+      "size": 19810
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.PipelineStage.html",
+      "hash": "516e38d870708829561edb052504b82df2379f879ffa1371a92cb6d8c2a0f93b",
+      "size": 10274
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ProviderConfig.html",
+      "hash": "241156c45d3fd8f20a7891f24a8b92f021e4d08eb4644406261c3c3685a9f68b",
+      "size": 16286
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.PurgeFilter.html",
+      "hash": "760cb00c2acaf9aa2bafbc9a0857f0b265c1625ceb1a5bb2ee7797afa7e21fb8",
+      "size": 11967
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ResponseMetadata.html",
+      "hash": "44cb6e4400688e428e65e12f6d2eaf58d51c1cfbd49b2cc1e7f89b26f66e11d9",
+      "size": 30114
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ResultSubmitInput.html",
+      "hash": "f4bbeb0fcc019ee1bc6074078626ee76483eb2639cbb3c36d4741bc9ada29310",
+      "size": 15123
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ResultSubmitOutput.html",
+      "hash": "77d807b4d14be66c126f750ed6d586f1addbc7d702d889bc508978bab8bbcb5a",
+      "size": 9317
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.RolesApi.html",
+      "hash": "f6fc6d2e018397a23bf86ca52f58dd0d968331f31565435d916ea7d8bc744980",
+      "size": 18917
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.SafetyViolationInput.html",
+      "hash": "151a8c75e914f4ffb8924288629cae15df1ddc6e6645a61aa707e21c13c99258",
+      "size": 14605
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.SchemaValidationError.html",
+      "hash": "d32310c87ab695767471010f47da6186416b22a7c7c997db4ed5dd5f442d1329",
+      "size": 14547
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.SearchOptions.html",
+      "hash": "560e39f6bbbf1474212afe61ddf1935227f903644dbc82dcc2e479b5ab48078d",
+      "size": 11737
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.Session.html",
+      "hash": "964cec8a2baad6c77753592e8017aa3dc181b7e5deb341456064e7325d50c5d9",
+      "size": 31995
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.SessionOptions.html",
+      "hash": "6a6976274024375f93bd9052b8acdce1225491fdce13cea1c7a60d0366469360",
+      "size": 14687
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.SubsystemHealth.html",
+      "hash": "65d23bb7e3291c722dc27719e281e3096d9681e6b4fce5c240c3f8d1246470af",
+      "size": 9442
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.TaskExecutionInput.html",
+      "hash": "309d46e38e88b93607133718e810212a871dd83f4af613d5bfaec73898e1fc0d",
+      "size": 11818
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.TaskExecutionOutput.html",
+      "hash": "5987475fa0c3381d009a0a4a3a387f45c29c8b7ffa495e3441f03c12a23d211d",
+      "size": 10388
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.TaskGraphInput.html",
+      "hash": "5bfdab6eb4664884d594a086d67115d4d895e1496a7989615c58113a59f5fa60",
+      "size": 12979
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.TaskGraphOutput.html",
+      "hash": "d5a4c38eae51766d397d36c2e4a127ac6570a2d8433ef047d14db3f9ffc60594",
+      "size": 12633
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.TaskSpec.html",
+      "hash": "26ce83599b7802fc825df6a596c8c5d46aa808bfce851d090b36af7d678f5d1d",
+      "size": 13623
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.TrustPromotionOptions.html",
+      "hash": "bf6db41afcd1bdb137a7b2e1d0769f2e988b819c533f5601fd3a38b7dd7cc93f",
+      "size": 12974
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.WorkingMemoryApi.html",
+      "hash": "b53793e23c39479f57f5456fc91147f1b97e34bc75db805698d9cd2098d77ed1",
+      "size": 18799
+    },
+    {
+      "path": "docs/api/interfaces/api_interfaces_api.ZodSchema.html",
+      "hash": "d8e73ae06e855a199e9f14e11109caa6ef6886d4c31bab3bb070e4faac310cbb",
+      "size": 13339
+    },
+    {
+      "path": "docs/api/interfaces/reference-agent.AgentExecutionState.html",
+      "hash": "8e6f6c2adafc1fb2dc052e27e5b547caefeaebe53c26e8af65675b8a14afed96",
+      "size": 30740
+    },
+    {
+      "path": "docs/api/interfaces/reference-agent.CheckpointRecord.html",
+      "hash": "d0d51eea516eca32894b2b703d80fc8bfe19811774822f2fe14980252ce1819f",
+      "size": 14577
+    },
+    {
+      "path": "docs/api/interfaces/reference-agent.ClassifiedError.html",
+      "hash": "1812b3a6b1d92538a7a9dd966dec3e5da81b19b24ce2680f67b76d8319b455f9",
+      "size": 12132
+    },
+    {
+      "path": "docs/api/interfaces/reference-agent.MissionRunOptions.html",
+      "hash": "dc4831e92a6163aeb4da1a7f543c99c6ff2779456d7ffe29c10fe71df84e6eee",
+      "size": 24954
+    },
+    {
+      "path": "docs/api/interfaces/reference-agent.ReferenceAgentConfig.html",
+      "hash": "90179bc84c8cd5420b349877265653dabafb71f1453ad51229ee54ab9fa73f78",
+      "size": 18110
+    },
+    {
+      "path": "docs/api/interfaces/substrate_transport_transport_types.DeliberationMetrics.html",
+      "hash": "e32aa82f59170b082913d6f46172c272dfa59343adf7dd44a8163e5854c65e70",
+      "size": 12143
+    },
+    {
+      "path": "docs/api/interfaces/substrate_transport_transport_types.ProviderAdapter.html",
+      "hash": "64547ae3a8bffd05f3557742a74b8b6f6963edad9fe8d284d2c52bcd85d712fe",
+      "size": 25174
+    },
+    {
+      "path": "docs/api/interfaces/substrate_transport_transport_types.SSEEvent.html",
+      "hash": "718ba58342f6522bbe8975af9384b95d7d8b83b51334a77be268ac65c3bb0e97",
+      "size": 12173
+    },
+    {
+      "path": "docs/api/interfaces/substrate_transport_transport_types.TransportEngine.html",
+      "hash": "1a5dde55b3add9c62ced785776bb1904cc897a49ac607d36b7c17a96a362f208",
+      "size": 18169
+    },
+    {
+      "path": "docs/api/interfaces/substrate_transport_transport_types.TransportEngineOptions.html",
+      "hash": "acd96578d0ea3a79982e230884b68c2a535258dd44af4c6f1a756a503d7fc9ad",
+      "size": 11557
+    },
+    {
+      "path": "docs/api/interfaces/substrate_transport_transport_types.TransportExecuteOptions.html",
+      "hash": "8c1882ae563bdcddcbb299cd92b35dbd011085e3381f949727a6837e6a9948fa",
+      "size": 9529
+    },
+    {
+      "path": "docs/api/interfaces/substrate_transport_transport_types.TransportHttpRequest.html",
+      "hash": "7aa00c4beead5fd2573d32c14dda0c93bf8734ed222c846b7c4888e4386e98d5",
+      "size": 14829
+    },
+    {
+      "path": "docs/api/interfaces/substrate_transport_transport_types.TransportHttpResponse.html",
+      "hash": "e1248a3f4085469b6d48dfd8dc75f3a812c31e62b1828ecfaddad392d77ae90d",
+      "size": 11497
+    },
+    {
+      "path": "docs/api/interfaces/substrate_transport_transport_types.TransportResult.html",
+      "hash": "70fa3f99dd0424396b42588c491bc4410cd1800c971ccd73971dbbaadc715cdd",
+      "size": 12571
+    },
+    {
+      "path": "docs/api/interfaces/substrate_transport_transport_types.TransportStreamResult.html",
+      "hash": "15694d3377c584bff62a2f48066f00d57673ca38e4d414aa62f9be82e40ce447",
+      "size": 11953
+    },
+    {
+      "path": "docs/api/media/CONTRIBUTING.md",
+      "hash": "83b1aee59d1645503492feb1499fa0dd51f47c29e86d474de426a592c9ff4c68",
+      "size": 3536
+    },
+    {
+      "path": "docs/api/media/LICENSE",
+      "hash": "57bafacf2cbdff50fb16de980082edf7a6a2aaa8da7bccf3db867cbb21ce653f",
+      "size": 10763
+    },
+    {
+      "path": "docs/api/media/SECURITY.md",
+      "hash": "ff7403f841df577a951d52cad7b86fdc24fc6ebd96ebae26b58682bb87b2c860",
+      "size": 1101
+    },
+    {
+      "path": "docs/api/modules.html",
+      "hash": "4f110e9a7d4fd0505dd33a0fb1aa32128736a57fa9aee967c7dbe92f41e28693",
+      "size": 9306
+    },
+    {
+      "path": "docs/api/modules/api.html",
+      "hash": "e920ff98937d0d50045e207f5c47ab03d10af522fabc7b75acfcd2e40048ad77",
+      "size": 67468
+    },
+    {
+      "path": "docs/api/modules/api_errors_limen_error.html",
+      "hash": "d8c0ddfdbe8bf2948aa5d45a854eacf0d6fc1da61495026de895eefffe45f7de",
+      "size": 8809
+    },
+    {
+      "path": "docs/api/modules/api_interfaces_api.html",
+      "hash": "93099f84776562cd9395f88ac6acac6882af2bac5afb4d0e5c878f0ab90c479c",
+      "size": 65215
+    },
+    {
+      "path": "docs/api/modules/reference-agent.html",
+      "hash": "03225b3df3645742368422b2d6fdfaced52e3957af7e306fcac31bc407462cac",
+      "size": 21376
+    },
+    {
+      "path": "docs/api/modules/substrate_transport.html",
+      "hash": "59b0c3cee32fab0776a805067de39e1e1d8855fc7af4aed18b56fcedc6a6f36d",
+      "size": 29284
+    },
+    {
+      "path": "docs/api/modules/substrate_transport_transport_types.html",
+      "hash": "9c947bd5710ee45034a97ef6013e0e50fe193cde8251d758477afc6f98ba6aff",
+      "size": 15838
+    },
+    {
+      "path": "docs/api/types/api.AgentId.html",
+      "hash": "fc603bc242d9a3f65702a56d39e8d8aadf35ebf701afe0fc0a2c7338dc2da4a6",
+      "size": 5136
+    },
+    {
+      "path": "docs/api/types/api.ArtifactId.html",
+      "hash": "453211a4fa60c08d6c4b639c995f9c19b0b4b30fc89e54aa254184c2345e5869",
+      "size": 5154
+    },
+    {
+      "path": "docs/api/types/api.EventId.html",
+      "hash": "2025e0d0164032adf453ac79e1242cfb02fffee05d56eb850d39292bd38e9429",
+      "size": 5137
+    },
+    {
+      "path": "docs/api/types/api.MissionId.html",
+      "hash": "9a808d8e91c67ea1e21470d2a823184e350f7e2863f460a4a5d8d033e6d468f7",
+      "size": 5148
+    },
+    {
+      "path": "docs/api/types/api.Permission.html",
+      "hash": "9ff365519163e4151cff7261feed9ddf7744c7844ad877a383f04e10db672d83",
+      "size": 6786
+    },
+    {
+      "path": "docs/api/types/api.SessionId.html",
+      "hash": "d1bbbb80d38ce8e5f2e0f2af5d69c21a5da10f9d8042d6f814f8e810a5867496",
+      "size": 5149
+    },
+    {
+      "path": "docs/api/types/api.TaskId.html",
+      "hash": "e2259f146e3149c0854dac1cabfe0f3b88993646c11bf575e90df31cf09040cf",
+      "size": 5130
+    },
+    {
+      "path": "docs/api/types/api.TenantId.html",
+      "hash": "87a546f27ed4ab93a66dff66671643cdc3c6d11c044d0290549f681fe8b503f0",
+      "size": 5143
+    },
+    {
+      "path": "docs/api/types/api.UserId.html",
+      "hash": "da876c473a59759abca5260849934dc45bc191a26a676b5ee42b51da7abd5a24",
+      "size": 5131
+    },
+    {
+      "path": "docs/api/types/api_interfaces_api.FinishReason.html",
+      "hash": "4f85b6f865fb7b31d71335033163150b04d4ae5bc3fd81e55db2b6f3370b0a4f",
+      "size": 5867
+    },
+    {
+      "path": "docs/api/types/api_interfaces_api.HitlMode.html",
+      "hash": "9302c8036331e21800475c2ff909b3d957e5823a712ae2250f3951fb54db2271",
+      "size": 5330
+    },
+    {
+      "path": "docs/api/types/api_interfaces_api.JsonSchema.html",
+      "hash": "dbe426dee7a64ab165a2a7804bad589be6c437aee1d1ed41a8e4601f0d2fd34e",
+      "size": 5130
+    },
+    {
+      "path": "docs/api/types/api_interfaces_api.LimenErrorCode.html",
+      "hash": "c03b359eafa57bc48fc4d617c5851bb7b98c94b29605123ea34a351b3c691763",
+      "size": 12198
+    },
+    {
+      "path": "docs/api/types/api_interfaces_api.LimenLogger.html",
+      "hash": "49ed6414bf4a636134fd6f5bcdd6aa2933266fb691923ca47f5968f78316bb4a",
+      "size": 6342
+    },
+    {
+      "path": "docs/api/types/api_interfaces_api.MissionContractId.html",
+      "hash": "33a029aa6524fdfdbf2b865a056f29fb3c297743e2b25a96a84df57f564cdb7c",
+      "size": 5296
+    },
+    {
+      "path": "docs/api/types/api_interfaces_api.MissionState.html",
+      "hash": "c4317fb9c03d9a06921847ad852de41f380323b497564e011c273cb6e2eeab4c",
+      "size": 6019
+    },
+    {
+      "path": "docs/api/types/api_interfaces_api.PipelinePhase.html",
+      "hash": "51d68bbb499f65994036f420223879b20e107a9ca3db47dc49510ff6ad73ebed",
+      "size": 5950
+    },
+    {
+      "path": "docs/api/types/api_interfaces_api.StreamChunk.html",
+      "hash": "14b7e4d8af9eee650fcf663c197699092ca8f69f419741666fe5108c78bbf76f",
+      "size": 10432
+    },
+    {
+      "path": "docs/api/types/reference-agent.CheckpointAssessmentMode.html",
+      "hash": "73aa315d4ed1e6a49e54ace3d7a5dcea861aa68ab85545f0fbdc1221a411326c",
+      "size": 5234
+    },
+    {
+      "path": "docs/api/types/reference-agent.CheckpointCallback.html",
+      "hash": "278ea7a198b035f39659fd2699abc896028299982a6d62c6fe9a47fd6d6f3185",
+      "size": 8253
+    },
+    {
+      "path": "docs/api/types/reference-agent.DecompositionStrategy.html",
+      "hash": "0cd46b51a6352e16cabee6aa8ec36831b9b677bd834fda3c5b4fbe619e6e6d9f",
+      "size": 5260
+    },
+    {
+      "path": "docs/api/types/reference-agent.ErrorCategory.html",
+      "hash": "2f25b86cb98a6be7a8eac607a291f8e7fc211331182ad9d2c3a56b0b8fa85263",
+      "size": 5253
+    },
+    {
+      "path": "docs/api/types/reference-agent.TaskExecutionCallback.html",
+      "hash": "c24414d7f4c39c5b30f1ba1b6e48f3313f6fab7d250ef473dad4761feb510d19",
+      "size": 9212
+    },
+    {
+      "path": "docs/api/types/substrate_transport_transport_types.IsCircuitOpenFn.html",
+      "hash": "a525f07c7331196e30c60a0bf13ccfcc252f9d440712783d940d40efeb97942a",
+      "size": 6273
+    },
+    {
+      "path": "docs/api/types/substrate_transport_transport_types.TransportErrorCode.html",
+      "hash": "2874abe3d63490094879e5fb2d291e2d0bfe0abd9c8dda5951a1f713f51e1fda",
+      "size": 7587
+    },
+    {
+      "path": "docs/api/types/substrate_transport_transport_types.UpdateProviderHealthFn.html",
+      "hash": "c9ad233eba823de7424a7a24a61c377a8a28e4c8c0480698a2894b4d2e6170a0",
+      "size": 7964
+    },
+    {
+      "path": "docs/api/variables/reference-agent.BUDGET_CHECKPOINT_THRESHOLDS.html",
+      "hash": "a4c095634020ea49257d9ced6abd019e84a45e3d2d90073f35b6fb31a4703463",
+      "size": 5548
+    },
+    {
+      "path": "docs/api/variables/reference-agent.DEFAULT_BUDGET_DECAY_FACTOR.html",
+      "hash": "76cb87ec2d3c4039411e924db217ad9489e38d5e3a967022d24300d22f182f69",
+      "size": 5072
+    },
+    {
+      "path": "docs/api/variables/reference-agent.DEFAULT_MAX_TASK_RETRIES.html",
+      "hash": "722ea33ea2ba4656795c203cb2568ffc013b3e23fe18ca7f23a232b14a18a811",
+      "size": 5027
+    },
+    {
+      "path": "docs/api/variables/reference-agent.ESCALATION_CONFIDENCE_THRESHOLD.html",
+      "hash": "edeabb91c0d0bc555315cc6039933028572e0496bd903f39f201228a4fc66486",
+      "size": 5155
+    },
+    {
+      "path": "docs/api/variables/reference-agent.MAX_PLAN_REVISIONS.html",
+      "hash": "9fa6793916db0063ae773e15837a96040f574ca4105919f6f0342c6f468bc346",
+      "size": 5404
+    },
+    {
+      "path": "docs/api/variables/reference-agent.MISSION_TREE_DEFAULTS.html",
+      "hash": "cbac0746692eb7653e6a767902eec94657d529bc3e3071589c8de2480ebaca4a",
+      "size": 6894
+    },
+    {
+      "path": "docs/architecture.md",
+      "hash": "07666e25897033c4a866adb1b0f3d3b661ea26c02e3ef53a405e873737d497e8",
+      "size": 11945
+    },
+    {
+      "path": "docs/assets/banner.svg",
+      "hash": "a09d657fa0093934f7c670d336007e909fd9ea05356097eed8865077bd070956",
+      "size": 2899
+    },
+    {
+      "path": "docs/blog/28-invariants.md",
+      "hash": "d7d38eef2ef8b8db16363688e1b463e4c263a9b7bf6861e2bc299e91dc4e65a4",
+      "size": 11841
+    },
+    {
+      "path": "docs/blog/introducing-limen.md",
+      "hash": "2e08d9d20d7bb6b5c0b4ea5055827779553bab74ebfa02702f0cba8afab88130",
+      "size": 10938
+    },
+    {
+      "path": "docs/blog/limen-vs-vercel-ai-sdk.md",
+      "hash": "20e6d4cfc05ca016344b91321e4f133f6e55948f78ea85416b1ac951f13c62a7",
+      "size": 4956
+    },
+    {
+      "path": "docs/blog/why-one-dependency.md",
+      "hash": "77f984288cadb68fce7ca62796ea1679642040f8f2567af170d4e81a31e35188",
+      "size": 10704
+    },
+    {
+      "path": "docs/breaker/SPRINT-1-BREAKER-REPORT.md",
+      "hash": "19d459e63577d02f265faf3821e111e52a70b8c8b98588628c545c8d59ec6d5c",
+      "size": 15572
+    },
+    {
+      "path": "docs/breaker/SPRINT-2-BREAKER-REPORT.md",
+      "hash": "49f9e088da935577df84bd3d48ea9015377ffa4d6b19c7495b6eceab475a036b",
+      "size": 17556
+    },
+    {
+      "path": "docs/breaker/SPRINT-3-BREAKER-REPORT.md",
+      "hash": "141380d52c72f977d4ca4542407696c5f24f47941dc4c086d4ce043a8d404e70",
+      "size": 13169
+    },
+    {
+      "path": "docs/breaker/SPRINT-4-BREAKER-REPORT.md",
+      "hash": "8b8640e2a787997a6d6754ab70e393227ea59b846c8bcc81261b86a9fe7aa24f",
+      "size": 15819
+    },
+    {
+      "path": "docs/breaker/SPRINT-5-BREAKER-REPORT.md",
+      "hash": "57f47b124c06b2ba67710a59a3def91aed9273a4daf9589ac4a582296daed068",
+      "size": 12612
+    },
+    {
+      "path": "docs/breaker/SPRINT-6-BREAKER-REPORT.md",
+      "hash": "7f39408ea8618d97ac866496a1757441343317a1d05198c29b93c41421f7ec72",
+      "size": 21806
+    },
+    {
+      "path": "docs/certifier/SPRINT-2-CERTIFIER-VERDICT.md",
+      "hash": "0dd9b09d437a810ed88f965f3cc36c3a781c0b606733a18ae556d201649b04ee",
+      "size": 31564
+    },
+    {
+      "path": "docs/certifier/SPRINT-3-CERTIFIER-VERDICT.md",
+      "hash": "697029d5b1f1a8038ca30588085774162b337ad6d9b1b139804f5928ac364497",
+      "size": 34503
+    },
+    {
+      "path": "docs/certifier/SPRINT-4-CERTIFIER-REPORT.md",
+      "hash": "ec31315f782aa970bd8ca50db39fa33d45f13826f19d573edf84b60bde52e0b7",
+      "size": 30210
+    },
+    {
+      "path": "docs/certifier/SPRINT-5-CERTIFIER-REPORT.md",
+      "hash": "6f2fc57ac080440138ada171881f0fd003cf7a06d97d3f06d2f28a4f9fcdbcaa",
+      "size": 28924
+    },
+    {
+      "path": "docs/certifier/SPRINT-6-CERTIFIER-REPORT.md",
+      "hash": "3d15f57aab96004c563cbadfd5e6cfebfcdc9c352beba5e17b4d1e50bd38f048",
+      "size": 36283
+    },
+    {
+      "path": "docs/deployment.md",
+      "hash": "90b4e3856d9541a41c07d44d5d93aa14021f52e31b12c8c30b4b3f30ff0b7122",
+      "size": 3557
+    },
+    {
+      "path": "docs/error-codes.md",
+      "hash": "dca81b32326adb9202fbfd6b57a0bef41c19053c04e786e5d3af92cc4ea0e899",
+      "size": 5612
+    },
+    {
+      "path": "docs/faq.md",
+      "hash": "71a941e8deae0a54b9faae9c4140c357f9577bf8e771bd5cc7b8e557a819ac64",
+      "size": 5594
+    },
+    {
+      "path": "docs/getting-started.md",
+      "hash": "89aa5cfd361f3f0a32b3321bd59daba2f400f169f28a7cde2677a7ed6cd5ee3c",
+      "size": 7082
+    },
+    {
+      "path": "docs/index.html",
+      "hash": "904d633538546cff9444821f5db2fcc0542cd8621047c4e0768fdf49f28d6dbc",
+      "size": 8466
+    },
+    {
+      "path": "docs/local/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "docs/marketing/limen-positioning.md",
+      "hash": "560b0b26492d37ce27a6aa269f3d95fb7076777e993134eabd96ac69b9be6b28",
+      "size": 43048
+    },
+    {
+      "path": "docs/missions.md",
+      "hash": "697ea8cbe4e9894aa7809df2e3f49f522a2528d20d56b0ddfffa9029b5281799",
+      "size": 6267
+    },
+    {
+      "path": "docs/proof/failure-modes.md",
+      "hash": "b0e2e6e91d06aaa2b11f0e74926cd7cd32b7d1561a45ebaf75b73e3933e099f9",
+      "size": 26201
+    },
+    {
+      "path": "docs/proof/invariants.md",
+      "hash": "33e86280955cdf9b32d747be04f8e9065b7d86f5507acd19ffb2b59bdbeaf2bd",
+      "size": 35694
+    },
+    {
+      "path": "docs/proof/readiness.md",
+      "hash": "f7697349392603e3938f5877423dbd8e96bb275935cd3a1b455b00d9c09d4132",
+      "size": 13991
+    },
+    {
+      "path": "docs/proof/security-model.md",
+      "hash": "314854bda5df87dbaf9fa1c7665195919ef6606f4d37dfa55478b5dd863bf3ad",
+      "size": 34601
+    },
+    {
+      "path": "docs/proof/system-calls.md",
+      "hash": "40ed2a40b6abeaace5b8162f8bd44be6406ad8ecbaa3ab417bd31eb324522ecc",
+      "size": 26158
+    },
+    {
+      "path": "docs/providers.md",
+      "hash": "dab5420b475d32b4b26a1ac5398b3cd93f9910fad85a7c7080b98fc96812b717",
+      "size": 5841
+    },
+    {
+      "path": "docs/security-model.md",
+      "hash": "9219e4f4bf408581f170ccaa6595e615232f889db9628ddfb17b563ea871920c",
+      "size": 5204
+    },
+    {
+      "path": "docs/sprint3_design.md",
+      "hash": "760010ca76e1013f14a59838093226a8abdd8a7f96be002827e11267a28c2cae",
+      "size": 38177
+    },
+    {
+      "path": "examples/01-hello.ts",
+      "hash": "016b276aec99fcd5e7d774367e1ef6400b5810c396c1689889650a65e114b59e",
+      "size": 177
+    },
+    {
+      "path": "examples/02-streaming.ts",
+      "hash": "3ca9f03fcbc273e0d99d69ac0bd772d76d7c85e1645afa0e9f9aff9de1e75310",
+      "size": 366
+    },
+    {
+      "path": "examples/03-structured-output.ts",
+      "hash": "3b04f116db57995ad164d416fa7137574bf6e3f743bb0ecf54124bec04236771",
+      "size": 733
+    },
+    {
+      "path": "examples/04-multi-provider.ts",
+      "hash": "4aee614e200b8eb8bdecf4710993f46ec0326f4dce33a04bdddadf83e2eb16b0",
+      "size": 1777
+    },
+    {
+      "path": "examples/05-sessions.ts",
+      "hash": "6498c62b0192d7f4a2aa5de247f3599148fb6ccf44864385747636c6aedfce30",
+      "size": 1005
+    },
+    {
+      "path": "examples/06-missions.ts",
+      "hash": "696ec0c4c6605bf1bdd543af2fec0cfc3c05fa34603d2bfc3a2d204245ef9e54",
+      "size": 1254
+    },
+    {
+      "path": "examples/07-knowledge.ts",
+      "hash": "59ed2df0d3f941b1064c397a4992fce028bf73a392fd3222c8406752a7b99f2e",
+      "size": 2363
+    },
+    {
+      "path": "examples/08-governance-visible.ts",
+      "hash": "2c592db03ae27f73a4468702d688c456a1235e448ce2227e1f678f048a369dc4",
+      "size": 1703
+    },
+    {
+      "path": "package.json",
+      "hash": "24852a7f2221b2864ad7ea0032ff7558cc29ade099dfcc248cde067dff83e6b5",
+      "size": 2222
+    },
+    {
+      "path": "packages/limen-a2a/LICENSE",
+      "hash": "57bafacf2cbdff50fb16de980082edf7a6a2aaa8da7bccf3db867cbb21ce653f",
+      "size": 10763
+    },
+    {
+      "path": "packages/limen-a2a/README.md",
+      "hash": "2ecfa79d3b24e8004ed19fc2d7e51b35513cb04b284d58875e3e081fa76c1438",
+      "size": 855
+    },
+    {
+      "path": "packages/limen-a2a/package.json",
+      "hash": "886ad491f88b9230928507bb2d11348338e64d7bacb5a8f224fcb7c288471c7e",
+      "size": 1114
+    },
+    {
+      "path": "packages/limen-a2a/src/agent_card.ts",
+      "hash": "12f608232728e2e1594bcec804abaf20c41395459e3b6c23c84e00631be2dc20",
+      "size": 2343
+    },
+    {
+      "path": "packages/limen-a2a/src/bootstrap.ts",
+      "hash": "80322c9af4da57c6d49f5f46e9dbcaf3684a666fcaa3260defa746edced61989",
+      "size": 3942
+    },
+    {
+      "path": "packages/limen-a2a/src/jsonrpc/errors.ts",
+      "hash": "4c9008e391c391f6d1a63950659bdee6ad3367c443c6b5d9d21887a5fe10ec59",
+      "size": 1444
+    },
+    {
+      "path": "packages/limen-a2a/src/jsonrpc/handler.ts",
+      "hash": "0653dab93902029f612e01cbc5f47c7235980693c487f63b232cafd43c553e67",
+      "size": 3840
+    },
+    {
+      "path": "packages/limen-a2a/src/jsonrpc/types.ts",
+      "hash": "232b4c2480412d2194a64bcc797e0dbe64daac81a8e7e28d14a046c126d0af14",
+      "size": 1816
+    },
+    {
+      "path": "packages/limen-a2a/src/methods/task_cancel.ts",
+      "hash": "1314be7213a50423b859bd591a8463d9840ea6017e1d367c072270d6b836479a",
+      "size": 2048
+    },
+    {
+      "path": "packages/limen-a2a/src/methods/task_get.ts",
+      "hash": "0668e1e6ff5285d9724e54d2057ea97cfb5a9dcb9019e0b770889538a0f6e42b",
+      "size": 2185
+    },
+    {
+      "path": "packages/limen-a2a/src/methods/task_send.ts",
+      "hash": "dbbf7698ff856a64bb57d90a8854d14797aafc92370177247564ee8db521e23a",
+      "size": 10944
+    },
+    {
+      "path": "packages/limen-a2a/src/server.ts",
+      "hash": "62cd01f842771b91df80d04aa4ece48ea75d063c99f8e2424e06da3d4f5a512f",
+      "size": 7048
+    },
+    {
+      "path": "packages/limen-a2a/src/task_manager.ts",
+      "hash": "12e75259d391ecca74eb3ff51b49301586dc41a542f26a169076473579ca3b1f",
+      "size": 3649
+    },
+    {
+      "path": "packages/limen-a2a/src/validation/schemas.ts",
+      "hash": "5ec100d371d759d5662edd0c3ac29609fd94dae7f533a9641277a1b989b7dae4",
+      "size": 4632
+    },
+    {
+      "path": "packages/limen-a2a/tests/validation_schemas.test.ts",
+      "hash": "5c59bb3e56f474db2d71442efa08a893bee6561d6303df2df60d7c762983c598",
+      "size": 10261
+    },
+    {
+      "path": "packages/limen-a2a/tsconfig.json",
+      "hash": "b64aa447d14fe0de98bd0b857f9eee8f08eff79ebd8ad60c5e00bf28860e4b21",
+      "size": 516
+    },
+    {
+      "path": "packages/limen-cli/LICENSE",
+      "hash": "57bafacf2cbdff50fb16de980082edf7a6a2aaa8da7bccf3db867cbb21ce653f",
+      "size": 10763
+    },
+    {
+      "path": "packages/limen-cli/README.md",
+      "hash": "46460d58adbba3381148607fcdff1fb5a4c8cfc9558794e96f6c9cf61151b432",
+      "size": 1137
+    },
+    {
+      "path": "packages/limen-cli/package.json",
+      "hash": "ad54a1a2de5d7b86acef5d606c65bab79837d97a11633a63e55aa5429a8f0fcc",
+      "size": 1043
+    },
+    {
+      "path": "packages/limen-cli/src/bootstrap.ts",
+      "hash": "89f00c358e81be235d4754bc46ad8230495fde8b9260862753b7eeb4c98cad58",
+      "size": 1126
+    },
+    {
+      "path": "packages/limen-cli/src/cli.ts",
+      "hash": "ae6d1727a62d4cdbb27879c1582e1020136ff345b09cecf45c9262292649270e",
+      "size": 1478
+    },
+    {
+      "path": "packages/limen-cli/src/commands/agent.ts",
+      "hash": "a49daa09d13cbf8e0e725a5aeca31b6e68fee8a685246caf6ffef648b64f83ba",
+      "size": 3788
+    },
+    {
+      "path": "packages/limen-cli/src/commands/claim.ts",
+      "hash": "aec8e5ab81f38a3d1e221cbff3068be182c50d15ef26772c0a04ee5fb907e5db",
+      "size": 5540
+    },
+    {
+      "path": "packages/limen-cli/src/commands/health.ts",
+      "hash": "b351b810b59df9a6c2e4ac6447944be12b15133d3709b039b8ed5a5b1e2c8c3d",
+      "size": 1012
+    },
+    {
+      "path": "packages/limen-cli/src/commands/init.ts",
+      "hash": "8cffb4b37771998ece5c65dd69bb97a7a26db855e3f18dec2a6b39981dd2e91d",
+      "size": 2154
+    },
+    {
+      "path": "packages/limen-cli/src/commands/mission.ts",
+      "hash": "3c15da0311f64ca6083bb15a97c259316f723311e9c262104410b99e89157cf8",
+      "size": 3203
+    },
+    {
+      "path": "packages/limen-cli/src/commands/wm.ts",
+      "hash": "6a0ff64ec34bf343be55360c26793e129a275a5d797dacbc532725648d239c1f",
+      "size": 4292
+    },
+    {
+      "path": "packages/limen-cli/src/config.ts",
+      "hash": "eec1162bb244d3adea33c53d96f0343638634826515da5de82905eb14edf32e9",
+      "size": 1093
+    },
+    {
+      "path": "packages/limen-cli/src/output.ts",
+      "hash": "556ad1294a44df829df6618b23d2f404112bc18d226959056ea25d2dd146ee60",
+      "size": 543
+    },
+    {
+      "path": "packages/limen-cli/tsconfig.json",
+      "hash": "b64aa447d14fe0de98bd0b857f9eee8f08eff79ebd8ad60c5e00bf28860e4b21",
+      "size": 516
+    },
+    {
+      "path": "packages/limen-mcp/LICENSE",
+      "hash": "57bafacf2cbdff50fb16de980082edf7a6a2aaa8da7bccf3db867cbb21ce653f",
+      "size": 10763
+    },
+    {
+      "path": "packages/limen-mcp/README.md",
+      "hash": "3a029d44cec69d998deaa0d797be9a411849e9bbad497644ba194b6e898aefe6",
+      "size": 1201
+    },
+    {
+      "path": "packages/limen-mcp/package.json",
+      "hash": "a538227cf4c92e3e85a4f58d464793d37a5d65ed6a44ded3df67cf208002f1b4",
+      "size": 1121
+    },
+    {
+      "path": "packages/limen-mcp/src/bootstrap.ts",
+      "hash": "2085657ae9d0bb7911f5195ce2eb50af457f12a396d3df0e3441c256ce7968a8",
+      "size": 1976
+    },
+    {
+      "path": "packages/limen-mcp/src/resources/health.ts",
+      "hash": "6775ed2cb557dc9134f083dd98aa77d87090f4452ec2a2d217dbfd170a72dca3",
+      "size": 682
+    },
+    {
+      "path": "packages/limen-mcp/src/server.ts",
+      "hash": "7213f880767e5fa90f4956953480ee0d85ee2cfd8b7ee8deb40e89a6e3f0f61d",
+      "size": 2551
+    },
+    {
+      "path": "packages/limen-mcp/src/tools/agent.ts",
+      "hash": "193c1e79336cb510516d4c8c2c45b7df048abcb2eac289ff158a49bbb3bc2ece",
+      "size": 2777
+    },
+    {
+      "path": "packages/limen-mcp/src/tools/claim.ts",
+      "hash": "212d58268a8e6923a9ba9fb3a6d778a5b5805261ff29b2ce250ed8c2ea889c0f",
+      "size": 5687
+    },
+    {
+      "path": "packages/limen-mcp/src/tools/health.ts",
+      "hash": "3b1aaa6a64eeffb4c4fe63b89ccb343a4db856753d18fcf718e47536946af321",
+      "size": 647
+    },
+    {
+      "path": "packages/limen-mcp/src/tools/mission.ts",
+      "hash": "028b10989b830696867d9bd5ea65ff824920907beff1558eccd31d1f8f0c2c8a",
+      "size": 2673
+    },
+    {
+      "path": "packages/limen-mcp/src/tools/wm.ts",
+      "hash": "7ff56cf2c19c323563a117167706c85903d45fb6cb2de8978ea2eee410b8e58f",
+      "size": 3511
+    },
+    {
+      "path": "packages/limen-mcp/tsconfig.json",
+      "hash": "ae47f1c0d44b5a1ad700654038fc4ef9f34e74d3d5d6b71bac9b5f48913267cf",
+      "size": 586
+    },
+    {
+      "path": "scripts/verify-proof-pack.ts",
+      "hash": "574ef3cc31b3a2d3d4470f81e832ff4cc53c1d608ae055af429348ecfc477767",
+      "size": 12157
+    },
+    {
+      "path": "src/api/agents/agent_api.ts",
+      "hash": "3ea7168bc0e3e7e9eea76d2c9d1d1485db19882d8f4559effcae1b10a575bd56",
+      "size": 22623
+    },
+    {
+      "path": "src/api/agents/trust_progression.ts",
+      "hash": "7bedcdd773643eabc15d28d41dcce8d8129038968f7a12baf5543f91edd36a5f",
+      "size": 5205
+    },
+    {
+      "path": "src/api/chat/chat_pipeline.ts",
+      "hash": "1d39b0dedbc7d8aee52aaf4fff123001a46ee116260c3d74bdca64364a97468b",
+      "size": 31621
+    },
+    {
+      "path": "src/api/chat/technique_injector.ts",
+      "hash": "936b2129ff6cfbff6cbb80d5c15b6e02ac0d616054e38c8147e0e1a49f954f7c",
+      "size": 7269
+    },
+    {
+      "path": "src/api/defaults.ts",
+      "hash": "70084cc6580e0e2373d01e0f1b294dcd432ee7f5690e96d835a66d4ea1a8073a",
+      "size": 6603
+    },
+    {
+      "path": "src/api/enforcement/cost_tracker.ts",
+      "hash": "89dc0a0926a259b7d19eb56ae69ec95e3af83c24a500eaab276eed8e038326fa",
+      "size": 9939
+    },
+    {
+      "path": "src/api/enforcement/latency_harness.ts",
+      "hash": "917e5ce1b3cbd2b6782300c16bd5b33025aac28972713fb14fde6e5240c9db1f",
+      "size": 5996
+    },
+    {
+      "path": "src/api/enforcement/rate_guard.ts",
+      "hash": "02bb1776a96ec6eaa2360aa9818afd2d8c4da6749334601958507d3aa533fca3",
+      "size": 3753
+    },
+    {
+      "path": "src/api/enforcement/rbac_guard.ts",
+      "hash": "4efdf4522a97133fb218fe7fac95aa52e781f8d91ab0520d38932565335ceed0",
+      "size": 3558
+    },
+    {
+      "path": "src/api/errors/limen_error.ts",
+      "hash": "901970c9a639f44aaef7d45ae84dde772c9e5f6101f42284d6f6c2ed4d54cc7c",
+      "size": 15130
+    },
+    {
+      "path": "src/api/facades/claim_api_impl.ts",
+      "hash": "8e4de9f5c26b88c541c5bd0c2e7dea4745b55bfc62af85473f8c6ce4c032d2a6",
+      "size": 1779
+    },
+    {
+      "path": "src/api/facades/claim_facade.ts",
+      "hash": "d6ba9869b28cb4f4b4319b79bfad287dc7e686a10e2318c207b5c937106fde7b",
+      "size": 4540
+    },
+    {
+      "path": "src/api/facades/working_memory_api_impl.ts",
+      "hash": "2ed724f0f76688c8b2cc5933a7bf68fb8022aafa569ecf6d26b765146490bc54",
+      "size": 1898
+    },
+    {
+      "path": "src/api/facades/working_memory_facade.ts",
+      "hash": "a2672bd652240a803e3bd7b01c10e9928c680eea760d8b80d0d84fde30c907fc",
+      "size": 5221
+    },
+    {
+      "path": "src/api/governance/governed_orchestration.ts",
+      "hash": "fee559b09a862934e23494d0511e6b9a55f11ed72e138073a09612633d510c3d",
+      "size": 23132
+    },
+    {
+      "path": "src/api/index.ts",
+      "hash": "edc89ccb4e3f279ee6a8ccc1536f270bab9f6217d3e111a9592dc2d43597dcfc",
+      "size": 49425
+    },
+    {
+      "path": "src/api/infer/infer_pipeline.ts",
+      "hash": "dcbd4afff8593f7498b932f46595786877a01acd4a114c7dd8b69f46d7dd2588",
+      "size": 15086
+    },
+    {
+      "path": "src/api/interfaces/api.ts",
+      "hash": "effa2fded5892fa2632b4287b58424b220ab7831cb7d76b97eaec25af464ebb5",
+      "size": 41412
+    },
+    {
+      "path": "src/api/knowledge/knowledge_api.ts",
+      "hash": "e0ed22e2ae800b900da829ecb08cd4c8a9ae7641947ddc34e9785e029bcc5342",
+      "size": 3744
+    },
+    {
+      "path": "src/api/migration/023_agent_persistence.ts",
+      "hash": "ad4f1faf20563d603850cdeff813c851b81323df6d9281fd01fe6ceb39191325",
+      "size": 6185
+    },
+    {
+      "path": "src/api/migration/024_trust_learning.ts",
+      "hash": "a8cf733d19ccdb76de2e4b455f9e0348ded56c711f67da3881feb6c3653ffca6",
+      "size": 8296
+    },
+    {
+      "path": "src/api/migration/025_knowledge_graph.ts",
+      "hash": "dd065bd7e27c6436b7985b04383d2da44e240d4731bfe631c9d7c576932e0715",
+      "size": 4135
+    },
+    {
+      "path": "src/api/migration/026_replay_pipeline.ts",
+      "hash": "79cae6ecadde5320b4493fea348982d461cd6d58b18a65bb2c690723f0fa25ad",
+      "size": 5094
+    },
+    {
+      "path": "src/api/migration/027_interactions_retention.ts",
+      "hash": "01650366c4f65b7d129a7356796754dd99bbd0aaa1876d5102fe4337a2c73dd2",
+      "size": 2809
+    },
+    {
+      "path": "src/api/missions/mission_api.ts",
+      "hash": "0c821fe3cd8b2467c17aa81b64d9331556974edf9d64091c4eb607aa6a4d29ac",
+      "size": 19433
+    },
+    {
+      "path": "src/api/observability/health.ts",
+      "hash": "495f9f8ee013176b75ffd96515db8fad1823833468662039031fbc1e4d8f02e4",
+      "size": 3898
+    },
+    {
+      "path": "src/api/observability/metrics.ts",
+      "hash": "2680b0b7d988d39118c5e3cf7cdadb70b4c7c2e98fe8f70901679aec3ae8dd7f",
+      "size": 10286
+    },
+    {
+      "path": "src/api/roles/roles_api.ts",
+      "hash": "1dd294be8c5e5a3561b362e01645f189fa391fa79bf7ac6117097a762bbfef8e",
+      "size": 3192
+    },
+    {
+      "path": "src/api/sessions/session_manager.ts",
+      "hash": "0703705e752b4e997114689f176291f3fc9ca73a3d8fad39743bfe89ace0b1f2",
+      "size": 12534
+    },
+    {
+      "path": "src/api/syscalls/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/budget/harness/dba_harness.ts",
+      "hash": "d4f30d23f1846662dc9d1b2c2664ea60025fb1ebfc8e5a2291aa98101fa2c8c9",
+      "size": 2502
+    },
+    {
+      "path": "src/budget/impl/dba_impl.ts",
+      "hash": "6311bebee72b7553ca23a18900d3acfc5c8a581976bf3ceca67ac4a622a1cf9a",
+      "size": 21561
+    },
+    {
+      "path": "src/budget/interfaces/dba_types.ts",
+      "hash": "14700c9e18e0e5cea4f9c402a3d1d68902722ef44590676c019589f1baf00e56",
+      "size": 36361
+    },
+    {
+      "path": "src/claims/evidence/capability_scope_validator.ts",
+      "hash": "2bb865f55509affe14b631deb71713e4dcf96d1c7c5d37cfc83f5e73eb1b5057",
+      "size": 3604
+    },
+    {
+      "path": "src/claims/evidence/evidence_validator.ts",
+      "hash": "f6120e47f41633889c13e22379de02262b9a244e14b809978fefff8315d7a3d0",
+      "size": 5511
+    },
+    {
+      "path": "src/claims/harness/claim_harness.ts",
+      "hash": "7bd82fd4ac965ddceaf5541d3c4481268d7919d5559bd23c9469e98d6f744b29",
+      "size": 880
+    },
+    {
+      "path": "src/claims/interfaces/claim_types.ts",
+      "hash": "bfcb2a0d5a3429d60161f21068aee02eee4c1a32cbf248d83143fca61fbb8ac7",
+      "size": 41672
+    },
+    {
+      "path": "src/claims/migration/019_ccp_claims.ts",
+      "hash": "82f98748752b65a98fbde5870b79e1cd93070f23efbb664c2921d6ee169d4fc4",
+      "size": 8124
+    },
+    {
+      "path": "src/claims/store/claim_stores.ts",
+      "hash": "225908f9d4d02baa3611bd997f728bef9523202ddee5e704d62b092540b737cd",
+      "size": 66268
+    },
+    {
+      "path": "src/context/harness/cgp_harness.ts",
+      "hash": "55a2fa9db94372bef864ebed691088d8388b249ae16cf5ea6b95187d77658214",
+      "size": 15971
+    },
+    {
+      "path": "src/context/interfaces/cgp_types.ts",
+      "hash": "29e8af1660620fcd6f007e7589d2e61c51c215d59e291cd802032c6226c1d6a5",
+      "size": 43898
+    },
+    {
+      "path": "src/context/stores/cgp_stores.ts",
+      "hash": "d1fbafd77ed353a9cd813b256089b2494fea36bb6f08b6747176421ac2760a9b",
+      "size": 42400
+    },
+    {
+      "path": "src/execution/harness/egp_harness.ts",
+      "hash": "da675997e4b6fc9327960d522a1d614b03d57c0cc45678606c1e15f3fd9ecb35",
+      "size": 2473
+    },
+    {
+      "path": "src/execution/interfaces/egp_types.ts",
+      "hash": "9b93dfb2b59e5c14520b0f2e05e8b49436cb46cfec043fffd0ddfe8d04ee0271",
+      "size": 51253
+    },
+    {
+      "path": "src/execution/stores/egp_stores.ts",
+      "hash": "701d88824c93f5e59cae64f0b93ee6a2e8c0f372d019242935785f885add7c18",
+      "size": 61487
+    },
+    {
+      "path": "src/execution/wiring/execution_gate.ts",
+      "hash": "58f3d4097245d64b8455ff07847d1648961b7a5fecbacf3314179d594cda2cfa",
+      "size": 4572
+    },
+    {
+      "path": "src/execution/wiring/floor_enforcer.ts",
+      "hash": "52b1ca6d48e4d2bf87010bb69221f3033c8f0729dc018deaf187e46faeabeadc",
+      "size": 6559
+    },
+    {
+      "path": "src/execution/wiring/invocation_gate.ts",
+      "hash": "aa41443c908aca817cf367cffca690483ed32cfc00cfdf59ae1562f3a3ba656e",
+      "size": 4040
+    },
+    {
+      "path": "src/execution/wiring/terminal_release.ts",
+      "hash": "c78adf5bb8217b27d0b1508464edefbb2b35cf6e4ffad78cae882f34ff9df013",
+      "size": 6025
+    },
+    {
+      "path": "src/governance/harness/governance_harness.ts",
+      "hash": "f1b515c0783d6407d1ada05d5fc248b9ca532e23df1da74fc966a9aab2ff112d",
+      "size": 5043
+    },
+    {
+      "path": "src/governance/migration/012_governance_runs_traces.ts",
+      "hash": "d9b8ebd4514e0fa8b539cac0b7f61833b2b8d855bea852dbfcea46f88fc4d12e",
+      "size": 4674
+    },
+    {
+      "path": "src/governance/migration/013_governance_contracts.ts",
+      "hash": "f4c469b4ba9625170dba68a13f66f1d7b4c55f3a6e65181b6ddf35a705336645",
+      "size": 2110
+    },
+    {
+      "path": "src/governance/migration/014_governance_supervisor.ts",
+      "hash": "2a54b689a26048f921965d7c5b37a0355975fbfc29ad5af70f596ef24062eb1c",
+      "size": 3098
+    },
+    {
+      "path": "src/governance/migration/015_governance_eval.ts",
+      "hash": "4a181c8b492aaeb793ac3659114e744a18467c47d05ebf583ced62848d546d9b",
+      "size": 2236
+    },
+    {
+      "path": "src/governance/migration/016_governance_capabilities.ts",
+      "hash": "15522068a0fc853157fcae51e66acca83a8a507c885b47485a78edff9678461e",
+      "size": 2130
+    },
+    {
+      "path": "src/governance/migration/017_governance_handoffs_idempotency.ts",
+      "hash": "1c0f437aa500f964227a17dd16a6eac80cf91a24953cdd3a244f6e92aea17851",
+      "size": 4274
+    },
+    {
+      "path": "src/governance/migration/018_supervisor_decision_delete_trigger.ts",
+      "hash": "6af46d96a05c5f3bd82fc8db370bf35337b154436e5377b7de51f83b6eb81b2c",
+      "size": 1525
+    },
+    {
+      "path": "src/governance/stores/governance_stores.ts",
+      "hash": "df2d61586f04d8075a63edfa99abdf2a005e944ad1bbf54ea6b1687373c9b13c",
+      "size": 60325
+    },
+    {
+      "path": "src/kernel/audit/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/kernel/audit/audit_trail.ts",
+      "hash": "c9995b7948fd89004c5f8e766aa80050a3562ddb64d192c80697765516c70257",
+      "size": 27805
+    },
+    {
+      "path": "src/kernel/crypto/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/kernel/crypto/crypto_engine.ts",
+      "hash": "90cb86b8f6f676a6b4d0709a77292db563fafc1c9450440c60972f9f9085832c",
+      "size": 16067
+    },
+    {
+      "path": "src/kernel/database/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/kernel/database/database_lifecycle.ts",
+      "hash": "480fe39a1670bfb64c779bc0804d8200609ece5042232ed5a860abbfe9b76069",
+      "size": 15588
+    },
+    {
+      "path": "src/kernel/database/migrations.ts",
+      "hash": "6bd2e91bbb7282e79af8f570126c87d601b8417468516df2fb5f5cae7851d269",
+      "size": 16189
+    },
+    {
+      "path": "src/kernel/events/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/kernel/events/event_bus.ts",
+      "hash": "159babd3f6c894becbc4c5dec9c0f9cf0de16c357a18ea12770bf1c3438fe229",
+      "size": 14162
+    },
+    {
+      "path": "src/kernel/events/webhook_delivery.ts",
+      "hash": "8a98c5d0e4d610d1d5c22e7d30693c131516054a76548e0ca50096fa5298d9e6",
+      "size": 14842
+    },
+    {
+      "path": "src/kernel/index.ts",
+      "hash": "5424cd8aed947cc39ebe957425638d66e070f2b92ab2d0e798dc5333163e6255",
+      "size": 10275
+    },
+    {
+      "path": "src/kernel/interfaces/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/kernel/interfaces/audit.ts",
+      "hash": "e00b8e3ff5e68301e34604fbeadeaa8c6d44104f402c9a6c927f3ebf73d9474d",
+      "size": 5559
+    },
+    {
+      "path": "src/kernel/interfaces/capability_manifest.ts",
+      "hash": "7884b5b40f9c3b2615ab9e76be017e58c48bbc36f3d612ca044ba3558208e901",
+      "size": 8393
+    },
+    {
+      "path": "src/kernel/interfaces/common.ts",
+      "hash": "8d062df61b6078d0cfc5cc27df5594447b9b5c24f3058a2992c9c0cf964bf5b4",
+      "size": 3861
+    },
+    {
+      "path": "src/kernel/interfaces/crypto.ts",
+      "hash": "b38862efe5899e425f17e56188ad69e152d03934da5d8658f87a1ff2177f7b34",
+      "size": 3528
+    },
+    {
+      "path": "src/kernel/interfaces/database.ts",
+      "hash": "939fc51fc5696af493d67b3093af422d67d89d136ab7de4057db38a97a2d5ee8",
+      "size": 4910
+    },
+    {
+      "path": "src/kernel/interfaces/eval.ts",
+      "hash": "b2cc2a50ac5057b7c7fc8098dcf8b5e20283235ccb4b59dd0fbe620380987a1a",
+      "size": 4093
+    },
+    {
+      "path": "src/kernel/interfaces/events.ts",
+      "hash": "7a4c31f106460f992dbac42858ddc322ce0cb39931ca3d452e542449412fb237",
+      "size": 2784
+    },
+    {
+      "path": "src/kernel/interfaces/governance_ids.ts",
+      "hash": "bb93169628d5f908fdd977cfd24739628c9f8acb176064fea92cbf74b2f99a0d",
+      "size": 4017
+    },
+    {
+      "path": "src/kernel/interfaces/idempotency.ts",
+      "hash": "cfce4e0f629f434a8c8a0f028dd3bded7bf217b1984fa64f9b3ebd33afd34df2",
+      "size": 6374
+    },
+    {
+      "path": "src/kernel/interfaces/index.ts",
+      "hash": "b5daee3b50517363549d9a0d14d4158e430c66be0b661f688764100beec21855",
+      "size": 3691
+    },
+    {
+      "path": "src/kernel/interfaces/kernel.ts",
+      "hash": "641e91bc88490e0ad2d68e0451a8a7375313637aae327cc1eb6faafcf367b48e",
+      "size": 3262
+    },
+    {
+      "path": "src/kernel/interfaces/lifecycle.ts",
+      "hash": "2a8bfa1f57028b7eb0fd90dccb0ca2e2536258f60fa6c7a89933e45ff0197e55",
+      "size": 6686
+    },
+    {
+      "path": "src/kernel/interfaces/mission_contract.ts",
+      "hash": "c0489f0bce22a1f5c5d328b4a86845d5e4540d535cb025b09baefd17634d5382",
+      "size": 4785
+    },
+    {
+      "path": "src/kernel/interfaces/namespace.ts",
+      "hash": "f101e127f4a5c80fc3e1e0a3d6b879bf42a4431b9cab87f5bf30b6b7f8f2d3c0",
+      "size": 1021
+    },
+    {
+      "path": "src/kernel/interfaces/rate_limiter.ts",
+      "hash": "8dc59d4114a83433a52d0ecf26066e37743ee9a17557a9dcd4d37772a501c4a9",
+      "size": 1530
+    },
+    {
+      "path": "src/kernel/interfaces/rbac.ts",
+      "hash": "103c68b59f472aeadeaf776b79cf461a50aab077a516c9c21d9c8914a20bbc5b",
+      "size": 2501
+    },
+    {
+      "path": "src/kernel/interfaces/retention.ts",
+      "hash": "29c0d7347502021fb8393b25ae9d0f28b4c9d768c4ef6f27917297af501b4011",
+      "size": 2161
+    },
+    {
+      "path": "src/kernel/interfaces/run_identity.ts",
+      "hash": "7e997d9a159ba04e4ebb6259e92e9fdcc5fb942b083763a90d9e2cad037e82c0",
+      "size": 5829
+    },
+    {
+      "path": "src/kernel/interfaces/supervisor.ts",
+      "hash": "1083ecd5c7617a01e4458a855e8a8958a3627a6ddfad618b91c6d06656196a23",
+      "size": 8377
+    },
+    {
+      "path": "src/kernel/interfaces/tenant.ts",
+      "hash": "2bd8e8b143286317292b1ff6bd5354b307d0b3b315d36156c18915b66682f945",
+      "size": 1428
+    },
+    {
+      "path": "src/kernel/interfaces/time.ts",
+      "hash": "5d438946abe61566930785eebc3b92f2cd9c0712f1f2a697523c0204aeb640d2",
+      "size": 1170
+    },
+    {
+      "path": "src/kernel/interfaces/trace.ts",
+      "hash": "8084052dd71c0cf3496aeb5cb83e2b7c4c000a4e66009a0d1730903f417dbc45",
+      "size": 10725
+    },
+    {
+      "path": "src/kernel/namespace/namespace_enforcer.ts",
+      "hash": "b8f41cb3caf9cea51dbafab37e030874be8686be510faf4fcc01ded495bab8f8",
+      "size": 3107
+    },
+    {
+      "path": "src/kernel/rate_limiter/rate_limiter.ts",
+      "hash": "5606e429ef61b4b358cdee374e3e766e123064e5d64ad0feed98b0b22aa102da",
+      "size": 6555
+    },
+    {
+      "path": "src/kernel/rbac/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/kernel/rbac/rbac_engine.ts",
+      "hash": "d87c9c0abf07bc5249cf558b28d3a7935d7d5b4b21502e459ce12323e3114579",
+      "size": 9480
+    },
+    {
+      "path": "src/kernel/retention/retention_scheduler.ts",
+      "hash": "659facd9b6037b9eb1a7e5f48c19f07164ba19ab54d6617ecf055124e79b19cf",
+      "size": 10522
+    },
+    {
+      "path": "src/kernel/tenant/tenant_context.ts",
+      "hash": "d0971cae0c0c273cad974f4dd89e92ee9887a16b6ba62024d354c2c12c7768e1",
+      "size": 3855
+    },
+    {
+      "path": "src/kernel/tenant/tenant_scope.ts",
+      "hash": "2ffbd0e5f513f1d27ec803bff9d535346e20632c6b32e341b5baa7c80deeab4f",
+      "size": 7765
+    },
+    {
+      "path": "src/kernel/time/time_provider.ts",
+      "hash": "ca3077dab965c4994565dde3dc8ce4d2af4609047787fe931bf3fc2ebab69e24",
+      "size": 1837
+    },
+    {
+      "path": "src/learning/applicator/technique_applicator.ts",
+      "hash": "8ca138254eef0105a44396a6cae0d4d1da7557c67e35e24e7b4d61504203ff2a",
+      "size": 9820
+    },
+    {
+      "path": "src/learning/cold_start/cold_start_manager.ts",
+      "hash": "8ecf92fcb56f2b7a0932bfb51b643ec65347887e531a36b37aeff42f30d16305",
+      "size": 7337
+    },
+    {
+      "path": "src/learning/cycle/learning_cycle_orchestrator.ts",
+      "hash": "1d18f29d92b3dfcd1d20fa225663030ff31f07f57fb034cd58d5fa9759e22913",
+      "size": 8402
+    },
+    {
+      "path": "src/learning/extractor/technique_extractor.ts",
+      "hash": "1e29c6d47b76311e95f43afabbffd930fddeb5d3a89add8e7861aee61d1a9ba9",
+      "size": 15837
+    },
+    {
+      "path": "src/learning/harness/learning_harness.ts",
+      "hash": "199a7100d496031cae6fa92d3c482b8442ff1cbb892e323a610590b85dbb497a",
+      "size": 2683
+    },
+    {
+      "path": "src/learning/interfaces/index.ts",
+      "hash": "2cb5aa28da21a7cf396c868e937c5e83982a11929bb24f387a17b06204355272",
+      "size": 1828
+    },
+    {
+      "path": "src/learning/interfaces/learning_types.ts",
+      "hash": "cc966111eaf8350da7fe36a8f4e1015ded82467b37c52d53e77e1db6d1db08e0",
+      "size": 19539
+    },
+    {
+      "path": "src/learning/migration/007_learning_techniques.ts",
+      "hash": "86777d1a86d8336ed293f1554676353c626a7e0669e917f6d0d5b3a1aaefdaf2",
+      "size": 4330
+    },
+    {
+      "path": "src/learning/migration/008_learning_outcomes.ts",
+      "hash": "e882d76c6a79f12cd7133c960eb5e8081f2bbc09544d90271e131e8ae9c46409",
+      "size": 3968
+    },
+    {
+      "path": "src/learning/migration/009_learning_applications.ts",
+      "hash": "7e399976759f3b71b129a32b6232ca01de94e4872b7eb20cf52fc8d23d8122a3",
+      "size": 4090
+    },
+    {
+      "path": "src/learning/migration/010_learning_quarantine.ts",
+      "hash": "6d06a154423ad8611f5c9b860144f4c9c584f8d7f142d8ac4c16bcdf60b96958",
+      "size": 3806
+    },
+    {
+      "path": "src/learning/migration/011_learning_transfers.ts",
+      "hash": "089669415080e82a198c4c1b33855debc57a4e5fdfa8c0db3234e973ece0d749",
+      "size": 3807
+    },
+    {
+      "path": "src/learning/quarantine/quarantine_manager.ts",
+      "hash": "ad6fb45e84920076447cf7b2b5d8b22e7da898ea591028248859cab09d5f2c89",
+      "size": 9612
+    },
+    {
+      "path": "src/learning/retirement/retirement_evaluator.ts",
+      "hash": "1bdc6af174377e15d296b4ed726f7cd7121d98dcc4dc2862aa879e6a2244d593",
+      "size": 6383
+    },
+    {
+      "path": "src/learning/specialization/over_specialization_detector.ts",
+      "hash": "e252af097589930669783d8456230035bba38fbaa124342592f5218fd86e153a",
+      "size": 4258
+    },
+    {
+      "path": "src/learning/store/technique_store.ts",
+      "hash": "e89d107561f19a43284f3eb7942a8f26d2c0a09a5a67426b98b9a842f49652ab",
+      "size": 14983
+    },
+    {
+      "path": "src/learning/tracker/effectiveness_tracker.ts",
+      "hash": "b5e929f692bea1ea3178ab13758b705c4168fb7e6fac0adba1540cb8355a2051",
+      "size": 7430
+    },
+    {
+      "path": "src/learning/transfer/cross_agent_transfer.ts",
+      "hash": "f446b2e1664af73b0b9b85d97f3f340f3a003474fb79631308d3b1899ff1822a",
+      "size": 10608
+    },
+    {
+      "path": "src/orchestration/artifacts/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/orchestration/artifacts/artifact_store.ts",
+      "hash": "a8eee510028829df9efba370fcf18a4a0cb1a779a39bef0c57bbd671eb576c41",
+      "size": 11493
+    },
+    {
+      "path": "src/orchestration/artifacts/cascade_walker.ts",
+      "hash": "a0f0d038ad65bc40d2b42bef3c3a4e4ac20388da236200b9d19ae3b1b2746c58",
+      "size": 4913
+    },
+    {
+      "path": "src/orchestration/budget/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/orchestration/budget/budget_governance.ts",
+      "hash": "93ddfe783422ac45e2a4773c83a804873d9ae387dc0ae0990c16a85434032e27",
+      "size": 11358
+    },
+    {
+      "path": "src/orchestration/checkpoints/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/orchestration/checkpoints/checkpoint_coordinator.ts",
+      "hash": "11266ab435fba62ab59b37043776c3059bc38facd1aab486ff8bc30653724f74",
+      "size": 12760
+    },
+    {
+      "path": "src/orchestration/checkpoints/drift_engine.ts",
+      "hash": "c35d4997bea7dca4c4409ec77cb6c613eef7920bd7f69bf355f50d817fa53142",
+      "size": 5389
+    },
+    {
+      "path": "src/orchestration/compaction/bounded_cognition.ts",
+      "hash": "268641f885886ea5eb782d5a60f6373a24d9d445f37ea64a4c0d263e4095a9e0",
+      "size": 6933
+    },
+    {
+      "path": "src/orchestration/conversation/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/orchestration/conversation/conversation_manager.ts",
+      "hash": "83b631bd9e1a752f53a2eede9f066bb92bc9253ac35a3fa53853ef7c8582592f",
+      "size": 15165
+    },
+    {
+      "path": "src/orchestration/events/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/orchestration/events/event_propagation.ts",
+      "hash": "24580b56d84be8e43e8b19685d4b3cb717e5cc1fd1e96aee0662b86e69813257",
+      "size": 8597
+    },
+    {
+      "path": "src/orchestration/index.ts",
+      "hash": "ee29e92331dd94b9d4299000b7611891ee17dce4637db21aae2dc878627a828a",
+      "size": 10330
+    },
+    {
+      "path": "src/orchestration/interfaces/orchestration.ts",
+      "hash": "35d6e6857d68e663d61b917917316858087b06a1dee5834199bb5753df722dbf",
+      "size": 25934
+    },
+    {
+      "path": "src/orchestration/migration/003_orchestration.ts",
+      "hash": "03d7ccc40f1df0022ae2860c09a33912bf634ea062f8fa0548daa28d0ad4427e",
+      "size": 14024
+    },
+    {
+      "path": "src/orchestration/migration/004_tenant_isolation.ts",
+      "hash": "9c585ee95255569bbd7928fd726b6cedfe2e39c0d4b468ddbf32e6b0846c208b",
+      "size": 7572
+    },
+    {
+      "path": "src/orchestration/migration/005_immutability_triggers.ts",
+      "hash": "cd29e3ac99f9869931a3ae5108914cd3fd7a6cbf2af694b22c833542c55d65b9",
+      "size": 4442
+    },
+    {
+      "path": "src/orchestration/migration/006_audit_tombstone.ts",
+      "hash": "42ae16c46ca86a7e4790cdce03be15fb386a10de12be1a6b35741c11c70a383c",
+      "size": 3326
+    },
+    {
+      "path": "src/orchestration/missions/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/orchestration/missions/mission_recovery.ts",
+      "hash": "d9531fb627f45d9fced3bcbbece43d8b535b2023607ea75c55b58dd300d900eb",
+      "size": 9319
+    },
+    {
+      "path": "src/orchestration/missions/mission_store.ts",
+      "hash": "5c84f3b8708b6aae94a33ec4e74a4902f934b383e91df0f7af1a5abf4eb04600",
+      "size": 16100
+    },
+    {
+      "path": "src/orchestration/syscalls/create_artifact.ts",
+      "hash": "e4804b1f67f16bef1abe01a41265f2deae468e8e1d27b339ba78ada62b7ef105",
+      "size": 1124
+    },
+    {
+      "path": "src/orchestration/syscalls/emit_event.ts",
+      "hash": "f402fca87421e274ce6cd2ebbfdd293956c1dc459fbda15f4eedd32a8fb12907",
+      "size": 698
+    },
+    {
+      "path": "src/orchestration/syscalls/propose_mission.ts",
+      "hash": "d0bb03dc866b2a3f41eb06caca60ac855cf5f56a2550739e25a51602cdab779c",
+      "size": 1725
+    },
+    {
+      "path": "src/orchestration/syscalls/propose_task_execution.ts",
+      "hash": "72b4704bad441905d3cd13e695db081cd7c4692193b6412c6989bcde3d1c6fc6",
+      "size": 4563
+    },
+    {
+      "path": "src/orchestration/syscalls/propose_task_graph.ts",
+      "hash": "27acbe3f97ca7ac49b12798e8b794bf690a30fd0994572dd5e5bfa7d405f82ee",
+      "size": 1144
+    },
+    {
+      "path": "src/orchestration/syscalls/read_artifact.ts",
+      "hash": "03ebfa7af6275da4d6cae841a6b69d17d581ce8269f7a78d27a389d9a897b0c9",
+      "size": 1785
+    },
+    {
+      "path": "src/orchestration/syscalls/request_budget.ts",
+      "hash": "b6f53267ee5ea18cec18c1278e07a420b879191eb4e0c7804526e19bb403945c",
+      "size": 2823
+    },
+    {
+      "path": "src/orchestration/syscalls/request_capability.ts",
+      "hash": "f7e0757c4336a3e18437582efacaea85be16c175f6ccaa3e8dfbbe9fcd44f302",
+      "size": 7082
+    },
+    {
+      "path": "src/orchestration/syscalls/respond_checkpoint.ts",
+      "hash": "c06f7456a6f202b64d1f9711610d5cec32ad6c37b40e54e3893780e1f8f1c518",
+      "size": 781
+    },
+    {
+      "path": "src/orchestration/syscalls/submit_result.ts",
+      "hash": "01d2a6ef1b991298b656117ddf1b72cd5e8d4f6d0bb8483913d0d023e07eceac",
+      "size": 5448
+    },
+    {
+      "path": "src/orchestration/tasks/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/orchestration/tasks/task_graph.ts",
+      "hash": "b0d23f3cb9a4d721e7abe7615c65b8ffab937b9c8761f61615d88f9bc21853c4",
+      "size": 12491
+    },
+    {
+      "path": "src/orchestration/tasks/task_store.ts",
+      "hash": "1a5de9df170d73839c12cc2bf321a96e379697963ab55b87f6c9cc1a0b44c107",
+      "size": 5156
+    },
+    {
+      "path": "src/orchestration/transitions/transition_service.ts",
+      "hash": "a3f5b4a1a3bae1bd2e9fc05838760029f93ddaf1628164a3c4635d5b93e7b0e8",
+      "size": 21351
+    },
+    {
+      "path": "src/reference-agent/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/reference-agent/artifact_manager.ts",
+      "hash": "8641cfecc093e3a61606c4ad26fc3826511d8de81e8c907ebb0a9bd1ac7c4050",
+      "size": 7481
+    },
+    {
+      "path": "src/reference-agent/checkpoint_handler.ts",
+      "hash": "b98ca81a66210083ba41db8ad01978799b0bf735c4072691b1a64a47086ed6b5",
+      "size": 19329
+    },
+    {
+      "path": "src/reference-agent/index.ts",
+      "hash": "d4c734c040c94587843be642efcbce0104d86e137244a53da004f90e128ce5b9",
+      "size": 2859
+    },
+    {
+      "path": "src/reference-agent/mission_planner.ts",
+      "hash": "d62bcf55ff5a2c3bfce18d27cbe688de84500fafd885eecd2fc57d36bfe2b1bb",
+      "size": 17854
+    },
+    {
+      "path": "src/reference-agent/reference_agent.ts",
+      "hash": "13ce2e9f29ccf6394493f1db5c123213a0953819d499b7e532f3f9fcf480a47c",
+      "size": 18115
+    },
+    {
+      "path": "src/reference-agent/reference_agent.types.ts",
+      "hash": "c4db4d53dcb72ea82bebde1bc662fcaaa1d3f34a5161fc97067795043b3e72c4",
+      "size": 9864
+    },
+    {
+      "path": "src/reference-agent/result_aggregator.ts",
+      "hash": "0f2d38c1fe78026c16e50236a9a30c95a7c5b90fba6bc6d3168960d5a62420e9",
+      "size": 9175
+    },
+    {
+      "path": "src/reference-agent/system_call_client.ts",
+      "hash": "c6f244069e75b82dea8b9156f2f9c0d9e02db3b7532bbb838b1e48a4f11271c1",
+      "size": 10462
+    },
+    {
+      "path": "src/reference-agent/task_executor.ts",
+      "hash": "0a06faea5db79957213e99de626d3968257dc0f3d9356d078c6d1edd42df64b9",
+      "size": 11934
+    },
+    {
+      "path": "src/substrate/accounting/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/substrate/accounting/resource_accounting.ts",
+      "hash": "89aa6ca7507d850d63548f48e71f67b0750483c89fdccd5edc2d3cd9d7b92c5a",
+      "size": 9054
+    },
+    {
+      "path": "src/substrate/adapters/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/substrate/adapters/capability_registry.ts",
+      "hash": "95c1135c5444dd38118db3e0012a9c6379ddcbe80abbf4f80e09570a690532f2",
+      "size": 8194
+    },
+    {
+      "path": "src/substrate/gateway/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/substrate/gateway/llm_gateway.ts",
+      "hash": "71324434c3c72e9a16be8c6a3e5b68644192513c018b86bd93540c7500c69bb7",
+      "size": 24133
+    },
+    {
+      "path": "src/substrate/heartbeat/heartbeat_monitor.ts",
+      "hash": "841a054c6ed1d99e5cf72025f5394dc2579d471fa62b640cebb9b810feda099c",
+      "size": 7726
+    },
+    {
+      "path": "src/substrate/index.ts",
+      "hash": "02078015335cf864c8858a77297d3157c57515521243d502448580ac2edf8cb0",
+      "size": 8165
+    },
+    {
+      "path": "src/substrate/interfaces/substrate.ts",
+      "hash": "3c20e4b8fffeb7b104b7f1225170112a2d4df724c29ca834033f9d6bbab81ca3",
+      "size": 20235
+    },
+    {
+      "path": "src/substrate/migration/002_substrate.ts",
+      "hash": "2926e7284786767ba23fa8e5d6086d12de6cea4340315f81489005937ce85ab6",
+      "size": 10296
+    },
+    {
+      "path": "src/substrate/migration/022_transport_deliberation.ts",
+      "hash": "9c3277a65cb896d7ae8545601bcd7ebfdab8ba32c298c011d30d0c84e4b625ae",
+      "size": 4156
+    },
+    {
+      "path": "src/substrate/replay/replay_engine.ts",
+      "hash": "9233839ad3d77577a228636a99e3600d63aded7de050aee0a83979ddd1b5b32f",
+      "size": 15675
+    },
+    {
+      "path": "src/substrate/scheduler/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/substrate/scheduler/task_scheduler.ts",
+      "hash": "84c3d3fd9b559b7dbbd5211dad3de3940d2fb406943e7e4d14dba4c2c1cd9553",
+      "size": 23623
+    },
+    {
+      "path": "src/substrate/transport/adapters/anthropic_adapter.ts",
+      "hash": "06100084139b3ef5033dfcf470a119290e465a99a4089c9d27f7fd8d3f12f222",
+      "size": 17059
+    },
+    {
+      "path": "src/substrate/transport/adapters/gemini_adapter.ts",
+      "hash": "9b3cbedcf8cd04bd1025778dcc7f3657577a489c0b267e21b0b67f53a6f7e2d7",
+      "size": 17572
+    },
+    {
+      "path": "src/substrate/transport/adapters/groq_adapter.ts",
+      "hash": "3324e9779c078f1ab30d0f3b4812eb67b6e22c983068f414b313b5bf2636af9f",
+      "size": 7938
+    },
+    {
+      "path": "src/substrate/transport/adapters/mistral_adapter.ts",
+      "hash": "89f83e3651fecacb92c318aa57a70a6470a9d422a6c4b21573b419c246ca0d99",
+      "size": 7981
+    },
+    {
+      "path": "src/substrate/transport/adapters/ollama_adapter.ts",
+      "hash": "8641de094f6a29354792a56d4bf5ab3043146d394214c98617d6c8621c1b0ce0",
+      "size": 13362
+    },
+    {
+      "path": "src/substrate/transport/adapters/openai_adapter.ts",
+      "hash": "0a05f324717d3dab4252eafc47d498d03e7a83bf602356d035ca7858ef4b170a",
+      "size": 17729
+    },
+    {
+      "path": "src/substrate/transport/adapters/openai_compat.ts",
+      "hash": "1b1005b281eb6feb5f57fcbf6122afd7d4031925a4e1d5df07a1cfd43076e426",
+      "size": 12141
+    },
+    {
+      "path": "src/substrate/transport/index.ts",
+      "hash": "bf4aa6982704ed7bbff6d7b71d55946a37a38b05209ab50bcf8a911724ba8976",
+      "size": 1564
+    },
+    {
+      "path": "src/substrate/transport/stream_parser.ts",
+      "hash": "d12c2a21d7de0c4a13e453703e12d3fa82f8cbdfa3901bf13f2f0d735734029e",
+      "size": 11084
+    },
+    {
+      "path": "src/substrate/transport/transport_engine.ts",
+      "hash": "1c03ac241464558e8f8b4238346d356aadac0000cd4d002b9b028fce84ee0f49",
+      "size": 20059
+    },
+    {
+      "path": "src/substrate/transport/transport_types.ts",
+      "hash": "f7e4f5b68ff00fb1c78740453923bb7ae8d2251fef2c32918ec609453b7e360c",
+      "size": 11398
+    },
+    {
+      "path": "src/substrate/workers/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "src/substrate/workers/worker_runtime.ts",
+      "hash": "d0d8fb8077431937358dba2f31be57f8c242aa78f59a4c3b830e9621e8cb2353",
+      "size": 13480
+    },
+    {
+      "path": "src/techniques/harness/tgp_harness.ts",
+      "hash": "07000d3d433a7efa5cb316d73fdc5a4b95f0b7c9e2429287ad742f1acfff1014",
+      "size": 2394
+    },
+    {
+      "path": "src/techniques/interfaces/tgp_types.ts",
+      "hash": "08472d763c44073f907c4234cf60413673bc084ffcf90b51f94dff21f11a07c4",
+      "size": 31334
+    },
+    {
+      "path": "src/techniques/migration/020_tgp_governance.ts",
+      "hash": "cb5a7adb6ca10871bc7762f2cc0b3511b3a25b333e8e19019e1c8009b2404125",
+      "size": 10799
+    },
+    {
+      "path": "src/techniques/store/tgp_stores.ts",
+      "hash": "572baa73ab03221d4edef1360a0a7013efd8b3d103830cb85b2ef91a7b6a59f3",
+      "size": 48108
+    },
+    {
+      "path": "src/working-memory/harness/wmp_harness.ts",
+      "hash": "8054a45b78880b35c9c0a2bf31222e2da20f22dab1a5e5bebd878424483075b3",
+      "size": 4490
+    },
+    {
+      "path": "src/working-memory/interfaces/wmp_types.ts",
+      "hash": "9ef22137188b015575896dba42a23b5751eac3d3533b3c1cbff4589a0ca987f6",
+      "size": 35415
+    },
+    {
+      "path": "src/working-memory/migration/021_wmp.ts",
+      "hash": "d664d17b6e19805f5163a8d980cfdfa9e9832aade9799294e82fe8cbaf6bf454",
+      "size": 5895
+    },
+    {
+      "path": "src/working-memory/stores/wmp_stores.ts",
+      "hash": "08e357d44a8e643d09ea1740fc5b448d88d3f8f020dcc3b24015c4e442bbe835",
+      "size": 43076
+    },
+    {
+      "path": "tests/adversarial/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "tests/api/api_backward_compat.test.ts",
+      "hash": "fd925326342b7f673bacf85b0171022737ae01f92901b7659ffd61c6fcd5bcf7",
+      "size": 5671
+    },
+    {
+      "path": "tests/api/api_chat.test.ts",
+      "hash": "c6b89afa17ca3ee20e52decb675de0d8a02f159a992c68b30700fd8abf35a058",
+      "size": 18136
+    },
+    {
+      "path": "tests/api/api_claims_convenience.test.ts",
+      "hash": "17593ff2998e52e9169bc9a2bf07239767a1142538dc95af27b6bab3c7cd1567",
+      "size": 7026
+    },
+    {
+      "path": "tests/api/api_create_limen.test.ts",
+      "hash": "7d1998bb7a1374cd37844e54b75f33072e9442ff364ebd74c3ce127d4fa8b3fe",
+      "size": 12452
+    },
+    {
+      "path": "tests/api/api_infer.test.ts",
+      "hash": "0e7b21437dd855a21ab3a2dbb1f5e66172e29a107fe50dc52cba4098d1fccedc",
+      "size": 10456
+    },
+    {
+      "path": "tests/api/api_missions.test.ts",
+      "hash": "5adbf8fbb0425be339eb29e78583f85225d0194e789ce3b2bed5abee244e89bf",
+      "size": 6604
+    },
+    {
+      "path": "tests/api/api_wm_convenience.test.ts",
+      "hash": "736e1ffb8ae606b2323d773f9e17dd71ed2cdba8aa1f808a0fea969d6a324c57",
+      "size": 4879
+    },
+    {
+      "path": "tests/api/test_defaults.test.ts",
+      "hash": "e74f975497ab91d1a771e5f2b36f855b57581f49aafbae0e7f0d0d773eb4cfc3",
+      "size": 13708
+    },
+    {
+      "path": "tests/breaker/sprint1_agent_persistence_attacks.test.ts",
+      "hash": "086100ef6e88165a092b9bc42435257fcc7728deb199a7ef13595c8d7940f4b6",
+      "size": 29952
+    },
+    {
+      "path": "tests/breaker/sprint1_cross_feature_attacks.test.ts",
+      "hash": "69a7f5f60e1f0dea4f5375116da9aa08c1669ac2bb78a4fe4f52b5c112ddec31",
+      "size": 20447
+    },
+    {
+      "path": "tests/breaker/sprint1_memory_evidence_attacks.test.ts",
+      "hash": "3c9ee1564df4412a37b6658a1d23ab4a5d0f5655e8b1cdc829cdc73b76993117",
+      "size": 28852
+    },
+    {
+      "path": "tests/breaker/sprint2_admin_guard_trigger_attacks.test.ts",
+      "hash": "1ca0be4dd2a773f65425a8850524e6a0f6d79327fc9e3b3643979aa49b09f955",
+      "size": 19565
+    },
+    {
+      "path": "tests/breaker/sprint2_interaction_recording_attacks.test.ts",
+      "hash": "e2530c7696bb57a7e14d13d68957f2bf9713b657d9b511f3b699be6597174ecb",
+      "size": 21149
+    },
+    {
+      "path": "tests/breaker/sprint2_learning_pipeline_attacks.test.ts",
+      "hash": "25f70d16930faf53f988252aa3ad0972c24025c37204e03a0f88fd10653e6d3b",
+      "size": 21291
+    },
+    {
+      "path": "tests/breaker/sprint2_safety_violation_attacks.test.ts",
+      "hash": "d8d4a83fde3416a747a39e60fac3d8743c958f506d363c8b4bcf254a04b025ef",
+      "size": 25375
+    },
+    {
+      "path": "tests/breaker/sprint2_trust_progression_attacks.test.ts",
+      "hash": "40a2c39b9c63ffcf696269524daa993b72afecbdff9282382d3c5097c5c3e30b",
+      "size": 36158
+    },
+    {
+      "path": "tests/breaker/sprint3_cascade_attacks.test.ts",
+      "hash": "2ca9f4df391d238ee04883195525dc1e44259449389dfbdc3d6215ad423dc195",
+      "size": 37028
+    },
+    {
+      "path": "tests/breaker/sprint3_drift_attacks.test.ts",
+      "hash": "ebffa9328ab31da252c1aa6ed802a58d175c528d9ab736908b3aa037bdd4ba5a",
+      "size": 32725
+    },
+    {
+      "path": "tests/breaker/sprint3_migration_attacks.test.ts",
+      "hash": "39db96e075c983c2028f45a5d6a65eb502f2d13569e6ea1fe19bea9fb64ac52b",
+      "size": 21803
+    },
+    {
+      "path": "tests/breaker/sprint4_mission_recovery_attacks.test.ts",
+      "hash": "81fe97ad6dc6a076fd8b63082d789d0fcbac32847d2cfc4ab9c3d6ba1264dbba",
+      "size": 33389
+    },
+    {
+      "path": "tests/breaker/sprint4_pipeline_migration_attacks.test.ts",
+      "hash": "b73cb5c47579010e5bfafe3eeba125aad363e6a0347070dbafaf9168a2bb70fb",
+      "size": 28212
+    },
+    {
+      "path": "tests/breaker/sprint4_replay_engine_attacks.test.ts",
+      "hash": "db6da24e443bb0a167cd9561b2f3c15759448369ae8665c871e840ff7637240d",
+      "size": 34828
+    },
+    {
+      "path": "tests/breaker/sprint5_cost_tracker_attacks.test.ts",
+      "hash": "a64f1a8e4026b0dc99d852b79aa60403d901239cb87e7cb10a645fe4a41ac12d",
+      "size": 19195
+    },
+    {
+      "path": "tests/breaker/sprint5_latency_harness_attacks.test.ts",
+      "hash": "99d58ec5e60a55942a766f76989b753994b2f3dd8aefcdf5a9e418b0be0f2b20",
+      "size": 17333
+    },
+    {
+      "path": "tests/breaker/sprint5_webhook_delivery_attacks.test.ts",
+      "hash": "82bf34265f131c6309c9b3028dbf62b4024f633ca80e38179e16650138b7daba",
+      "size": 28680
+    },
+    {
+      "path": "tests/breaker/sprint6_reference_agent_llm_attacks.test.ts",
+      "hash": "8652fe733780b0a4fa1fda55924590f8993e00aac4bbdf58fc2e79485eba39c6",
+      "size": 59029
+    },
+    {
+      "path": "tests/contract/test_contract_029_learning.test.ts",
+      "hash": "bd549d26e09fb78950e09d36843b471407ca76a4ffe625b75593d90517bfeae9",
+      "size": 56034
+    },
+    {
+      "path": "tests/contract/test_contract_029_learning_extractor_edge.test.ts",
+      "hash": "b645fbf451631c5f4d03f88aeb92ed5a75331362d79c6a67d7b72090c51c5cfd",
+      "size": 15233
+    },
+    {
+      "path": "tests/contract/test_contract_agent_persistence.test.ts",
+      "hash": "0d941cc8b296fff5ee3f5f5c163bfb1c45f7a6fdd70972fc8be0709f265df1ef",
+      "size": 12801
+    },
+    {
+      "path": "tests/contract/test_contract_capability_manifest.test.ts",
+      "hash": "acb3a3a95819d7d1365902cbb6fc7370a064658759421075d27d40d5bec1a23f",
+      "size": 13379
+    },
+    {
+      "path": "tests/contract/test_contract_cascade_walker.test.ts",
+      "hash": "4fe90279c8866e8388e6d77e9271cb347c3d94e6e40c78be2b36bfb0d49b61dc",
+      "size": 18957
+    },
+    {
+      "path": "tests/contract/test_contract_ccp.test.ts",
+      "hash": "cf7797288eb9c18add650dbf9493f7e52d4ba9e953be90ac0b1764306883f9b2",
+      "size": 139892
+    },
+    {
+      "path": "tests/contract/test_contract_ccp_events.test.ts",
+      "hash": "cf60e0b53b1780ae4b95a19c0bd719513450c793f0cb7f6fd336a46f56eadb7d",
+      "size": 11000
+    },
+    {
+      "path": "tests/contract/test_contract_ccp_governance.test.ts",
+      "hash": "fd9d48b702db11b2310e13b6bc8608f033e7eefc5a6ab5bda287bf2c93a9b951",
+      "size": 59043
+    },
+    {
+      "path": "tests/contract/test_contract_cgp.test.ts",
+      "hash": "61cbf96d63dccf909fad7ebb5c420ede423269e58056800e17db4f903278f502",
+      "size": 172585
+    },
+    {
+      "path": "tests/contract/test_contract_collect_candidates.test.ts",
+      "hash": "4100a9aa3f152b4371a84801ea9bc510f92fcc75868b434074e491f15451242c",
+      "size": 11355
+    },
+    {
+      "path": "tests/contract/test_contract_cost_tracker.test.ts",
+      "hash": "417f05d6408ada7dc4e0443645594ac9ea73a73ace6dd13e29af69bdd920c7c1",
+      "size": 8579
+    },
+    {
+      "path": "tests/contract/test_contract_dba.test.ts",
+      "hash": "c206bc1780fd1861bb3d2de364c6ddaae8b15e837b31f1c6fad6c3998df46ba1",
+      "size": 55165
+    },
+    {
+      "path": "tests/contract/test_contract_drift_engine.test.ts",
+      "hash": "22f0689a1d382776f15224ba118b44783d47700b97e2c79caf35dec5f85690e8",
+      "size": 18238
+    },
+    {
+      "path": "tests/contract/test_contract_egp.test.ts",
+      "hash": "66d86b68c6b3cdb3c8d051c36fd6334e2b7b93f0737a0c4c1fed70dcf29792d0",
+      "size": 142041
+    },
+    {
+      "path": "tests/contract/test_contract_error_model.test.ts",
+      "hash": "cd6c19d29ec165f4138615f2a8c84de1dae3e730a3bf25c6e45a79a9a527739e",
+      "size": 24884
+    },
+    {
+      "path": "tests/contract/test_contract_eval.test.ts",
+      "hash": "d14a40e4f99736161314daffd765082694bd4429b1322b67f12cb5dc18a26e4a",
+      "size": 12813
+    },
+    {
+      "path": "tests/contract/test_contract_evidence_validators.test.ts",
+      "hash": "906925588740e4288dfb455a249784b643cc1aa9d14996da9ba38820eb9fc540",
+      "size": 12077
+    },
+    {
+      "path": "tests/contract/test_contract_governance_cross_cutting.test.ts",
+      "hash": "fb35849646ac0962c9bbbb688b5fa2e48d76a328c6744711b61bb7ade3b0b6ce",
+      "size": 28527
+    },
+    {
+      "path": "tests/contract/test_contract_governance_ids.test.ts",
+      "hash": "81740fe71fc1a53efd95be55d2728700d0cc3a3744222742b66ad2060fc411d1",
+      "size": 8609
+    },
+    {
+      "path": "tests/contract/test_contract_idempotency.test.ts",
+      "hash": "088f61525887c211b73c08057eae5c8b50154635ddad2cfc8fedccaee02e5d65",
+      "size": 18686
+    },
+    {
+      "path": "tests/contract/test_contract_interaction_recording.test.ts",
+      "hash": "cdc59171e8fe4617e89503c7dc516ca43bdedb1c9e229b6ee07b19c189b9d53e",
+      "size": 9602
+    },
+    {
+      "path": "tests/contract/test_contract_latency_harness.test.ts",
+      "hash": "c11cb75e7bb5971e34db123a4704dd2cd0cf868509e761c959d3b1080f24a2aa",
+      "size": 10601
+    },
+    {
+      "path": "tests/contract/test_contract_lifecycle.test.ts",
+      "hash": "5b34baaf7789002f94b3b45b56cf928b597fc04b8edb2d06ac87c42d85eefb86",
+      "size": 24493
+    },
+    {
+      "path": "tests/contract/test_contract_mission_contract.test.ts",
+      "hash": "b9b537552eba7f6467235c1185d8cadf1f5bd324c89d83a2c2b929c8a555652b",
+      "size": 14549
+    },
+    {
+      "path": "tests/contract/test_contract_mission_recovery.test.ts",
+      "hash": "03ab0611f42f11a6de5e43c78c3ae825da26dc7a24e268fea7ca16158fce89d8",
+      "size": 15108
+    },
+    {
+      "path": "tests/contract/test_contract_pipeline_determinism.test.ts",
+      "hash": "43de3640aac6aae9cad73931161a8494df67d956ec5f1514a6c8b2a8b5ded6e6",
+      "size": 10853
+    },
+    {
+      "path": "tests/contract/test_contract_reference_agent_llm.test.ts",
+      "hash": "192f0f066cb81b6630014b7f925e866ae42e5660fb500443fc1002f24c669a1b",
+      "size": 33591
+    },
+    {
+      "path": "tests/contract/test_contract_replay_engine.test.ts",
+      "hash": "c2520d37c716e6324c80da5191c855049f769369c76a4aead8312623a71dfc43",
+      "size": 16996
+    },
+    {
+      "path": "tests/contract/test_contract_run_identity.test.ts",
+      "hash": "af0d92637087a8ce573505591a4e7263afcf509696f475b5042e2dd401267c74",
+      "size": 17910
+    },
+    {
+      "path": "tests/contract/test_contract_sc10_respond_checkpoint.test.ts",
+      "hash": "8ae3044245821d2cf1e38e15a732375b964acc2004612b4e859e606b94f1b95a",
+      "size": 30281
+    },
+    {
+      "path": "tests/contract/test_contract_sc1_propose_mission.test.ts",
+      "hash": "2172cfa0f6eb03973c914202d6346a1e68e0bd9cefb25d9b710df0b87ff985ac",
+      "size": 34426
+    },
+    {
+      "path": "tests/contract/test_contract_sc2_propose_task_graph.test.ts",
+      "hash": "ea18ede5d45d568984bbb21310ef579e0006abf325b7c4cb85d608a26f4075bc",
+      "size": 29642
+    },
+    {
+      "path": "tests/contract/test_contract_sc3_propose_task_execution.test.ts",
+      "hash": "9fd35f88f3aced2fcbb77bb825c7cc6a11f4d958e286299cae1001159c874b0a",
+      "size": 25681
+    },
+    {
+      "path": "tests/contract/test_contract_sc4_create_artifact.test.ts",
+      "hash": "4e1ad536d16a1e85ef208a26951c93e5fe72db3922404c5d798087658b9ec1c3",
+      "size": 26016
+    },
+    {
+      "path": "tests/contract/test_contract_sc5_read_artifact.test.ts",
+      "hash": "f5f9899ed08b067dd27b980ed496229d406690fb12481127506f56f788294eeb",
+      "size": 20780
+    },
+    {
+      "path": "tests/contract/test_contract_sc6_emit_event.test.ts",
+      "hash": "042fd7194f14044faec488071383ac18ab47083e5f97880ff2ca7fcfbde5ef4f",
+      "size": 21244
+    },
+    {
+      "path": "tests/contract/test_contract_sc7_request_capability.test.ts",
+      "hash": "42a6f1f65eae5af1ffe441d1a9f23d5e1616964bd04ef069d26d19f5345e0356",
+      "size": 46168
+    },
+    {
+      "path": "tests/contract/test_contract_sc8_request_budget.test.ts",
+      "hash": "3d9968fde061756176217568ee0110964d83de985e4b4fef30090f76f99f90f2",
+      "size": 43350
+    },
+    {
+      "path": "tests/contract/test_contract_sc9_submit_result.test.ts",
+      "hash": "fe50be181b2eaaa2796ff0879b77a0935cdc897aabecf84aca4fd42266bf04b8",
+      "size": 53663
+    },
+    {
+      "path": "tests/contract/test_contract_supervisor.test.ts",
+      "hash": "37d1366b170a7b71b0ddb92c27f7fb01abae3d53b447bbdb620b671e53b8f9bf",
+      "size": 20813
+    },
+    {
+      "path": "tests/contract/test_contract_tgp.test.ts",
+      "hash": "afacb31eaad06948f335edf76d8727c89a28af31bda118724200c056962d9bf7",
+      "size": 103306
+    },
+    {
+      "path": "tests/contract/test_contract_trace.test.ts",
+      "hash": "9ad6e69ac71f3c6b233fed347e7733d613831981449f5bd6b2a271e42ca628b5",
+      "size": 27783
+    },
+    {
+      "path": "tests/contract/test_contract_trust_progression.test.ts",
+      "hash": "2f2841981bd7530b34f0a82bf5dc72ac6bc15e1c0ccf4b67b6e79bee643a7ec0",
+      "size": 20866
+    },
+    {
+      "path": "tests/contract/test_contract_webhook_delivery.test.ts",
+      "hash": "2383862e15de7323834307c7947771965fa5a339cd958868616617d69f401c11",
+      "size": 12475
+    },
+    {
+      "path": "tests/contract/test_contract_wmp.test.ts",
+      "hash": "25fe254af48965449b1f9532de7939aa177e12cd99e31e917c153be71b3bfa05",
+      "size": 85052
+    },
+    {
+      "path": "tests/contract/test_contract_wmp_extensions.test.ts",
+      "hash": "338089b12c99e61cb013b60937eda5a328af15e50fc5a74605b4d56c827d509f",
+      "size": 79513
+    },
+    {
+      "path": "tests/contract/test_governance_migrations.test.ts",
+      "hash": "6ff4d6eb0a74b073d65266e680bcee2ad2cb2e9d88d60a12212574c795776bf6",
+      "size": 22656
+    },
+    {
+      "path": "tests/contract/test_integration_cgp_ccp.test.ts",
+      "hash": "c2ff3e09fbdfb02ace03053cdede1915416a0684550269a72287be575509e7e8",
+      "size": 37990
+    },
+    {
+      "path": "tests/contract/test_integration_cgp_dba.test.ts",
+      "hash": "cfa4cfca483c486b33059fca700d4ab84014e856908e2259138afe284804c93f",
+      "size": 33979
+    },
+    {
+      "path": "tests/contract/test_integration_cgp_wmp.test.ts",
+      "hash": "dfe7e5c7bd55ccf13002f676f3b766cc54500cea34594f3d676bf4d7ff498a08",
+      "size": 21015
+    },
+    {
+      "path": "tests/contract/test_integration_egp_execution.test.ts",
+      "hash": "583fa6b3c58d39a023fa1078d5360bdaf76606e1ab0e418fd781427615dabb59",
+      "size": 28812
+    },
+    {
+      "path": "tests/contract/test_integration_tgp_pipeline.test.ts",
+      "hash": "1ca82bc7a72f9e9d1d2d6013a5f959d2b863d8ffa707335b7689e41b78c882e4",
+      "size": 28451
+    },
+    {
+      "path": "tests/contract/test_integration_tgp_pipeline_wiring.test.ts",
+      "hash": "e4f1c7e0331dd37e5b6c12c594459cf21f36b4d80a29fa39c4461d91f513572c",
+      "size": 19631
+    },
+    {
+      "path": "tests/contract/test_p0a_individual_fixes.test.ts",
+      "hash": "5628c3f6b9d85f2364f55303d1c9874234f94843af39ac117ba7ffc896a0de16",
+      "size": 10740
+    },
+    {
+      "path": "tests/contract/test_p0a_module_state.test.ts",
+      "hash": "427f6841b6d380c4a81cf9eb6299af2fda2c208fb58648f852f30a5485240d84",
+      "size": 3271
+    },
+    {
+      "path": "tests/contract/test_p0a_rewiring.test.ts",
+      "hash": "f8ee7a3b4140a77907211f95c42f4950cec972fa78b8c82be42df17e591a43b2",
+      "size": 22155
+    },
+    {
+      "path": "tests/contract/test_p0a_transition_service.test.ts",
+      "hash": "06e8300faac414f58aa6bef4e2eea12999785de268114a523358c9e9d158b979",
+      "size": 29581
+    },
+    {
+      "path": "tests/contract/test_phase4_governance_wiring.test.ts",
+      "hash": "d9f57fa5a6e1c72a687a0cfeffc898052dd7e80b213e65c811ed95f4365bb7ca",
+      "size": 50764
+    },
+    {
+      "path": "tests/contract/test_phase5_sprint5a.test.ts",
+      "hash": "cd16f4a1c361b37a0aa4adcc0f2b4567f1791395c2f28f5c3791c84d1d296914",
+      "size": 79717
+    },
+    {
+      "path": "tests/contract/test_phase5_sprint5b.test.ts",
+      "hash": "468f0322b46deece1f6bd82467f032136e81efef260a90fae45005527c583a5e",
+      "size": 66864
+    },
+    {
+      "path": "tests/contract/test_phase5_sprint5c.test.ts",
+      "hash": "e62e31284f8835efd98fa468db9101bb68414d1715492a1e7d033bf8aaa10e97",
+      "size": 55763
+    },
+    {
+      "path": "tests/failure-modes/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "tests/gap/test_gap_001_tenant_isolation.test.ts",
+      "hash": "d8fcf4779a637da757b245ef76b4977584e0bd3c1104980b872612fa67704d50",
+      "size": 7280
+    },
+    {
+      "path": "tests/gap/test_gap_002_mission_validation.test.ts",
+      "hash": "e35a95a8f497495dec6c2f9c2e39a254e05eced9f73aa152489f78b72fd795f9",
+      "size": 11130
+    },
+    {
+      "path": "tests/gap/test_gap_003_dag_validation.test.ts",
+      "hash": "d3aa686cde31f3360e0d0907fa7fa907f808f6b38f967a10efadaf24ef015e9d",
+      "size": 5301
+    },
+    {
+      "path": "tests/gap/test_gap_004_audit_tamper.test.ts",
+      "hash": "7934c3d0e58bad5536899ca60b415acd0bc31e21eaddcb740fe6397f69cd2de4",
+      "size": 7509
+    },
+    {
+      "path": "tests/gap/test_gap_005_budget_enforcement.test.ts",
+      "hash": "9c7ccf6a3b0e6946db45fba41c005a05c5d48bfbf7cefcd86e945302674640be",
+      "size": 9428
+    },
+    {
+      "path": "tests/gap/test_gap_006_learning_formulas.test.ts",
+      "hash": "c0054e727aba56e9fae3eafa8b6c7f2a8d7ec1fef1c70add3f18dfbb1a611777",
+      "size": 5668
+    },
+    {
+      "path": "tests/gap/test_gap_007_checkpoint_governance.test.ts",
+      "hash": "5fc63798bf416bf62d4f05a4a0fda08e2b00d54fdb14f06eafce0b01d0743e4a",
+      "size": 11191
+    },
+    {
+      "path": "tests/gap/test_gap_008_conversation_isolation.test.ts",
+      "hash": "babeea39ba1c32bd869daf59316493407099054a72bf54fc84eae50258ea208b",
+      "size": 6467
+    },
+    {
+      "path": "tests/gap/test_gap_009_cross_tenant_isolation.test.ts",
+      "hash": "131efe1720f9acc00fb0adb3906990af17bc3f03e675e825ab1b0e6861f992d8",
+      "size": 33243
+    },
+    {
+      "path": "tests/gap/test_gap_010_migration_v13_verification.test.ts",
+      "hash": "03af8e5e13cc920c18801164e40be19973228b6d86facd0a1415fda61c9b7b03",
+      "size": 13448
+    },
+    {
+      "path": "tests/gap/test_gap_011_system_operations.test.ts",
+      "hash": "cd95b88b4ed25ba822ae875171a9a297a4dac4df426f976329821e3f37502f99",
+      "size": 13790
+    },
+    {
+      "path": "tests/gap/test_gap_012_adversarial_tenant.test.ts",
+      "hash": "f2ffc05a2011116af0fa21b8355f5544c758c1b129ef6f407c1d22afc54cb940",
+      "size": 15165
+    },
+    {
+      "path": "tests/gap/test_gap_013_mutation_tests.test.ts",
+      "hash": "694d99742b1fa4e4f0c9d22f3b7b50f9ee073faca75fbbb201fc1f67f3248da5",
+      "size": 10254
+    },
+    {
+      "path": "tests/gap/test_gap_014_public_api_boundary.test.ts",
+      "hash": "b390a2037bef6d8a37ce4502a0ec2a1ffb9a4836c7c49e9bc9dbd8b00b433260",
+      "size": 19314
+    },
+    {
+      "path": "tests/gap/test_gap_015_security_enforcement.test.ts",
+      "hash": "cd1d97a08b9d7fa408a60ea53b54e18f88bae9fa84df97772a2137ff7902270e",
+      "size": 33857
+    },
+    {
+      "path": "tests/gap/test_gap_016_enforcement_mechanisms.test.ts",
+      "hash": "c507fbc7e4ed7a36dfdcc70fafc2ab9167c2e1732229d675ce3441401265ede8",
+      "size": 28524
+    },
+    {
+      "path": "tests/gap/test_gap_017_governance_completion.test.ts",
+      "hash": "3d9a6e5286b38fe19ed4f1e94c61117fd1f197b5557f18e30f71af40e858540f",
+      "size": 24566
+    },
+    {
+      "path": "tests/gap/test_gap_018_data_integrity.test.ts",
+      "hash": "cd487741b005955e88449bd9ffbd4790faad247cd440907fb03148234419e645",
+      "size": 41469
+    },
+    {
+      "path": "tests/gap/test_gap_019_sc_error_codes.test.ts",
+      "hash": "9cd9625da0ca0d6c59cad9dd140144cdeb9f91068f099723e6e7a8800515ee4c",
+      "size": 33008
+    },
+    {
+      "path": "tests/gap/test_gap_breaker_debt2_rejections.test.ts",
+      "hash": "49bf078556afc0c221b080b40ecf5ffa90d1fb168af9cb16593e43d148ed1840",
+      "size": 14683
+    },
+    {
+      "path": "tests/helpers/governance_test_helpers.ts",
+      "hash": "17b1f3acb9c95466715fddf1b53feffafd39adc96283537a62abb269d70c599c",
+      "size": 2020
+    },
+    {
+      "path": "tests/helpers/mock_gateway.ts",
+      "hash": "34a777afec044c344c24bcf6efb323897d68d0998c3085b5e32b528292bb31bc",
+      "size": 3262
+    },
+    {
+      "path": "tests/helpers/test_database.ts",
+      "hash": "9440b853e1c2ce23231ca3a507d2060f0ffe1ba3fb539d187db8bf742aa0314a",
+      "size": 19416
+    },
+    {
+      "path": "tests/helpers/test_database_smoke.test.ts",
+      "hash": "f22b63a9e34f11307151e2b4f37c8c50da931ed6be16566a21dc21be6ae0eb89",
+      "size": 7310
+    },
+    {
+      "path": "tests/integration/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "tests/integration/test_learning_tracker_retirement.test.ts",
+      "hash": "2fe0b010efaec90560901941327322dfe2e0ed73f1e6d0b3e335c595abd8af0c",
+      "size": 27385
+    },
+    {
+      "path": "tests/integration/test_phase3_e2e_failure_scenarios.test.ts",
+      "hash": "6c7c2446d251ab3040a26fff9ec6912604d3cd24410b06501848bfdc5c2f90b1",
+      "size": 44497
+    },
+    {
+      "path": "tests/integration/test_phase3_e2e_lifecycle.test.ts",
+      "hash": "a9ce9b9a1d159db4e41dbc93145b76876341669d9a5d14efc73138cee5aefa40",
+      "size": 48660
+    },
+    {
+      "path": "tests/integration/test_phase3_e2e_recursive_mission.test.ts",
+      "hash": "c377265dd146ff739e2c02b702cb17327feb6e7cc109979353e1aacb8e92805a",
+      "size": 63667
+    },
+    {
+      "path": "tests/integration/test_phase5_sprint5d_integration.test.ts",
+      "hash": "b5f0df91a4ecfcc64eb3c9f2332d78b48902297e9eab84c342067ec4bc61f18d",
+      "size": 47547
+    },
+    {
+      "path": "tests/integration/uc01_chat_assistant.test.ts",
+      "hash": "412dacec97bd57b87cca6eb33fa0f94e6502d76869ca04a774587463c8a0ee20",
+      "size": 7997
+    },
+    {
+      "path": "tests/integration/uc08_structured_automation.test.ts",
+      "hash": "889c4c1858228c7734417858572ab88ad4cb1e5c277630adc9dd91d6f802bed8",
+      "size": 9677
+    },
+    {
+      "path": "tests/integration/uc10_recursive_mission.test.ts",
+      "hash": "3d7548789af482f89468c77d2ca5da256be78c2594d70b024d5a3041f6593a2b",
+      "size": 13326
+    },
+    {
+      "path": "tests/invariants/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "tests/invariants/i01_single_dependency.test.ts",
+      "hash": "f10d9f61672f439b5b67479da96bc39b6dbb4ff78f16c38b5696ee1a82005132",
+      "size": 7404
+    },
+    {
+      "path": "tests/invariants/i04_provider_independence.test.ts",
+      "hash": "a88fc7af5bbba60f1206ce54ca72c03c66e69ddd0fc38f4b2dc55cf24690ee23",
+      "size": 10995
+    },
+    {
+      "path": "tests/invariants/i05_transactional_consistency.test.ts",
+      "hash": "3baec152f932e67aba354087142262186b84f4758dbea96cb511636f227965ea",
+      "size": 9597
+    },
+    {
+      "path": "tests/invariants/i11_encryption_at_rest.test.ts",
+      "hash": "a3e258026e08180cbfb8e994d0ca1c3101c96ae2b436cde3d611601f7da5aa24",
+      "size": 11586
+    },
+    {
+      "path": "tests/invariants/i18_mission_persistence.test.ts",
+      "hash": "d8baa46ca592e2b8d2038a3fb15c3b8fe36e0cd070b0cf6ee791d0bc73e70879",
+      "size": 13225
+    },
+    {
+      "path": "tests/invariants/i19_artifact_immutability.test.ts",
+      "hash": "f7837dc124ec1f2bd83d819752f72bce848b4be9fcba5bbeed206194f0d8adf6",
+      "size": 19266
+    },
+    {
+      "path": "tests/invariants/i23_artifact_dependency_tracking.test.ts",
+      "hash": "8cfe01c760add94a587b4a822751d7df6412c0972f0f986b8adb14d10ba4b935",
+      "size": 16313
+    },
+    {
+      "path": "tests/invariants/i24_goal_anchoring.test.ts",
+      "hash": "bcdeb29053a25bd4342cf205ee019139ebda90b54085ad08b6a93e6564065930",
+      "size": 13590
+    },
+    {
+      "path": "tests/invariants/i25_deterministic_replay.test.ts",
+      "hash": "1cfbe7b7657ba4039026b48716ac6ced80102d91269deb7a9cae848247c80a50",
+      "size": 8891
+    },
+    {
+      "path": "tests/invariants/i28_pipeline_determinism.test.ts",
+      "hash": "eafa8f50b3f52bd009c43940a486719abd5d8708ff1ca4b0364ecfbc244ce802",
+      "size": 12497
+    },
+    {
+      "path": "tests/learning/test_4e_r2_remediation.test.ts",
+      "hash": "c2075eaaa9f567a078b5afdc8d8b933115cc05379a39a8171b4ac24c22bea6de",
+      "size": 19066
+    },
+    {
+      "path": "tests/learning/test_convergence_subsystems.test.ts",
+      "hash": "090776978d5f481d702c1bb586dea5385c22c327791d4f34b0b6dfbad34251cd",
+      "size": 29897
+    },
+    {
+      "path": "tests/learning/test_learning_cycle_orchestrator.test.ts",
+      "hash": "a037a60a87e1ee3cea5ebe4f447db02a7ad566f0b7c228c8b8084275d65f5358",
+      "size": 22001
+    },
+    {
+      "path": "tests/learning/test_technique_applicator.test.ts",
+      "hash": "aab3b8692826253b054125070ad829960f05d9fddaefed478b9d3cbebb988392",
+      "size": 17203
+    },
+    {
+      "path": "tests/property/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "tests/rate-limiting/rate_limiting.test.ts",
+      "hash": "f1a5b5887bc400571890a91b8bd7af363b1bf4b7352881249d9a6ee4c7e376cc",
+      "size": 9562
+    },
+    {
+      "path": "tests/rbac/rbac_enforcement.test.ts",
+      "hash": "a47d51cedf5fe71af89fa9bf18620d69ab5b9e2e712438c4f456e5666be29994",
+      "size": 12437
+    },
+    {
+      "path": "tests/replay/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "tests/scaffold/failure-modes/fm05_state_corruption_concurrency.test.ts",
+      "hash": "c6e5f0535782b171e1859a058dcf8556889126c4c4d783b04399efc1635630b8",
+      "size": 12890
+    },
+    {
+      "path": "tests/scaffold/failure-modes/fm08_audit_trail_tampering.test.ts",
+      "hash": "412ea2c6f3247c1e07f26aa4b4454be438b1ecd070b85257d0cd212c4b9b2f0f",
+      "size": 18774
+    },
+    {
+      "path": "tests/scaffold/failure-modes/fm09_tool_poisoning.test.ts",
+      "hash": "e2cc6cbfde6bcd3d07f25d8cf9a97d0f47ff16f3ea52515bf3625b1d5ed00838",
+      "size": 17769
+    },
+    {
+      "path": "tests/scaffold/failure-modes/fm11_observability_overhead.test.ts",
+      "hash": "ac752be06911a88b15815b24605a7d44311952e47fcc780037131979b7cbaa9b",
+      "size": 14377
+    },
+    {
+      "path": "tests/scaffold/failure-modes/fm12_provider_failover_budget.test.ts",
+      "hash": "869a4a3d9457fa0697694a98852a22786d153835e9af3e0647741b400f71b378",
+      "size": 18731
+    },
+    {
+      "path": "tests/scaffold/failure-modes/fm13_unbounded_autonomy.test.ts",
+      "hash": "effc67b9e5c7f66e9713609f13e24039828bc54f11452bb9cde43835bc2220b9",
+      "size": 7979
+    },
+    {
+      "path": "tests/scaffold/failure-modes/fm14_semantic_drift.test.ts",
+      "hash": "a3b1783c349ca2d898e5675cfca421b82fe8f45c229d1f72724994b1e1625a20",
+      "size": 7423
+    },
+    {
+      "path": "tests/scaffold/failure-modes/fm15_artifact_entropy.test.ts",
+      "hash": "99c06baba526b342228953ac2ff3a6e1143ea0906fae001ea8128bbdf5d938f9",
+      "size": 8410
+    },
+    {
+      "path": "tests/scaffold/failure-modes/fm16_mission_drift.test.ts",
+      "hash": "b8d8ba25c8e1551367e1bea6518cf47c9fccdc7a57f1feb5659886b65ec2bc14",
+      "size": 7272
+    },
+    {
+      "path": "tests/scaffold/failure-modes/fm17_plan_explosion.test.ts",
+      "hash": "4ef0f6afb5693a85f8cbf356ef523e9d7bbb7268bfa32d3cfafb65d6d3e89529",
+      "size": 6742
+    },
+    {
+      "path": "tests/scaffold/failure-modes/fm18_capability_escalation.test.ts",
+      "hash": "0886fba4e2c2e56dd3a6f575a18f9f2397dac77ac7f318f05c771aa288fb7747",
+      "size": 7113
+    },
+    {
+      "path": "tests/scaffold/failure-modes/fm19_delegation_cycle.test.ts",
+      "hash": "b94367d9e7df6940b80a3809ec0896e369f323b377de8022f1a1eef42e87a596",
+      "size": 8389
+    },
+    {
+      "path": "tests/scaffold/failure-modes/fm20_worker_deadlock.test.ts",
+      "hash": "227f0e7e5152486e855ceaab5a37bb221025869dbc60a19df21797b103689a5e",
+      "size": 17021
+    },
+    {
+      "path": "tests/scaffold/invariants/i02_user_owns_data.test.ts",
+      "hash": "dca97a667a25785e7c94c9fdb0093da3c1fc4ed54ff46862eb7d072a6762aefd",
+      "size": 13802
+    },
+    {
+      "path": "tests/scaffold/invariants/i03_atomic_audit.test.ts",
+      "hash": "2a0f4579c01a1ff4b5b576acbc105cee643ce504c0e83d1bf998e87b9f9dd226",
+      "size": 13895
+    },
+    {
+      "path": "tests/scaffold/invariants/i04_provider_independence_substrate.test.ts",
+      "hash": "154c1f871c43ffaeface578c0eba4c060cdeb1729f55e8f32188f8b28cc43218",
+      "size": 11781
+    },
+    {
+      "path": "tests/scaffold/invariants/i06_audit_immutability.test.ts",
+      "hash": "298c62cf75ac39fed6608abb80572edad988b10472677fc9375bffb7690678f8",
+      "size": 16998
+    },
+    {
+      "path": "tests/scaffold/invariants/i07_agent_isolation.test.ts",
+      "hash": "9d0cd048835b710622ac3df78b63c67a1b6a2c239f5bec59ee27ee5a6d0f6e0e",
+      "size": 13376
+    },
+    {
+      "path": "tests/scaffold/invariants/i08_agent_identity_persistence.test.ts",
+      "hash": "c05036fe2127c3e141d72507cf608209660f4334c1a2d0aefb8ae5e00a28f274",
+      "size": 5186
+    },
+    {
+      "path": "tests/scaffold/invariants/i09_trust_is_earned.test.ts",
+      "hash": "ea762d9726ce1c9277dfeeb2a70abb4d1a0b421405fd3e2e9ba729927f171877",
+      "size": 6402
+    },
+    {
+      "path": "tests/scaffold/invariants/i12_tool_sandboxing.test.ts",
+      "hash": "52e098bdf19f6a6df3b1d3a947ab3fc6fbfad16fcfc3093bc70b7c158fe06183",
+      "size": 13210
+    },
+    {
+      "path": "tests/scaffold/invariants/i12_tool_sandboxing_substrate.test.ts",
+      "hash": "f538b61fedd6e20848420eca94ab4995f5a67927abdfe91e0d72c77bffe3b8ab",
+      "size": 14707
+    },
+    {
+      "path": "tests/scaffold/invariants/i13_authorization_completeness.test.ts",
+      "hash": "0025a0536549657a2924d736b5efa139018e4139dc95ddd0965221c81dc64536",
+      "size": 14917
+    },
+    {
+      "path": "tests/scaffold/invariants/i14_predictable_latency.test.ts",
+      "hash": "8f653e2b3f2e73947982f30cebc31479e72ea9c20495dc998ada94206695e25a",
+      "size": 3730
+    },
+    {
+      "path": "tests/scaffold/invariants/i15_linear_cost_scaling.test.ts",
+      "hash": "3e8bf55145bc9e49e462ed165534b192adb465df89625c247bb2c284ae919019",
+      "size": 2742
+    },
+    {
+      "path": "tests/scaffold/invariants/i16_graceful_degradation.test.ts",
+      "hash": "acebca0be91670eda385ef88300707542737ed3702c45775620dc0fbee616820",
+      "size": 15503
+    },
+    {
+      "path": "tests/scaffold/invariants/i17_governance_boundary.test.ts",
+      "hash": "5da697a74aa21ce120153ef80739aad8ae6167e13e42e4b82c01f81fde35b2f0",
+      "size": 11792
+    },
+    {
+      "path": "tests/scaffold/invariants/i20_mission_tree_boundedness.test.ts",
+      "hash": "1a7963fa8b11c3ba8468609a12bb514f02450a44f31aea1f229723359ca30328",
+      "size": 10267
+    },
+    {
+      "path": "tests/scaffold/invariants/i21_bounded_cognitive_state.test.ts",
+      "hash": "e1033fe5c4a7373d283debc339a3f8dde06885173866be2a0923ef03a7bc225c",
+      "size": 8726
+    },
+    {
+      "path": "tests/scaffold/invariants/i22_capability_immutability.test.ts",
+      "hash": "1b3a04a53707af34ce6aa6f672b3cb4fbe408a5aa83257317521dc02d908f395",
+      "size": 7464
+    },
+    {
+      "path": "tests/scaffold/reference-agent/agent_boundary.test.ts",
+      "hash": "1d4fce54dd92b9e504da01094c5eda0737266e33e030fd580a6208bc0f4c5d1c",
+      "size": 15154
+    },
+    {
+      "path": "tests/scaffold/reference-agent/fm_defense.test.ts",
+      "hash": "f276fc70e3d0a0dfd314d14737392e1173787ef86479e8a4e57491e6a06de737",
+      "size": 19002
+    },
+    {
+      "path": "tests/scaffold/reference-agent/reference_agent_lifecycle.test.ts",
+      "hash": "d18e5e06ce06b257d03b6d227178d75eca6d38c989326cbd886664cccc3d2b99",
+      "size": 18718
+    },
+    {
+      "path": "tests/scaffold/reference-agent/replay_determinism.test.ts",
+      "hash": "9c96e0fc2afc10c854efeb575004f12e6e12bb4b4077551c8264a5dfd5ec9cd8",
+      "size": 16646
+    },
+    {
+      "path": "tests/scaffold/reference-agent/uc10_recursive_mission.test.ts",
+      "hash": "82cf79b80b9726fa9bb2ce5180a1d3f9615cfd2fe40ba45ed33c86b8ea5b2590",
+      "size": 26187
+    },
+    {
+      "path": "tests/scaffold/reference-agent/uc11_reality_change.test.ts",
+      "hash": "9971a26316f6375e783c55fd3244c519986dd7a0aca553992028ef5769a3b57d",
+      "size": 21499
+    },
+    {
+      "path": "tests/scaffold/reference-agent/uc12_long_horizon.test.ts",
+      "hash": "b3a30d2bc802ff7e067053d03d95fcb638a85c437e5f1b1ccd0c4970d78ec56a",
+      "size": 23865
+    },
+    {
+      "path": "tests/scaffold/substrate/capability_adapters.test.ts",
+      "hash": "c8c5f7283f2db84ba2adc87a9450327f25dfe58190af53650bf03b682ddcdd57",
+      "size": 15844
+    },
+    {
+      "path": "tests/scaffold/substrate/heartbeat_protocol.test.ts",
+      "hash": "8fcdd61c80b88fb5333bd1497085813b5c7e6910bb73c09bc98f6fcd5bb75fa0",
+      "size": 11825
+    },
+    {
+      "path": "tests/scaffold/substrate/llm_gateway.test.ts",
+      "hash": "2db2c961e96fa689797a73211d007491877c37afe2d38762feb772219708a2c1",
+      "size": 18331
+    },
+    {
+      "path": "tests/scaffold/substrate/resource_accounting.test.ts",
+      "hash": "45ce5aeb87907cf8daf07f802cbbca25ae41acf8cd407cbdcff32aba97eb13cb",
+      "size": 13764
+    },
+    {
+      "path": "tests/scaffold/substrate/scheduler_queue.test.ts",
+      "hash": "bc91e189b2dbc49c5569e809f613da0a0297f66e5285a4c97a76576429390566",
+      "size": 16321
+    },
+    {
+      "path": "tests/scaffold/substrate/task_scheduler.test.ts",
+      "hash": "51534e367534db84517c9669cde1d9983d97e386b769c5872d0f93c3859eb69e",
+      "size": 13153
+    },
+    {
+      "path": "tests/scaffold/substrate/worker_pool.test.ts",
+      "hash": "73bb06b8fac12fd8f06e21e8f5f40c5021fc46ca68a61583b00cc56408483495",
+      "size": 14611
+    },
+    {
+      "path": "tests/scaffold/substrate/worker_runtime.test.ts",
+      "hash": "fe9855b6186bca9346cde499a20853f5accb374da34f265fe44871c44c7a3dc3",
+      "size": 14380
+    },
+    {
+      "path": "tests/scaffold/syscalls/sc01_propose_mission.test.ts",
+      "hash": "dedfd66bb957ca06b3fa6ab524cc3dbdd942fcfa442b5a5666ae97062469f193",
+      "size": 23975
+    },
+    {
+      "path": "tests/scaffold/syscalls/sc02_propose_task_graph.test.ts",
+      "hash": "5c066601bb040e8de58853d355710d9ecbc6a27e8467210780de4c77668d651f",
+      "size": 14575
+    },
+    {
+      "path": "tests/scaffold/syscalls/sc03_propose_task_execution.test.ts",
+      "hash": "6bb38200aaa281c1e5e2fb2d9b6890b8ce30f79ce13d6e34256018f356807f13",
+      "size": 7409
+    },
+    {
+      "path": "tests/scaffold/syscalls/sc04_create_artifact.test.ts",
+      "hash": "ece237f1d7c348f4e728946b588e58cbf19f319faf1d4ccbdcbff3edda6f72a9",
+      "size": 8617
+    },
+    {
+      "path": "tests/scaffold/syscalls/sc05_read_artifact.test.ts",
+      "hash": "61bf0ee610cc9eb3808629a34ffe27c03726eb7f2217ff1e33d0833f7e646e36",
+      "size": 6059
+    },
+    {
+      "path": "tests/scaffold/syscalls/sc06_emit_event.test.ts",
+      "hash": "52c066a13164d03ebc77b2a2fc19ee5156688c298e8f40f70f9e11d454da860c",
+      "size": 6792
+    },
+    {
+      "path": "tests/scaffold/syscalls/sc07_request_capability.test.ts",
+      "hash": "0952786436417cb0717c2194407385ccc4a04f03bad3dc3877d9262a1dacc815",
+      "size": 6327
+    },
+    {
+      "path": "tests/scaffold/syscalls/sc08_request_budget.test.ts",
+      "hash": "2694d3dd22f78072ef21b7840f7413b9c2b0f7fa88307a71a31f2adcabbe154a",
+      "size": 6876
+    },
+    {
+      "path": "tests/scaffold/syscalls/sc09_submit_result.test.ts",
+      "hash": "8d08349bd5d068123e529964e4f41ad6258c508ee2f449b8a196ebe6a8d07b90",
+      "size": 7445
+    },
+    {
+      "path": "tests/scaffold/syscalls/sc10_respond_checkpoint.test.ts",
+      "hash": "b8fd617752ad2ff28c63ee6f8aac543e63d31acce26af7535394a3ef208ed274",
+      "size": 8455
+    },
+    {
+      "path": "tests/streaming/streaming_model.test.ts",
+      "hash": "5516693eb6e991cb82062837caadb255b1e2f2553a61f3b0545dfaa991474be5",
+      "size": 9992
+    },
+    {
+      "path": "tests/streaming/streaming_pipeline.test.ts",
+      "hash": "f839d3988aabdc72c13984d0e7e3894bbf3cf8ac51536ece50465449d035c248",
+      "size": 10143
+    },
+    {
+      "path": "tests/structured-output/structured_output.test.ts",
+      "hash": "3895ca572ebbe909365f08f8ab8fd7811aa97226397d244a73b24b358d5bb958",
+      "size": 17666
+    },
+    {
+      "path": "tests/syscalls/.gitkeep",
+      "hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+      "size": 0
+    },
+    {
+      "path": "tests/two-impl/two_implementation.test.ts",
+      "hash": "6c575628960967ef56842476ba7b368c633832612ecb2bf3b804e210bc7c6bb5",
+      "size": 14612
+    },
+    {
+      "path": "tests/unit/test_tenant_scope.test.ts",
+      "hash": "dd30eef40934c6fe79cbe99d3a43034cd7cfbcd3f7a4cc81e289d220043e60d9",
+      "size": 17606
+    },
+    {
+      "path": "tsconfig.build.json",
+      "hash": "c9cdc0a68adfa030f53fa6229658decf824998ecc163d2b39707dbc57703ec83",
+      "size": 145
+    },
+    {
+      "path": "tsconfig.json",
+      "hash": "faec1642f97a0ba8a5932c7f42331aed1f57ec85084b2aa36902ce43ceef8402",
+      "size": 713
+    },
+    {
+      "path": "typedoc.json",
+      "hash": "d0e40ef10363af08135c4d0533f7cc699474fcff970868ebca639a3291400841",
+      "size": 500
+    }
+  ],
+  "ignorePatterns": [
+    "node_modules/",
+    "dist/",
+    "coverage/",
+    ".claude/worktrees/",
+    "*.db",
+    "*.sqlite",
+    "*.sqlite-wal",
+    "*.sqlite-shm",
+    ".DS_Store",
+    ".env",
+    ".env.*",
+    "data/",
+    "package-lock.json",
+    "SESSION_LOG.md"
+  ],
+  "attestation": {
+    "identityHash": "2e3749f5efb5e47b815177ff9105fe7916c5b2c1369b8328932c214f2c8d4dc4",
+    "registryHash": "02039ab3c085d7d3ae703585ec09b62be28daa6ba3d7b97832ba067afd0acc7c",
+    "chainHash": "d6a78255e53103924a353b9cb4cd1336eeecb8a383faf17c6a148a62e18f11d8",
+    "signature": "9f40aacf723365bd6f7065148b68159e05049f835177cb2962bd968857a978e6813b7336bd961515c3762dafeba39c23d41289239a3b2a112f9a918cc2714f06"
+  },
+  "timestamp": "2026-03-24T21:23:39.302Z"
+}
