@@ -735,9 +735,13 @@ export async function createLimen(
     'approve_response', 'edit_response', 'takeover_session', 'review_batch',
   ]);
 
+  // Library-mode agent identity: set via setDefaultAgent() after agent registration.
+  // Captured by getContext closure — mutable even after engine object is frozen.
+  let defaultAgentId: import('../kernel/interfaces/index.js').AgentId | null = null;
+
   const getContext = (): OperationContext => {
     if (tenancyMode === 'single') {
-      return buildOperationContext(null, null, null, allPermissions);
+      return buildOperationContext(null, null, defaultAgentId, allPermissions);
     }
     // Multi-tenant: context must be provided per-call via session
     return buildOperationContext(null, null, null, new Set());
@@ -998,6 +1002,13 @@ export async function createLimen(
     // Sprint 7: Working memory management — consumer convenience wrapper (SC-14, SC-15, SC-16)
     // DC-P4-406: Raw WorkingMemorySystem is closure-local, wrapped by WorkingMemoryApiImpl
     workingMemory: wmApi,
+
+    // Library-mode agent identity setter.
+    // Modifies closure-captured defaultAgentId — safe after deep freeze
+    // because the function reference is frozen, not the captured variable.
+    setDefaultAgent(agentId: import('../kernel/interfaces/index.js').AgentId) {
+      defaultAgentId = agentId;
+    },
 
     // S3.4, I-05, SD-06: Graceful shutdown
     // CF-011: Each step wrapped in try/catch so that one failure
