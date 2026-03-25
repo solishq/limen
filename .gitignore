@@ -29,5 +29,10 @@ docs/sprint*_design.md
 .provenance.pub
 .provenanceignore
 
+# Per-package internal artifacts
+packages/*/BREAKER_REPORT.md
+packages/*/CERTIFIER_REPORT.md
+packages/*/scripts/seed-*.ts
+
 # Per-project local documents (not tracked — backed up separately)
 docs/local/

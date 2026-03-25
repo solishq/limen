@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * Limen MCP Server — Claude Code native integration.
+ * Limen MCP Server — AI agent native integration via Model Context Protocol.
  *
  * Boots a long-running Limen engine instance and exposes it
  * via the Model Context Protocol over stdio transport.
  *
- * Tools:
+ * Low-level tools (direct engine access):
  *   limen_health          — Engine health status
  *   limen_agent_register  — Register a new agent
  *   limen_agent_list      — List all agents
@@ -20,6 +20,15 @@
  *   limen_wm_read         — Read from working memory
  *   limen_wm_discard      — Discard from working memory
  *
+ * High-level knowledge tools (session-managed):
+ *   limen_session_open    — Open a knowledge session for a project
+ *   limen_session_close   — Close session with optional summary
+ *   limen_remember        — Assert a knowledge claim (simplified)
+ *   limen_recall          — Query claims, excluding superseded
+ *   limen_connect         — Relate claims with governance protection
+ *   limen_reflect         — Batch-assert categorized learnings
+ *   limen_scratch         — Session-scoped scratch working memory
+ *
  * Resources:
  *   limen://health        — Health status JSON
  */
@@ -28,16 +37,27 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 import { bootstrapEngine } from './bootstrap.js';
+import { SessionAdapter } from './adapter.js';
 import { registerHealthTools } from './tools/health.js';
 import { registerAgentTools } from './tools/agent.js';
 import { registerMissionTools } from './tools/mission.js';
 import { registerClaimTools } from './tools/claim.js';
 import { registerWmTools } from './tools/wm.js';
+import { registerKnowledgeTools } from './tools/knowledge.js';
 import { registerHealthResource } from './resources/health.js';
 
 async function main(): Promise<void> {
   // Boot the Limen engine (reads ~/.limen/config.json)
   const { limen, shutdown } = await bootstrapEngine();
+
+  // Configure governance protection from environment
+  const protectedPrefixes = process.env.LIMEN_PROTECTED_PREFIXES
+    ? new Set(process.env.LIMEN_PROTECTED_PREFIXES.split(',').map(p => p.trim()))
+    : new Set<string>();
+
+  // Initialize session adapter (registers "limen-mcp" agent)
+  const adapter = new SessionAdapter(limen, { protectedPrefixes });
+  await adapter.init();
 
   // Create the MCP server
   const server = new McpServer({
@@ -45,12 +65,15 @@ async function main(): Promise<void> {
     version: '1.0.0',
   });
 
-  // Register tools
+  // Register low-level tools (direct engine access)
   registerHealthTools(server, limen);
   registerAgentTools(server, limen);
   registerMissionTools(server, limen);
   registerClaimTools(server, limen);
   registerWmTools(server, limen);
+
+  // Register high-level knowledge tools (session-managed)
+  registerKnowledgeTools(server, adapter);
 
   // Register resources
   registerHealthResource(server, limen);
