@@ -275,6 +275,22 @@ export interface Limen {
 
   readonly data: DataApi;
 
+  // -- Library Mode Context --
+
+  /**
+   * Set the default agent identity for single-tenant library mode.
+   *
+   * In library mode (single-tenant), the OperationContext has no agentId
+   * by default. Library consumers that register agents can call this
+   * to activate attribution: all subsequent assertClaim and relateClaims
+   * calls will carry this agentId in the OperationContext.
+   *
+   * Pattern: createLimen() → agents.register() → setDefaultAgent(agent.id)
+   *
+   * No-op in multi-tenant mode (agentId is per-session).
+   */
+  setDefaultAgent(agentId: AgentId): void;
+
   // -- Lifecycle --
 
   /**
