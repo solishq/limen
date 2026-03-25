@@ -1,7 +1,7 @@
 {
   "name": "limen-mcp",
   "version": "1.0.0",
-  "description": "MCP server for Limen Cognitive OS — Claude Code native integration",
+  "description": "MCP server for Limen Cognitive OS — AI agent native integration",
   "type": "module",
   "license": "Apache-2.0",
   "author": {
@@ -17,7 +17,7 @@
   "bugs": {
     "url": "https://github.com/solishq/limen/issues"
   },
-  "keywords": ["limen", "mcp", "model-context-protocol", "claude", "cognitive-os", "ai"],
+  "keywords": ["limen", "mcp", "model-context-protocol", "cognitive-os", "ai-agent", "ai"],
   "publishConfig": {
     "access": "public"
   },
@@ -33,10 +33,11 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npx tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@modelcontextprotocol/sdk": "^1.27.0",
     "limen-ai": "^1.0.0",
     "zod": "^4.0.0"
   },
