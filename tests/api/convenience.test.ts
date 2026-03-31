@@ -466,7 +466,8 @@ describe('Phase 1: forget()', () => {
     assert.ok(r.ok);
     if (!r.ok) return;
 
-    const result = limen.forget(r.value.claimId, 'No longer relevant');
+    // Phase 4: Updated to use valid RetractionReason taxonomy value
+    const result = limen.forget(r.value.claimId, 'manual');
     assert.ok(result.ok, `forget: ${!result.ok ? result.error.message : ''}`);
   });
 
@@ -1272,7 +1273,8 @@ describe('Phase 1: UNAUTHORIZED retraction path (RR-P1-001, DC-P1-402)', () => {
     const layer = createConvenienceLayer(deps);
 
     // Call forget — should pass through the UNAUTHORIZED error
-    const result = layer.forget('some-claim-id', 'test retraction');
+    // Phase 4: Use valid RetractionReason taxonomy value
+    const result = layer.forget('some-claim-id', 'manual');
 
     // DISCRIMINATIVE: Verify UNAUTHORIZED is passed through, NOT remapped
     assert.equal(result.ok, false, 'forget() should fail with UNAUTHORIZED');

@@ -187,7 +187,7 @@ function makeValidRelationshipInput(overrides?: Partial<RelationshipCreateInput>
 function makeValidRetractInput(overrides?: Partial<RetractClaimInput>): RetractClaimInput {
   return {
     claimId: claimId('claim-retract-001'),
-    reason: 'Updated analysis shows previous conclusion was incorrect',
+    reason: 'incorrect',
     ...overrides,
   };
 }

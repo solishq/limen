@@ -10,7 +10,7 @@
  * Invariants: I-CONV-04 (confidence ceiling), I-CONV-06 (governance boundary)
  */
 
-import type { ClaimId, RelationshipType, EvidenceRef } from '../../claims/interfaces/claim_types.js';
+import type { ClaimId, RelationshipType, EvidenceRef, RetractionReason } from '../../claims/interfaces/claim_types.js';
 import type { FreshnessLabel, FreshnessThresholds } from '../../cognitive/freshness.js';
 import type { StabilityConfig } from '../../cognitive/stability.js';
 import type { AccessTrackerConfig } from '../../cognitive/access_tracker.js';
@@ -18,6 +18,7 @@ import type { AccessTrackerConfig } from '../../cognitive/access_tracker.js';
 // Re-export for consumer convenience
 export type { ClaimId } from '../../claims/interfaces/claim_types.js';
 export type { EvidenceRef } from '../../claims/interfaces/claim_types.js';
+export type { RetractionReason } from '../../claims/interfaces/claim_types.js';
 export type { FreshnessLabel } from '../../cognitive/freshness.js';
 export type { FreshnessThresholds } from '../../cognitive/freshness.js';
 export type { StabilityConfig } from '../../cognitive/stability.js';
@@ -171,10 +172,15 @@ export interface BeliefView {
 
 /**
  * Options for forget() calls.
- * Reserved for future use (e.g., retraction reason taxonomy in Phase 4).
+ * Phase 4: Retraction reason taxonomy.
  */
 export interface ForgetOptions {
-  // Currently empty but defined for forward compatibility.
+  /**
+   * Phase 4 §4.4: Retraction reason.
+   * Default: 'manual'.
+   * I-P4-15, I-P4-16: Typed reason from taxonomy.
+   */
+  readonly reason?: RetractionReason;
 }
 
 // ── reflect() Types ──
@@ -229,7 +235,8 @@ export type ConvenienceErrorCode =
   | 'CONV_CLAIM_NOT_FOUND'      // forget() target not found
   | 'CONV_ALREADY_RETRACTED'    // forget() target already retracted
   | 'CONV_INVALID_RELATIONSHIP' // connect() invalid relationship type
-  | 'CONV_SELF_REFERENCE';      // connect() same claim on both sides
+  | 'CONV_SELF_REFERENCE'       // connect() same claim on both sides
+  | 'CONV_INVALID_REASON';      // Phase 4: forget() with invalid retraction reason
 
 /** Valid relationship types for connect() */
 export const VALID_RELATIONSHIP_TYPES: readonly RelationshipType[] = [

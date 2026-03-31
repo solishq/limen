@@ -28,6 +28,28 @@ import type {
   DatabaseConnection, RunResult, Result, TenantId,
 } from '../interfaces/index.js';
 
+// ─── Raw Access Audit Logger Type ───
+
+/**
+ * Phase 4 §4.6, C.7: Callback for auditing .raw access.
+ * When provided, called every time .raw is accessed.
+ * I-P4-13: Every .raw access is audit-logged.
+ */
+export type RawAccessAuditLogger = (tag: string | undefined) => void;
+
+/**
+ * Phase 4 §4.6: Configuration for .raw access gating.
+ * I-P4-14: When requireRbac=true, rawAccessTag must be present.
+ */
+export interface RawAccessConfig {
+  /** Phase 4: Whether RBAC is active (gates .raw access) */
+  readonly requireRbac: boolean;
+  /** Phase 4: Tag identifying the caller of .raw access */
+  readonly rawAccessTag?: string;
+  /** Phase 4: Audit logger callback — called on every .raw access */
+  readonly auditLogger?: RawAccessAuditLogger;
+}
+
 // ─── Exported Type ───
 
 /**
@@ -149,7 +171,28 @@ export function injectTenantPredicate(
 export function createTenantScopedConnection(
   conn: DatabaseConnection,
   scopedTenantId: TenantId | null,
+  rawAccessConfig?: RawAccessConfig,
 ): TenantScopedConnection {
+  // Phase 4 §4.6: Create a raw access proxy that audits every .raw access
+  // I-P4-13: Every .raw access is audit-logged (regardless of requireRbac).
+  // I-P4-14: When requireRbac=true, rawAccessTag must be present.
+  function getRawConnection(): DatabaseConnection {
+    if (rawAccessConfig) {
+      // Log the access
+      if (rawAccessConfig.auditLogger) {
+        rawAccessConfig.auditLogger(rawAccessConfig.rawAccessTag);
+      }
+      // When RBAC is active, require the tag
+      if (rawAccessConfig.requireRbac && !rawAccessConfig.rawAccessTag) {
+        throw new Error(
+          'TenantScopedConnection: .raw access requires rawAccessTag when requireRbac is true. ' +
+          'Pass rawAccessTag to createTenantScopedConnection config.',
+        );
+      }
+    }
+    return conn;
+  }
+
   // Single mode or falsy tenant: no scoping needed
   // AUDIT-002: Use falsy check — empty string is as dangerous as null
   if (conn.tenancyMode !== 'row-level' || !scopedTenantId) {
@@ -157,7 +200,7 @@ export function createTenantScopedConnection(
       dataDir: conn.dataDir,
       schemaVersion: conn.schemaVersion,
       tenancyMode: conn.tenancyMode,
-      raw: conn,
+      get raw(): DatabaseConnection { return getRawConnection(); },
       tenantId: scopedTenantId,
 
       transaction<T>(fn: () => T): T {
@@ -188,7 +231,7 @@ export function createTenantScopedConnection(
     schemaVersion: conn.schemaVersion,
     tenancyMode: conn.tenancyMode,
     tenantId: scopedTenantId,
-    raw: conn,
+    get raw(): DatabaseConnection { return getRawConnection(); },
 
     query<T>(sql: string, params?: unknown[]): T[] {
       const { scopedSql, scopedParams } = injectTenantPredicate(sql, params ?? [], scopedTenantId);

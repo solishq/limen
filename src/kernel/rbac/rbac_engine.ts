@@ -73,14 +73,20 @@ const DEFAULT_ROLES: ReadonlyArray<{
  * If custom roles exist (is_default=0), RBAC activates immediately.
  * S ref: §34 (RBAC), I-13 (authorization completeness), §3.7 (dormant mode)
  */
-export function createRbacEngine(conn?: DatabaseConnection): RbacEngine {
+export function createRbacEngine(conn?: DatabaseConnection, forceActive?: boolean): RbacEngine {
   /** RBAC active state. Starts dormant (single-user default). S ref: §3.7. */
   let rbacActive = false;
+
+  // Phase 4 §4.5, C.8: When forceActive (requireRbac=true), RBAC is active immediately.
+  // I-P4-10: Default false. I-P4-11: When true, enforces.
+  if (forceActive) {
+    rbacActive = true;
+  }
 
   // CF-006: Restore active state from DB if custom roles exist.
   // Without this, a restart after role creation leaves RBAC dormant,
   // bypassing all permission checks until a new custom role is created.
-  if (conn) {
+  if (!rbacActive && conn) {
     const customRoleCount = conn.get<{ cnt: number }>(
       'SELECT COUNT(*) as cnt FROM core_roles WHERE is_default = 0'
     );
