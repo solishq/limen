@@ -105,6 +105,9 @@ import { getCognitiveMetabolismMigrations } from './migration/030_cognitive_meta
 import { createAccessTracker } from '../cognitive/access_tracker.js';
 import type { AccessTracker } from '../cognitive/access_tracker.js';
 
+// Phase 4: Quality & Safety migration (v40)
+import { getConflictIndexMigrations } from './migration/031_conflict_index.js';
+
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
 
@@ -375,6 +378,7 @@ function buildOrchestrationAdapter(
       ...getFts5SearchMigrations(),                      // v37: FTS5 full-text search index + sync triggers
       ...getFts5CjkMigrations(),                         // v38: FTS5 CJK trigram index + sync triggers
       ...getCognitiveMetabolismMigrations(),              // v39: Phase 3 cognitive metabolism columns
+      ...getConflictIndexMigrations(),                     // v40: Phase 4 conflict detection index
     ]);
     if (!phase4Governance.ok) {
       conn.close();
@@ -514,6 +518,9 @@ export async function createLimen(
       mode: tenancyMode === 'multi' ? (resolvedConfig.tenancy?.isolation ?? 'row-level') : 'single',
     },
     masterKey: resolvedConfig.masterKey,
+    // Phase 4 §4.5, C.8: Thread requireRbac to kernel RBAC engine.
+    // I-P4-10: Default false when undefined.
+    ...(resolvedConfig.requireRbac ? { requireRbac: true } : {}),
   });
 
   if (!kernelResult.ok) {
@@ -727,6 +734,9 @@ export async function createLimen(
     // Spread conditionally to avoid passing undefined with exactOptionalPropertyTypes.
     ...(config?.cognitive?.stability ? { stabilityConfig: config.cognitive.stability } : {}),
     ...(config?.cognitive?.freshness ? { freshnessThresholds: config.cognitive.freshness } : {}),
+    // Phase 4 §4.1: Structural conflict detection configuration.
+    // Default true when undefined. Only false when explicitly set to false.
+    ...(resolvedConfig.autoConflict === false ? { autoConflict: false } : {}),
   });
 
   // WMP working memory system (closure-local — DC-P4-406, C-SEC-05)
@@ -1079,7 +1089,7 @@ export async function createLimen(
       return convenienceLayer.recall(subject, predicate, options);
     },
 
-    forget(claimId: string, reason?: string) {
+    forget(claimId: string, reason?: import('../claims/interfaces/claim_types.js').RetractionReason) {
       if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
       return convenienceLayer.forget(claimId, reason);
     },

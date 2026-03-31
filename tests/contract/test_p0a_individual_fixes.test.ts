@@ -191,7 +191,7 @@ describe('P0-A C3: Null-Tenant Claim Handling — Behavioral', () => {
     // Retract the claim with the same null-tenant context
     const retractResult = system.retractClaim.execute(conn, nullTenantCtx, {
       claimId,
-      reason: 'C3 behavioral test: null-tenant retraction',
+      reason: 'manual',
     });
     assert.ok(retractResult.ok, `Retraction must succeed with null tenant_id, got: ${!retractResult.ok ? retractResult.error.message : ''}`);
 

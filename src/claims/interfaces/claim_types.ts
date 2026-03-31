@@ -64,6 +64,22 @@ export type GroundingMode = 'evidence_path' | 'runtime_witness';
 export type ClaimStatus = 'active' | 'retracted';
 
 /**
+ * Phase 4 §4.4, A.2 Rule 5: Retraction reason taxonomy.
+ * Enables wrongness analysis: which claims are wrong vs. outdated vs. superseded.
+ * CONSTITUTIONAL: Enumerated values only. Free-text not permitted.
+ * I-P4-15: RetractionReason = 'incorrect' | 'superseded' | 'expired' | 'manual'
+ */
+export type RetractionReason = 'incorrect' | 'superseded' | 'expired' | 'manual';
+
+/**
+ * Phase 4 §4.4: Valid retraction reasons for validation.
+ * I-P4-17: RetractClaimHandler rejects reasons outside this taxonomy.
+ */
+export const VALID_RETRACTION_REASONS: readonly RetractionReason[] = [
+  'incorrect', 'superseded', 'expired', 'manual',
+] as const;
+
+/**
  * §7, AMB-CCP-01: Evidence source lifecycle state.
  * Initial value 'live'. Updated to 'tombstoned' when source is purged.
  */
@@ -686,6 +702,12 @@ export interface ClaimSystemDeps {
   readonly stabilityConfig?: import('../../cognitive/stability.js').StabilityConfig;
   /** Phase 3: Freshness thresholds for classification. */
   readonly freshnessThresholds?: import('../../cognitive/freshness.js').FreshnessThresholds;
+  /**
+   * Phase 4 §4.1: Enable structural conflict detection on assertion.
+   * When true (default), asserting a claim with same subject+predicate+different value
+   * creates a 'contradicts' relationship. I-P4-06: Synchronous.
+   */
+  readonly autoConflict?: boolean;
 }
 
 /**

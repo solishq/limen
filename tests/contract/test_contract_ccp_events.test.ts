@@ -120,7 +120,7 @@ describe('CCP Event Contract Tests — GROUP 8', () => {
     deps.eventBus.emitted.length = 0; // Clear creation events
     system.retractClaim.execute(conn, ctx, {
       claimId: createResult.value.claim.id,
-      reason: 'Test retraction',
+      reason: 'manual',
     });
 
     const retractedEvents = deps.eventBus.emitted.filter(e => e.type === 'claim.retracted');
@@ -148,7 +148,7 @@ describe('CCP Event Contract Tests — GROUP 8', () => {
     deps.eventBus.emitted.length = 0;
     system.retractClaim.execute(conn, ctx, {
       claimId: resultA.value.claim.id,
-      reason: 'Source retraction',
+      reason: 'manual',
     });
 
     const evidenceRetractedEvents = deps.eventBus.emitted.filter(
