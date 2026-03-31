@@ -108,6 +108,10 @@ import type { AccessTracker } from '../cognitive/access_tracker.js';
 // Phase 4: Quality & Safety migration (v40)
 import { getConflictIndexMigrations } from './migration/031_conflict_index.js';
 
+// Phase 5: Reasoning migration (v41) + Cognitive API
+import { getReasoningMigrations } from './migration/032_reasoning.js';
+import { createCognitiveNamespace } from './cognitive/cognitive_api.js';
+
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
 
@@ -186,6 +190,8 @@ export type {
   WorkingMemoryApi, WriteWorkingMemoryInput, WriteWorkingMemoryOutput,
   ReadWorkingMemoryInput, ReadWorkingMemoryOutput,
   DiscardWorkingMemoryInput, DiscardWorkingMemoryOutput,
+  // Phase 5: Cognitive API types
+  CognitiveNamespace, CognitiveHealthReport, CognitiveHealthConfig,
 } from './interfaces/api.js';
 
 export type {
@@ -379,6 +385,7 @@ function buildOrchestrationAdapter(
       ...getFts5CjkMigrations(),                         // v38: FTS5 CJK trigram index + sync triggers
       ...getCognitiveMetabolismMigrations(),              // v39: Phase 3 cognitive metabolism columns
       ...getConflictIndexMigrations(),                     // v40: Phase 4 conflict detection index
+      ...getReasoningMigrations(),                          // v41: Phase 5 reasoning column
     ]);
     if (!phase4Governance.ok) {
       conn.close();
@@ -628,6 +635,8 @@ export async function createLimen(
         ...getFts5SearchMigrations(),
         ...getFts5CjkMigrations(),
         ...getCognitiveMetabolismMigrations(),
+        ...getConflictIndexMigrations(),
+        ...getReasoningMigrations(),
       ]);
       if (recoveryMigResult.ok) {
         // P0-A: Pass transition service to recovery for governance-enforced transitions.
@@ -925,6 +934,14 @@ export async function createLimen(
     log({ level: 'warn', category: 'init', message: 'Convenience API initialization failed (non-fatal)', context: { error: convErr instanceof Error ? convErr.message : String(convErr) } });
   }
 
+  // Phase 5: Create CognitiveNamespace for limen.cognitive
+  const cognitiveNamespace = createCognitiveNamespace({
+    getConnection,
+    getTenantId: () => getContext().tenantId,
+    time: kernel.time,
+    freshnessThresholds: config?.cognitive?.freshness,
+  });
+
   // Build the Limen object
   const engine: Limen = {
     // S27, S48: Chat API
@@ -1070,6 +1087,9 @@ export async function createLimen(
     // Sprint 7: Working memory management — consumer convenience wrapper (SC-14, SC-15, SC-16)
     // DC-P4-406: Raw WorkingMemorySystem is closure-local, wrapped by WorkingMemoryApiImpl
     workingMemory: wmApi,
+
+    // Phase 5: Cognitive intelligence namespace (limen.cognitive.health())
+    cognitive: cognitiveNamespace,
 
     // Phase 1: Convenience API methods
     // Delegates to convenienceLayer (created during eager init).

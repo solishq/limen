@@ -48,6 +48,7 @@ import {
   VALID_CATEGORIES,
   MAX_STATEMENT_LENGTH,
   MAX_REFLECT_ENTRIES,
+  MAX_REASONING_LENGTH,
   DEFAULT_RECALL_LIMIT,
   DEFAULT_SEARCH_LIMIT,
   MAX_SEARCH_LIMIT,
@@ -160,6 +161,12 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
       }
     }
 
+    // Phase 5 §5.2: Validate reasoning length (I-P5-07)
+    if (options?.reasoning !== undefined && options.reasoning.length > MAX_REASONING_LENGTH) {
+      return err('CONV_REASONING_TOO_LONG',
+        `Reasoning must be at most ${MAX_REASONING_LENGTH} characters, got ${options.reasoning.length}`);
+    }
+
     const groundingMode = options?.groundingMode ?? 'runtime_witness';
     const evidenceRefs = options?.evidenceRefs ?? [];
     const confidence = effectiveConfidence(options?.confidence, groundingMode, evidenceRefs);
@@ -192,6 +199,8 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
           witnessTimestamp: validAt,
         },
       } : {}),
+      // Phase 5 §5.2: Thread reasoning through to claim store (I-P5-02)
+      ...(options?.reasoning !== undefined ? { reasoning: options.reasoning } : {}),
     };
 
     const result = claims.assertClaim(input);
@@ -289,6 +298,8 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
         stability: item.claim.stability,
         lastAccessedAt: item.claim.lastAccessedAt,
         accessCount: item.claim.accessCount,
+        // Phase 5: Reasoning field
+        reasoning: item.claim.reasoning,
       }));
 
       return ok(beliefs);
@@ -505,6 +516,8 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
           stability: item.claim.stability,
           lastAccessedAt: item.claim.lastAccessedAt,
           accessCount: item.claim.accessCount,
+          // Phase 5: Reasoning field
+          reasoning: item.claim.reasoning,
         },
         relevance: item.relevance,
         score: item.score,

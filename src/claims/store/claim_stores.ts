@@ -244,6 +244,7 @@ function rowToClaim(row: Record<string, unknown>): Claim {
     lastAccessedAt: (row['last_accessed_at'] ?? null) as string | null,
     accessCount: (row['access_count'] ?? 0) as number,
     stability: (row['stability'] ?? 90) as number,
+    reasoning: (row['reasoning'] ?? null) as string | null,
   };
 }
 
@@ -278,6 +279,8 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
   // Phase 3: Lazy detection of v39 schema (stability column).
   // Cached after first check to avoid repeated PRAGMA queries.
   let hasStabilityColumn: boolean | null = null;
+  // Phase 5: Lazy detection of v41 schema (reasoning column).
+  let hasReasoningColumn: boolean | null = null;
   function checkHasStabilityColumn(conn: DatabaseConnection): boolean {
     if (hasStabilityColumn !== null) return hasStabilityColumn;
     try {
@@ -286,23 +289,53 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
         [],
       );
       hasStabilityColumn = cols.some(c => c['name'] === 'stability');
+      hasReasoningColumn = cols.some(c => c['name'] === 'reasoning');
     } catch {
       hasStabilityColumn = false;
+      hasReasoningColumn = false;
     }
     return hasStabilityColumn;
+  }
+  function checkHasReasoningColumn(conn: DatabaseConnection): boolean {
+    if (hasReasoningColumn !== null) return hasReasoningColumn;
+    // Will be populated by checkHasStabilityColumn's PRAGMA query
+    checkHasStabilityColumn(conn);
+    return hasReasoningColumn ?? false;
   }
 
   return {
     create(conn: DatabaseConnection, ctx: OperationContext, input: ClaimCreateInput): Result<Claim> {
       const hasStabCol = checkHasStabilityColumn(conn);
+      const hasReasonCol = checkHasReasoningColumn(conn);
       const id = newId() as ClaimId;
       const now = deps.time.nowISO();
       // Phase 3: Resolve stability from predicate pattern at creation time (I-P3-03).
       const stability = resolveStability(input.predicate, deps.stabilityConfig);
+      const reasoning = input.reasoning ?? null;
       try {
-        // Phase 3: Include stability column if v39 schema has the column.
-        // Detection via hasStabilityColumn (cached at store creation time).
-        if (hasStabCol) {
+        // Phase 5: Include reasoning column if v41 schema has it.
+        // Phase 3: Include stability column if v39 schema has it.
+        // Detection via cached PRAGMA query.
+        if (hasStabCol && hasReasonCol) {
+          conn.run(
+            `INSERT INTO claim_assertions (id, tenant_id, subject, predicate, object_type, object_value, confidence, valid_at, source_agent_id, source_mission_id, source_task_id, grounding_mode, runtime_witness, status, archived, idempotency_key, idempotency_hash, created_at, stability, reasoning)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, ?, ?, ?, ?, ?)`,
+            [
+              id, ctx.tenantId, input.subject, input.predicate,
+              input.object.type, JSON.stringify(input.object.value),
+              input.confidence, input.validAt,
+              ctx.agentId, input.missionId, input.taskId ?? null,
+              input.groundingMode,
+              input.runtimeWitness ? JSON.stringify(input.runtimeWitness) : null,
+              input.idempotencyKey?.key ?? null,
+              input.idempotencyKey?.key ? computeIdempotencyHash(input) : null,
+              now,
+              stability,
+              reasoning,
+            ],
+          );
+        } else if (hasStabCol) {
+          // v39 schema (stability) but pre-v41 (no reasoning column).
           conn.run(
             `INSERT INTO claim_assertions (id, tenant_id, subject, predicate, object_type, object_value, confidence, valid_at, source_agent_id, source_mission_id, source_task_id, grounding_mode, runtime_witness, status, archived, idempotency_key, idempotency_hash, created_at, stability)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, ?, ?, ?, ?)`,
@@ -356,6 +389,7 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
           lastAccessedAt: null,
           accessCount: 0,
           stability,
+          reasoning,
         };
         return ok(claim);
       } catch (e: unknown) {
