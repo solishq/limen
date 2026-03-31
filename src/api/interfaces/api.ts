@@ -79,6 +79,9 @@ export type {
   ConvenienceErrorCode, EvidenceRef,
   ForgetOptions,
   SearchOptions, SearchResult, SearchErrorCode,
+  // Phase 3: Cognitive Metabolism types
+  FreshnessLabel, FreshnessThresholds,
+  StabilityConfig, AccessTrackerConfig,
 } from '../convenience/convenience_types.js';
 
 // Sprint 7: Consumer-facing ClaimApi — no conn/ctx required (DC-P4-406, C-SEC-05)

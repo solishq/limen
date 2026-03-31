@@ -113,6 +113,12 @@ export interface Claim {
   readonly archived: boolean;
   /** §6: Creation timestamp */
   readonly createdAt: string;
+  /** Phase 3 §3.4: Last access timestamp (ISO 8601), null if never accessed. */
+  readonly lastAccessedAt: string | null;
+  /** Phase 3 §3.4: Number of times accessed via recall/search. */
+  readonly accessCount: number;
+  /** Phase 3 §3.2: Stability value in days. Set at creation, immutable. */
+  readonly stability: number;
 }
 
 /**
@@ -362,6 +368,10 @@ export interface ClaimQueryResultItem {
   readonly superseded: boolean;
   /** §14.7: Computed — claim has been contradicted by a relationship */
   readonly disputed: boolean;
+  /** Phase 3: Effective confidence after time-based decay. */
+  readonly effectiveConfidence: number;
+  /** Phase 3: Freshness classification based on last access time. */
+  readonly freshness: import('../../cognitive/freshness.js').FreshnessLabel;
 }
 
 // ============================================================================
@@ -672,6 +682,10 @@ export interface ClaimSystemDeps {
   readonly capabilityResultScopeValidator?: CapabilityResultScopeValidator;
   /** Hard Stop #7: Injectable clock for deterministic temporal logic. */
   readonly time: import('../../kernel/interfaces/time.js').TimeProvider;
+  /** Phase 3: Stability configuration for decay computation. */
+  readonly stabilityConfig?: import('../../cognitive/stability.js').StabilityConfig;
+  /** Phase 3: Freshness thresholds for classification. */
+  readonly freshnessThresholds?: import('../../cognitive/freshness.js').FreshnessThresholds;
 }
 
 /**
@@ -1022,7 +1036,8 @@ export interface SearchClaimResultItem {
   /** FTS5 BM25 relevance score (raw, negative -- lower = more relevant) */
   readonly relevance: number;
   /**
-   * Combined score: -bm25(claims_fts) * confidence. Higher = better match.
+   * Combined score: -bm25(claims_fts) * effectiveConfidence. Higher = better match.
+   * Phase 3: Uses effective (decayed) confidence, not raw.
    * PA Amendment 2: BM25 negated to make higher = better.
    */
   readonly score: number;
@@ -1030,6 +1045,10 @@ export interface SearchClaimResultItem {
   readonly superseded: boolean;
   /** Whether this claim is disputed (computed) */
   readonly disputed: boolean;
+  /** Phase 3: Effective confidence after time-based decay. */
+  readonly effectiveConfidence: number;
+  /** Phase 3: Freshness classification based on last access time. */
+  readonly freshness: import('../../cognitive/freshness.js').FreshnessLabel;
 }
 
 /**
