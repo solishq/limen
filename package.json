@@ -1,7 +1,7 @@
 {
   "name": "limen-ai",
   "version": "1.2.0",
-  "description": "Cognitive Operating System — deterministic infrastructure hosting stochastic cognition",
+  "description": "Governed knowledge engine for AI agents. Store beliefs with confidence, evidence chains, and lifecycle governance. SQLite-powered, zero-config, single dependency.",
   "type": "module",
   "license": "Apache-2.0",
   "author": {
@@ -33,7 +33,16 @@
     "orchestration",
     "transport",
     "streaming",
-    "typescript"
+    "typescript",
+    "memory",
+    "knowledge",
+    "remember",
+    "recall",
+    "agent-memory",
+    "knowledge-engine",
+    "beliefs",
+    "governed",
+    "ai-agents"
   ],
   "exports": {
     ".": {

@@ -54,7 +54,6 @@ import { ChatPipeline } from './chat/chat_pipeline.js';
 import { InferPipeline } from './infer/infer_pipeline.js';
 import { MissionApiImpl } from './missions/mission_api.js';
 import { AgentApiImpl } from './agents/agent_api.js';
-import { KnowledgeApiImpl } from './knowledge/knowledge_api.js';
 import { RolesApiImpl } from './roles/roles_api.js';
 import { DataApiImpl } from './data/data_api.js';
 import { MetricsCollector } from './observability/metrics.js';
@@ -154,7 +153,7 @@ export type {
   CheckpointResponseInput, CheckpointResponseOutput,
   AgentApi, AgentRegistration, AgentView, PipelineStage, AgentPipeline,
   TrustPromotionOptions, SafetyViolationInput,
-  KnowledgeApi, IngestOptions, IngestResult, SearchOptions, MemoryView, PurgeFilter,
+  PurgeFilter,
   RolesApi, Permission,
   HealthStatus, SubsystemHealth, MetricsApi, MetricsSnapshot, HistogramData,
   DataApi,
@@ -836,10 +835,6 @@ export async function createLimen(
     rbac, rateLimiter, getConnection, getContext, kernel.time,
   );
 
-  const knowledgeApi = new KnowledgeApiImpl(
-    rbac, rateLimiter, getConnection, getContext,
-  );
-
   const rolesApi = new RolesApiImpl(
     rbac, rateLimiter, getConnection, getContext,
   );
@@ -965,9 +960,6 @@ export async function createLimen(
 
     // S14-S24: Mission management
     missions: missionsApi,
-
-    // S9, UC-6: Knowledge management
-    knowledge: knowledgeApi,
 
     // §34: RBAC management
     roles: rolesApi,

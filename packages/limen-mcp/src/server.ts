@@ -43,7 +43,6 @@ import { registerAgentTools } from './tools/agent.js';
 import { registerMissionTools } from './tools/mission.js';
 import { registerClaimTools } from './tools/claim.js';
 import { registerWmTools } from './tools/wm.js';
-import { registerKnowledgeTools } from './tools/knowledge.js';
 import { registerHealthResource } from './resources/health.js';
 
 async function main(): Promise<void> {
@@ -71,9 +70,6 @@ async function main(): Promise<void> {
   registerMissionTools(server, limen);
   registerClaimTools(server, limen);
   registerWmTools(server, limen);
-
-  // Register high-level knowledge tools (session-managed)
-  registerKnowledgeTools(server, adapter);
 
   // Register resources
   registerHealthResource(server, limen);

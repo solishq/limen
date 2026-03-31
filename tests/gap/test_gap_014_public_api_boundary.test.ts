@@ -288,7 +288,6 @@ describe('Layer 4: Consumer patterns — downstream integration path', () => {
     assert.equal(typeof limen.session, 'function');
     assert.ok(limen.missions, 'Must have missions namespace');
     assert.ok(limen.agents, 'Must have agents namespace');
-    assert.ok(limen.knowledge, 'Must have knowledge namespace');
     assert.ok(limen.roles, 'Must have roles namespace');
     assert.ok(limen.data, 'Must have data namespace');
     assert.ok(limen.metrics, 'Must have metrics namespace');
