@@ -155,7 +155,7 @@ function makeValidRelationshipInput(overrides?: Partial<RelationshipCreateInput>
 function makeValidRetractInput(overrides?: Partial<RetractClaimInput>): RetractClaimInput {
   return {
     claimId: claimId('claim-retract-001'),
-    reason: 'Updated analysis shows previous conclusion was incorrect',
+    reason: 'incorrect',
     ...overrides,
   };
 }
@@ -837,7 +837,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
 
       const retractInput: RetractClaimInput = {
         claimId: createResult.value.claim.id,
-        reason: 'Superseded by new analysis',
+        reason: 'superseded',
       };
       const retractResult = system.retractClaim.execute(conn, ctx, retractInput);
       assert.strictEqual(retractResult.ok, true);
@@ -860,13 +860,13 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       // First retraction
       system.retractClaim.execute(conn, ctx, {
         claimId: createResult.value.claim.id,
-        reason: 'First retraction',
+        reason: 'manual',
       });
 
       // Second retraction attempt
       const result = system.retractClaim.execute(conn, ctx, {
         claimId: createResult.value.claim.id,
-        reason: 'Duplicate retraction',
+        reason: 'manual',
       });
       assert.strictEqual(result.ok, false);
       if (result.ok) return;
@@ -892,7 +892,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       deps.eventBus.emitted.length = 0; // Clear previous events
       system.retractClaim.execute(conn, ctx, {
         claimId: resultA.value.claim.id,
-        reason: 'Source retraction',
+        reason: 'manual',
       });
 
       // Should have emitted claim.evidence.retracted for B
@@ -954,7 +954,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
 
       system.retractClaim.execute(conn, ctx, {
         claimId: createResult.value.claim.id,
-        reason: 'test',
+        reason: 'manual',
       });
 
       system.store.archive(conn, createResult.value.claim.id, ctx.tenantId);
@@ -1191,7 +1191,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       if (!b.ok) return;
 
       // Retract A
-      system.retractClaim.execute(conn, ctx, { claimId: a.value.claim.id, reason: 'test' });
+      system.retractClaim.execute(conn, ctx, { claimId: a.value.claim.id, reason: 'manual' });
 
       const result = system.relateClaims.execute(conn, ctx, {
         fromClaimId: a.value.claim.id,
@@ -1214,7 +1214,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       if (!b.ok) return;
 
       // Retract B
-      system.retractClaim.execute(conn, ctx, { claimId: b.value.claim.id, reason: 'test' });
+      system.retractClaim.execute(conn, ctx, { claimId: b.value.claim.id, reason: 'manual' });
 
       // A → retracted B should succeed
       const result = system.relateClaims.execute(conn, ctx, {
@@ -2074,7 +2074,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       const claimIdValue = createResult.value.claim.id;
       system.retractClaim.execute(conn, ctx, {
         claimId: claimIdValue,
-        reason: 'Test retraction for keyClaimIds validation',
+        reason: 'manual',
       });
       // Retracted claim must still be retrievable (for keyClaimIds validation).
       const retrieved = system.store.get(conn, claimIdValue, ctx.tenantId);
@@ -2132,7 +2132,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
 
       system.retractClaim.execute(conn, ctx, {
         claimId: createResult.value.claim.id,
-        reason: 'Audit test retraction',
+        reason: 'manual',
       });
       // Implementation will verify audit entry fields
     });
@@ -2248,7 +2248,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       // Retract A
       system.retractClaim.execute(conn, ctx, {
         claimId: a.value.claim.id,
-        reason: 'Concurrent test',
+        reason: 'manual',
       });
 
       // Attempt relationship from A (now retracted) → B
@@ -2384,7 +2384,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       deps.eventBus.emitted.length = 0;
       system.retractClaim.execute(conn, ctx, {
         claimId: resultA.value.claim.id,
-        reason: 'Boundary test',
+        reason: 'manual',
       });
 
       // claim.evidence.retracted should fire for C2 (direct dependent) but NOT for C3
@@ -2420,7 +2420,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       // Retract A
       system.retractClaim.execute(conn, ctx, {
         claimId: resultA.value.claim.id,
-        reason: 'Cascade test',
+        reason: 'manual',
       });
 
       // B must still be active (no cascade)
@@ -2640,7 +2640,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       deps.eventBus.emitted.length = 0;
       system.retractClaim.execute(conn, ctx, {
         claimId: createResult.value.claim.id,
-        reason: 'Payload test',
+        reason: 'manual',
       });
 
       const events = deps.eventBus.emitted.filter(e => e.type === 'claim.retracted');
@@ -2664,7 +2664,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       deps.eventBus.emitted.length = 0;
       system.retractClaim.execute(conn, ctx, {
         claimId: resultA.value.claim.id,
-        reason: 'Evidence retraction payload test',
+        reason: 'manual',
       });
 
       const events = deps.eventBus.emitted.filter(e => e.type === 'claim.evidence.retracted');
@@ -2843,7 +2843,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
 
       const retractResult = system.retractClaim.execute(conn, ctx, {
         claimId: createResult.value.claim.id,
-        reason: 'Source agent retraction',
+        reason: 'manual',
       });
       assert.strictEqual(retractResult.ok, true);
 
@@ -2869,7 +2869,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       });
       const retractResult = system.retractClaim.execute(conn, otherTenantCtx, {
         claimId: createResult.value.claim.id,
-        reason: 'Cross-tenant attempt',
+        reason: 'manual',
       });
       assert.strictEqual(retractResult.ok, false);
       if (retractResult.ok) return;
@@ -2958,7 +2958,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       // Step 3: Retract claim A
       const retractResult = system.retractClaim.execute(conn, ctx, {
         claimId: claimA.value.claim.id,
-        reason: 'Testing retraction contamination',
+        reason: 'manual',
       });
       assert.strictEqual(retractResult.ok, true);
 
@@ -3077,7 +3077,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       // Step 2: Retract the claim
       const retractResult = system.retractClaim.execute(conn, ctx, {
         claimId: createResult.value.claim.id,
-        reason: 'Testing trace emission on retraction',
+        reason: 'manual',
       });
       assert.strictEqual(retractResult.ok, true, 'Retraction should succeed');
 
@@ -3088,7 +3088,8 @@ describe('CCP Contract Tests — Limen v1.0', () => {
       const tracePayload = retractedTraces[0].payload as { type: string; claimId: string; reason: string };
       assert.strictEqual(tracePayload.type, CCP_TRACE_EVENTS.CLAIM_RETRACTED);
       assert.strictEqual(tracePayload.claimId, createResult.value.claim.id);
-      assert.strictEqual(tracePayload.reason, 'Testing trace emission on retraction');
+      // Phase 4: Updated to match valid RetractionReason taxonomy
+      assert.strictEqual(tracePayload.reason, 'manual');
     });
 
     it('#168: SC-11 with empty permissions rejected with UNAUTHORIZED (BPB-004, DC-SC11-401)', () => {
@@ -3128,7 +3129,7 @@ describe('CCP Contract Tests — Limen v1.0', () => {
 
       const retractResult = system.retractClaim.execute(conn, ctx, {
         claimId: retractClaim.value.claim.id,
-        reason: 'Testing status default behavior',
+        reason: 'manual',
       });
       assert.strictEqual(retractResult.ok, true);
 

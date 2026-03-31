@@ -34,6 +34,13 @@ export interface KernelConfig {
   readonly masterKey: Buffer;
   readonly busyTimeoutMs?: number;            // default 5000
   readonly postQuantum?: boolean;             // default false
+  /**
+   * Phase 4 §4.5, C.8: Force RBAC active regardless of custom roles.
+   * When true, RBAC enforces on all operations.
+   * When false/undefined (default), RBAC is dormant unless custom roles exist.
+   * I-P4-10, I-P4-11.
+   */
+  readonly requireRbac?: boolean;
 }
 
 // ─── Kernel Health ───
