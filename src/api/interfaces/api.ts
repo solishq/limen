@@ -49,6 +49,9 @@ import type {
   SearchOptions, SearchResult,
 } from '../convenience/convenience_types.js';
 
+// Phase 5: Cognitive API types
+import type { CognitiveNamespace } from '../cognitive/cognitive_api.js';
+
 // Phase 4: WMP input/output types for consumer-facing WorkingMemoryApi
 import type {
   WriteWorkingMemoryInput, WriteWorkingMemoryOutput,
@@ -84,6 +87,10 @@ export type {
   FreshnessLabel, FreshnessThresholds,
   StabilityConfig, AccessTrackerConfig,
 } from '../convenience/convenience_types.js';
+
+// Phase 5: Cognitive API types
+export type { CognitiveNamespace } from '../cognitive/cognitive_api.js';
+export type { CognitiveHealthReport, CognitiveHealthConfig } from '../../cognitive/health.js';
 
 // Sprint 7: Consumer-facing ClaimApi — no conn/ctx required (DC-P4-406, C-SEC-05)
 export interface ClaimApi {
@@ -348,6 +355,16 @@ export interface Limen {
    * No-op in multi-tenant mode (agentId is per-session).
    */
   setDefaultAgent(agentId: AgentId): void;
+
+  // -- Phase 5: Cognitive Intelligence Namespace --
+
+  /**
+   * Phase 5 §5.3: Cognitive intelligence namespace.
+   * Provides knowledge health diagnostics.
+   * Forward-compatible with Phase 12 (consolidate, verify, narrative).
+   * PA Ruling: limen.cognitive.health() (not limen.health.cognitive()).
+   */
+  readonly cognitive: CognitiveNamespace;
 
   // -- Phase 1: Convenience API (remember/recall/forget/connect/reflect) --
 

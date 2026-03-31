@@ -135,6 +135,8 @@ export interface Claim {
   readonly accessCount: number;
   /** Phase 3 §3.2: Stability value in days. Set at creation, immutable. */
   readonly stability: number;
+  /** Phase 5 §5.1: Free-text reasoning for why this claim was asserted. Immutable (CCP-I1). */
+  readonly reasoning: string | null;
 }
 
 /**
@@ -253,6 +255,8 @@ export interface ClaimCreateInput {
   readonly runtimeWitness?: RuntimeWitnessInput;
   /** DC-CCP-307: Optional idempotency key for duplicate detection on retry */
   readonly idempotencyKey?: ClaimIdempotencyInput;
+  /** Phase 5 §5.2: Optional free-text reasoning for why this claim is being asserted. */
+  readonly reasoning?: string;
 }
 
 /**
