@@ -876,11 +876,12 @@ export async function createLimen(
   try {
     const convInit = await initializeConvenience(agentsApi, missionsApi, (agentId) => {
       defaultAgentId = agentId;
-    });
+    }, kernel.time);
 
     convenienceLayer = createConvenienceLayer({
       claims: claimsApi,
       getConnection,
+      time: kernel.time,
       missionId: convInit.missionId,
       taskId: convInit.taskId,
       maxAutoConfidence,
@@ -1053,7 +1054,7 @@ export async function createLimen(
       options?: import('./interfaces/api.js').RememberOptions,
     ) {
       if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
-      return convenienceLayer.remember(subjectOrText, predicateOrOptions as string, value!, options);
+      return convenienceLayer.remember(subjectOrText, predicateOrOptions, value, options);
     },
 
     recall(subject?: string, predicate?: string, options?: import('./interfaces/api.js').RecallOptions) {

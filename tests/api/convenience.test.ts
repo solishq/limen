@@ -18,6 +18,13 @@ import { randomBytes } from 'node:crypto';
 
 import { createLimen } from '../../src/api/index.js';
 import type { Limen } from '../../src/api/index.js';
+import { createConvenienceLayer } from '../../src/api/convenience/convenience_layer.js';
+import type { ConvenienceLayerDeps } from '../../src/api/convenience/convenience_layer.js';
+import type { ClaimApi } from '../../src/api/interfaces/api.js';
+import type { MissionId, TaskId } from '../../src/kernel/interfaces/index.js';
+import type { TimeProvider } from '../../src/kernel/interfaces/time.js';
+import type { Result } from '../../src/kernel/interfaces/index.js';
+import type { ClaimCreateInput, AssertClaimOutput, ClaimId } from '../../src/claims/interfaces/claim_types.js';
 
 // ─── Test Helpers ───
 
@@ -866,5 +873,345 @@ describe('Phase 1: Subject format (I-CONV-13)', () => {
     assert.ok(hash, 'Should have hash segment');
     assert.equal(hash!.length, 12, 'Hash should be 12 hex chars');
     assert.ok(/^[0-9a-f]{12}$/.test(hash!), 'Hash should be lowercase hex');
+  });
+});
+
+// ============================================================================
+// Mock helpers for unit-level convenience layer tests
+// ============================================================================
+
+/** Create a mock TimeProvider */
+function mockTime(): TimeProvider {
+  return {
+    nowISO: () => '2026-03-30T00:00:00.000Z',
+    nowMs: () => new Date('2026-03-30T00:00:00.000Z').getTime(),
+  };
+}
+
+/** Create a spy ClaimApi that records calls and delegates to a handler */
+function spyClaimApi(overrides?: {
+  assertClaim?: (input: ClaimCreateInput) => Result<AssertClaimOutput>;
+}): ClaimApi & { assertClaimCalls: ClaimCreateInput[] } {
+  const calls: ClaimCreateInput[] = [];
+
+  let callCount = 0;
+  const mockClaimId = () => `mock-claim-${++callCount}` as ClaimId;
+
+  return {
+    assertClaimCalls: calls,
+    assertClaim(input: ClaimCreateInput): Result<AssertClaimOutput> {
+      calls.push(input);
+      if (overrides?.assertClaim) return overrides.assertClaim(input);
+      return {
+        ok: true,
+        value: {
+          claim: {
+            id: mockClaimId(),
+            tenantId: null,
+            subject: input.subject,
+            predicate: input.predicate,
+            object: input.object,
+            confidence: input.confidence,
+            validAt: input.validAt,
+            sourceMissionId: input.missionId,
+            sourceTaskId: input.taskId,
+            sourceAgentId: 'mock-agent' as import('../../src/kernel/interfaces/index.js').AgentId,
+            groundingMode: input.groundingMode,
+            runtimeWitness: input.runtimeWitness ?? null,
+            status: 'active',
+            archived: false,
+            createdAt: '2026-03-30T00:00:00.000Z',
+          },
+          grounding: { grounded: true, mode: input.groundingMode },
+        },
+      };
+    },
+    relateClaims() { return { ok: true, value: { relationship: {} } } as Result<any>; },
+    queryClaims() { return { ok: true, value: { claims: [], total: 0, hasMore: false } } as Result<any>; },
+    retractClaim() { return { ok: true, value: undefined } as Result<any>; },
+  };
+}
+
+/** Create mock ConvenienceLayerDeps */
+function mockDeps(overrides?: {
+  maxAutoConfidence?: number;
+  assertClaim?: (input: ClaimCreateInput) => Result<AssertClaimOutput>;
+}): ConvenienceLayerDeps & { spyClaims: ReturnType<typeof spyClaimApi> } {
+  const spy = spyClaimApi({ assertClaim: overrides?.assertClaim });
+  let transactionActive = false;
+  return {
+    spyClaims: spy,
+    claims: spy,
+    getConnection: () => ({
+      dataDir: '/tmp/mock',
+      schemaVersion: 1,
+      tenancyMode: 'single',
+      transaction: (fn: () => any) => fn(),
+      run: (sql: string) => {
+        if (sql === 'BEGIN') transactionActive = true;
+        if (sql === 'COMMIT') transactionActive = false;
+        if (sql === 'ROLLBACK') transactionActive = false;
+        return { changes: 0 };
+      },
+      get: () => null,
+      all: () => [],
+    } as any),
+    time: mockTime(),
+    missionId: 'mock-mission' as MissionId,
+    taskId: null,
+    maxAutoConfidence: overrides?.maxAutoConfidence ?? 0.7,
+  };
+}
+
+// ============================================================================
+// F-P1-001: evidence_path confidence bypass — DISCRIMINATIVE TESTS
+// (Mutation 10: disable bypass -> always cap. This test KILLS the mutation.)
+// ============================================================================
+
+describe('Phase 1: evidence_path confidence bypass (F-P1-001, I-CONV-05)', () => {
+  it('F-P1-001 KILL: evidence_path with non-empty evidenceRefs passes uncapped confidence to ClaimApi', () => {
+    const deps = mockDeps({ maxAutoConfidence: 0.5 });
+    const layer = createConvenienceLayer(deps);
+
+    const result = layer.remember('entity:test:highconf', 'test.evidence', 'grounded', {
+      confidence: 0.95,
+      groundingMode: 'evidence_path',
+      evidenceRefs: [{ type: 'artifact', id: 'evidence-123' }],
+    });
+
+    assert.ok(result.ok, `remember should succeed: ${!result.ok ? result.error.message : ''}`);
+
+    // DISCRIMINATIVE: Verify the confidence passed to assertClaim was 0.95, NOT 0.5
+    assert.equal(deps.spyClaims.assertClaimCalls.length, 1, 'Should have made one assertClaim call');
+    const passedConfidence = deps.spyClaims.assertClaimCalls[0]!.confidence;
+    assert.equal(passedConfidence, 0.95,
+      `evidence_path with evidenceRefs should bypass cap. Expected 0.95, got ${passedConfidence}`);
+  });
+
+  it('F-P1-001 CONTROL: evidence_path with EMPTY evidenceRefs caps confidence', () => {
+    const deps = mockDeps({ maxAutoConfidence: 0.5 });
+    const layer = createConvenienceLayer(deps);
+
+    const result = layer.remember('entity:test:noev', 'test.evidence', 'no-evidence', {
+      confidence: 0.95,
+      groundingMode: 'evidence_path',
+      evidenceRefs: [],
+    });
+
+    assert.ok(result.ok, `remember should succeed: ${!result.ok ? result.error.message : ''}`);
+
+    // DISCRIMINATIVE: Verify the confidence was CAPPED to 0.5
+    assert.equal(deps.spyClaims.assertClaimCalls.length, 1);
+    const passedConfidence = deps.spyClaims.assertClaimCalls[0]!.confidence;
+    assert.equal(passedConfidence, 0.5,
+      `evidence_path with empty evidenceRefs should cap. Expected 0.5, got ${passedConfidence}`);
+  });
+
+  it('F-P1-001 CONTROL: runtime_witness caps confidence', () => {
+    const deps = mockDeps({ maxAutoConfidence: 0.5 });
+    const layer = createConvenienceLayer(deps);
+
+    const result = layer.remember('entity:test:rw', 'test.witness', 'runtime', {
+      confidence: 0.95,
+    });
+
+    assert.ok(result.ok);
+    assert.equal(deps.spyClaims.assertClaimCalls.length, 1);
+    assert.equal(deps.spyClaims.assertClaimCalls[0]!.confidence, 0.5,
+      'runtime_witness should always cap');
+  });
+});
+
+// ============================================================================
+// F-P1-002: reflect() transaction rollback — DISCRIMINATIVE TESTS
+// (Mutation 3: remove BEGIN/COMMIT. This test KILLS the mutation.)
+// ============================================================================
+
+describe('Phase 1: reflect() transaction rollback (F-P1-002, I-CONV-10)', () => {
+  it('F-P1-002 KILL: mid-batch ClaimApi failure triggers ROLLBACK, zero claims persist', () => {
+    let callCount = 0;
+    const deps = mockDeps({
+      assertClaim: (input: ClaimCreateInput) => {
+        callCount++;
+        if (callCount === 2) {
+          // Second call fails (simulating a CCP-level rejection)
+          return {
+            ok: false,
+            error: { code: 'CLAIM_LIMIT_EXCEEDED', message: 'Per-mission claim limit exceeded', spec: 'SC-11' },
+          } as Result<AssertClaimOutput>;
+        }
+        // First and third calls would succeed
+        return {
+          ok: true,
+          value: {
+            claim: {
+              id: `claim-${callCount}` as ClaimId,
+              tenantId: null,
+              subject: input.subject,
+              predicate: input.predicate,
+              object: input.object,
+              confidence: input.confidence,
+              validAt: input.validAt,
+              sourceMissionId: input.missionId,
+              sourceTaskId: input.taskId,
+              sourceAgentId: 'mock-agent' as import('../../src/kernel/interfaces/index.js').AgentId,
+              groundingMode: input.groundingMode,
+              runtimeWitness: input.runtimeWitness ?? null,
+              status: 'active',
+              archived: false,
+              createdAt: '2026-03-30T00:00:00.000Z',
+            },
+            grounding: { grounded: true, mode: input.groundingMode },
+          },
+        };
+      },
+    });
+
+    // Track SQL commands to verify transaction behavior
+    const sqlCommands: string[] = [];
+    const originalGetConnection = deps.getConnection;
+    (deps as any).getConnection = () => {
+      const conn = originalGetConnection();
+      return {
+        ...conn,
+        run: (sql: string, params?: unknown[]) => {
+          sqlCommands.push(sql);
+          return conn.run(sql, params);
+        },
+      };
+    };
+
+    const layer = createConvenienceLayer(deps);
+
+    const result = layer.reflect([
+      { category: 'decision', statement: 'First valid entry' },
+      { category: 'pattern', statement: 'Second entry will fail at CCP' },
+      { category: 'warning', statement: 'Third valid entry' },
+    ]);
+
+    // The reflect should fail
+    assert.equal(result.ok, false, 'reflect() should fail when 2nd entry fails at CCP');
+    if (!result.ok) {
+      assert.equal(result.error.code, 'CLAIM_LIMIT_EXCEEDED',
+        'Error should be the CCP rejection code');
+    }
+
+    // DISCRIMINATIVE: Verify BEGIN was issued, then ROLLBACK (not COMMIT)
+    assert.ok(sqlCommands.includes('BEGIN'), 'Should have issued BEGIN');
+    assert.ok(sqlCommands.includes('ROLLBACK'), 'Should have issued ROLLBACK on failure');
+    assert.ok(!sqlCommands.includes('COMMIT'), 'Should NOT have issued COMMIT on failure');
+
+    // Verify: only 1 assertClaim call was made (first succeeded, second failed, third never called)
+    assert.equal(callCount, 2, 'Should have called assertClaim twice (first succeeded, second failed)');
+  });
+
+  it('F-P1-002 CONTROL: successful batch issues BEGIN then COMMIT', () => {
+    const deps = mockDeps();
+
+    const sqlCommands: string[] = [];
+    const originalGetConnection = deps.getConnection;
+    (deps as any).getConnection = () => {
+      const conn = originalGetConnection();
+      return {
+        ...conn,
+        run: (sql: string, params?: unknown[]) => {
+          sqlCommands.push(sql);
+          return conn.run(sql, params);
+        },
+      };
+    };
+
+    const layer = createConvenienceLayer(deps);
+
+    const result = layer.reflect([
+      { category: 'decision', statement: 'Entry one' },
+      { category: 'pattern', statement: 'Entry two' },
+    ]);
+
+    assert.ok(result.ok, `reflect should succeed: ${!result.ok ? result.error.message : ''}`);
+
+    // DISCRIMINATIVE: Verify BEGIN then COMMIT
+    assert.ok(sqlCommands.includes('BEGIN'), 'Should have issued BEGIN');
+    assert.ok(sqlCommands.includes('COMMIT'), 'Should have issued COMMIT on success');
+    assert.ok(!sqlCommands.includes('ROLLBACK'), 'Should NOT have issued ROLLBACK on success');
+  });
+});
+
+// ============================================================================
+// F-P1-008: reflect() entries count limit
+// ============================================================================
+
+describe('Phase 1: reflect() entries limit (F-P1-008)', () => {
+  it('F-P1-008 rejection: entries exceeding 100 returns CONV_ENTRIES_LIMIT', async () => {
+    const limen = await createTestLimen();
+    const entries = Array.from({ length: 101 }, (_, i) => ({
+      category: 'decision' as const,
+      statement: `Entry ${i}`,
+    }));
+
+    const result = limen.reflect(entries);
+    assert.equal(result.ok, false, 'Should fail with too many entries');
+    if (result.ok) return;
+    assert.equal(result.error.code, 'CONV_ENTRIES_LIMIT');
+  });
+
+  it('F-P1-008 success: exactly 100 entries is accepted', () => {
+    const deps = mockDeps();
+    const layer = createConvenienceLayer(deps);
+    const entries = Array.from({ length: 100 }, (_, i) => ({
+      category: 'decision' as const,
+      statement: `Entry ${i}`,
+    }));
+
+    const result = layer.reflect(entries);
+    assert.ok(result.ok, `reflect: ${!result.ok ? result.error.message : ''}`);
+    if (!result.ok) return;
+    assert.equal(result.value.stored, 100);
+  });
+});
+
+// ============================================================================
+// F-P1-009: NaN/Infinity confidence tests
+// ============================================================================
+
+describe('Phase 1: NaN/Infinity confidence (F-P1-009)', () => {
+  it('F-P1-009: remember() with NaN confidence returns CONV_INVALID_CONFIDENCE', async () => {
+    const limen = await createTestLimen();
+    const result = limen.remember('entity:test:nan', 'test.nan', 'val', { confidence: NaN });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.error.code, 'CONV_INVALID_CONFIDENCE');
+  });
+
+  it('F-P1-009: remember() with Infinity confidence returns CONV_INVALID_CONFIDENCE', async () => {
+    const limen = await createTestLimen();
+    const result = limen.remember('entity:test:inf', 'test.inf', 'val', { confidence: Infinity });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.error.code, 'CONV_INVALID_CONFIDENCE');
+  });
+
+  it('F-P1-009: remember() with -Infinity confidence returns CONV_INVALID_CONFIDENCE', async () => {
+    const limen = await createTestLimen();
+    const result = limen.remember('entity:test:ninf', 'test.ninf', 'val', { confidence: -Infinity });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.error.code, 'CONV_INVALID_CONFIDENCE');
+  });
+
+  it('F-P1-009: reflect() with NaN confidence returns CONV_INVALID_CONFIDENCE', async () => {
+    const limen = await createTestLimen();
+    const result = limen.reflect([{ category: 'decision', statement: 'test', confidence: NaN }]);
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.error.code, 'CONV_INVALID_CONFIDENCE');
+  });
+
+  it('F-P1-009: reflect() with Infinity confidence returns CONV_INVALID_CONFIDENCE', async () => {
+    const limen = await createTestLimen();
+    const result = limen.reflect([{ category: 'decision', statement: 'test', confidence: Infinity }]);
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.error.code, 'CONV_INVALID_CONFIDENCE');
   });
 });

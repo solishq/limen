@@ -13,6 +13,7 @@
  */
 
 import type { AgentId, MissionId, TaskId } from '../../kernel/interfaces/index.js';
+import type { TimeProvider } from '../../kernel/interfaces/time.js';
 import type { AgentApi, MissionApi } from '../interfaces/api.js';
 
 /**
@@ -22,7 +23,7 @@ import type { AgentApi, MissionApi } from '../interfaces/api.js';
 export interface ConvenienceInitResult {
   readonly agentId: AgentId;
   readonly missionId: MissionId;
-  readonly taskId: TaskId;
+  readonly taskId: TaskId | null;
 }
 
 /** Well-known agent name for convenience API */
@@ -50,6 +51,7 @@ export async function initializeConvenience(
   agents: AgentApi,
   missions: MissionApi,
   setDefaultAgent: (agentId: AgentId) => void,
+  time: TimeProvider,
 ): Promise<ConvenienceInitResult> {
   // 1. Register agent (idempotent -- if already exists, retrieve it)
   let agentId: AgentId;
@@ -76,7 +78,7 @@ export async function initializeConvenience(
 
   // 3. Create convenience mission
   // Deadline: 1 year from now. Budget: 1,000,000 tokens.
-  const deadline = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+  const deadline = new Date(time.nowMs() + 365 * 24 * 60 * 60 * 1000).toISOString();
   const missionHandle = await missions.create({
     agent: CONVENIENCE_AGENT_NAME,
     objective: CONVENIENCE_MISSION_OBJECTIVE,
@@ -130,6 +132,6 @@ export async function initializeConvenience(
   return {
     agentId,
     missionId,
-    taskId: null as unknown as TaskId, // TaskId is nullable in ClaimCreateInput
+    taskId: null,
   };
 }
