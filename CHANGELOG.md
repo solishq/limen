@@ -5,6 +5,35 @@ All notable changes to Limen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-03-31
+
+### Added
+- **Convenience API** (`remember`, `recall`, `forget`, `connect`, `reflect`, `promptInstructions`) — the thesis becomes accessible. 3 lines to store a belief. Full engineering controls: Design Source, Breaker pass, Certifier gate.
+- **FTS5 Full-Text Search** (`search`) — find beliefs by content. Primary index (`unicode61` tokenizer) for Latin/Cyrillic, secondary index (`trigram`) for CJK and substring matching. External content mode (zero data duplication). Tenant-scoped. FTS5 query injection sanitized.
+- **Cognitive Metabolism** — beliefs that breathe. FSRS power-decay formula `R(t) = (1 + t/(9*S))^(-1)` computed on every read, never stored. `effective_confidence` returned alongside raw `confidence`. Freshness classification (Fresh/Aging/Stale). Access tracking with batched flush. `minConfidence` filters by decayed confidence.
+- **Wrongness containment** — `maxAutoConfidence` ceiling (default 0.7) prevents confidence laundering. Auto-extracted claims cannot start above 0.7 unless human-verified via `evidence_path` grounding.
+- **Stability per claim** — predicate-based stability assignment: governance 365d, architectural 180d, finding 90d, warning 30d, ephemeral 7d, preference 120d. Configurable patterns.
+- `retractClaim` on `ClaimApi` — programmatic claim retraction with audit trail.
+- `searchClaims` on `ClaimApi` — programmatic FTS5 search with BM25 ranking.
+- Migrations v37 (FTS5 primary + triggers), v38 (FTS5 CJK trigram + triggers), v39 (cognitive metabolism columns).
+- 235 new tests (3,188 → 3,423). Every test through A21 dual-path (success + rejection).
+
+### Changed
+- npm description updated to "Governed knowledge engine for AI agents."
+- npm keywords expanded for discoverability.
+- `BeliefView` extended with `effectiveConfidence`, `freshness`, `stability`, `lastAccessedAt`, `accessCount`.
+- `SearchResult.score` now uses `effectiveConfidence * BM25` — old claims rank lower than fresh ones.
+- `recall()` and `search()` return decay-aware results by default.
+
+### Removed
+- **Knowledge API stub** (`KnowledgeApi`, `KnowledgeApiImpl`, MCP knowledge tools) — dead code that returned `{ memoriesCreated: 0 }`. Replaced by the convenience API built through full engineering controls.
+
+## [1.2.0] - 2026-03-28
+
+### Added
+- `setDefaultAgent` API for library-mode agent identity.
+- MCP server: session adapter with knowledge tools (subsequently removed in v1.3.0).
+
 ## [1.1.0] - 2026-03-24
 
 ### Added
