@@ -27,6 +27,7 @@ import type {
   ClaimCreateInput, AssertClaimOutput,
   RelationshipCreateInput, RelateClaimsOutput,
   ClaimQueryInput, ClaimQueryResult,
+  RetractClaimInput,
 } from '../../claims/interfaces/claim_types.js';
 
 import { requirePermission } from '../enforcement/rbac_guard.js';
@@ -46,6 +47,8 @@ export interface RawClaimFacade {
   assertClaim(conn: DatabaseConnection, ctx: OperationContext, input: ClaimCreateInput): Result<AssertClaimOutput>;
   relateClaims(conn: DatabaseConnection, ctx: OperationContext, input: RelationshipCreateInput): Result<RelateClaimsOutput>;
   queryClaims(conn: DatabaseConnection, ctx: OperationContext, input: ClaimQueryInput): Result<ClaimQueryResult>;
+  /** Phase 1 prerequisite: Retract a claim (active -> retracted, audited per I-03). */
+  retractClaim(conn: DatabaseConnection, ctx: OperationContext, input: RetractClaimInput): Result<void>;
 }
 
 // ============================================================================
@@ -112,6 +115,22 @@ export function createRawClaimFacade(
       requireRateLimit(rateLimiter, conn, ctx, 'api_calls');
 
       return claimSystem.queryClaims.execute(conn, ctx, input);
+    },
+
+    /**
+     * §14.4: Retract a claim.
+     * Phase 1 prerequisite: Expose retractClaim through the facade.
+     * DC-P4-404: RBAC check FIRST — unauthorized → throws UNAUTHORIZED.
+     */
+    retractClaim(
+      conn: DatabaseConnection,
+      ctx: OperationContext,
+      input: RetractClaimInput,
+    ): Result<void> {
+      requirePermission(rbac, ctx, 'create_mission');
+      requireRateLimit(rateLimiter, conn, ctx, 'api_calls');
+
+      return claimSystem.retractClaim.execute(conn, ctx, input);
     },
   });
 }

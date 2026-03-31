@@ -19,6 +19,7 @@ import type {
   ClaimCreateInput, AssertClaimOutput,
   RelationshipCreateInput, RelateClaimsOutput,
   ClaimQueryInput, ClaimQueryResult,
+  RetractClaimInput,
 } from '../../claims/interfaces/claim_types.js';
 import type { ClaimApi } from '../interfaces/api.js';
 import type { RawClaimFacade } from './claim_facade.js';
@@ -40,5 +41,9 @@ export class ClaimApiImpl implements ClaimApi {
 
   queryClaims(input: ClaimQueryInput): Result<ClaimQueryResult> {
     return this.raw.queryClaims(this.getConnection(), this.getContext(), input);
+  }
+
+  retractClaim(input: RetractClaimInput): Result<void> {
+    return this.raw.retractClaim(this.getConnection(), this.getContext(), input);
   }
 }
