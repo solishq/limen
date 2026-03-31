@@ -29,8 +29,13 @@ const MS_PER_DAY = 86_400_000;
  * I-P3-01: CONSTITUTIONAL. Decay formula correctness.
  */
 export function computeDecayFactor(ageMs: number, stabilityDays: number): number {
-  // DC-P3-103: Guard against zero/negative stability
-  if (stabilityDays <= 0) return 0;
+  // F-P3-001: Guard against NaN, Infinity, and non-finite stability values.
+  // NaN <= 0 is false, so the original guard did NOT catch NaN.
+  // Must check isFinite BEFORE the <= 0 comparison.
+  if (!Number.isFinite(stabilityDays) || stabilityDays <= 0) return 0;
+
+  // F-P3-002: Guard against NaN/Infinity age — treat as brand-new (age=0).
+  if (!Number.isFinite(ageMs)) return 1;
 
   // DC-P3-102: Clamp negative age (future validAt)
   const clampedAgeMs = Math.max(0, ageMs);
@@ -66,5 +71,10 @@ export function computeEffectiveConfidence(
  * @returns Age in milliseconds (>= 0)
  */
 export function computeAgeMs(validAt: string, nowMs: number): number {
-  return Math.max(0, nowMs - Date.parse(validAt));
+  // F-P3-002: Guard against invalid date strings. Date.parse('invalid') returns NaN.
+  // Math.max(0, NaN) returns NaN, which propagates through the entire decay pipeline.
+  // Treat invalid/unparseable dates as brand-new (age=0).
+  const parsedMs = Date.parse(validAt);
+  if (!Number.isFinite(parsedMs)) return 0;
+  return Math.max(0, nowMs - parsedMs);
 }

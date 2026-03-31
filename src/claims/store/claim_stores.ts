@@ -577,10 +577,19 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
       // Apply requested limit after Phase 2 filtering
       const claims = allItems.slice(0, requestedLimit);
 
+      // F-P3-007: total and hasMore must reflect post-filter count, not SQL COUNT(*).
+      // SQL pre-filter (confidence >= minConfidence) is a necessary condition, but the
+      // TypeScript post-filter (effectiveConfidence >= minConfidence) is the exact condition.
+      // Using the SQL total misleads consumers: API would claim total=10 but only return 3.
+      // When minConfidence filtering is active, use allItems.length as the total.
+      const postFilterTotal = hasMinConfidence ? allItems.length : total;
+
       return ok({
         claims,
-        total,
-        hasMore: total > offset + requestedLimit,
+        total: postFilterTotal,
+        hasMore: hasMinConfidence
+          ? allItems.length > requestedLimit
+          : total > offset + requestedLimit,
       });
     },
 

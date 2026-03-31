@@ -27,6 +27,10 @@ export interface AccessTrackerConfig {
 const DEFAULT_FLUSH_INTERVAL_MS = 5000;
 /** Default flush threshold: 100 distinct claims */
 const DEFAULT_FLUSH_THRESHOLD = 100;
+/** F-P3-010: Maximum pending events before dropping oldest. Prevents unbounded memory growth. */
+const MAX_PENDING_SIZE = 10_000;
+/** F-P3-010: Maximum consecutive flush failures before clearing pending. */
+const MAX_CONSECUTIVE_FAILURES = 5;
 
 /** Pending access event for a single claim. */
 interface PendingAccess {
@@ -64,6 +68,7 @@ export function createAccessTracker(
   const flushThreshold = config?.flushThreshold ?? DEFAULT_FLUSH_THRESHOLD;
   const pending = new Map<string, PendingAccess>();
   let destroyed = false;
+  let consecutiveFailures = 0;
 
   // I-P3-13 (PA Amendment): Store interval ID for explicit clearInterval in shutdown.
   // Timer uses unref() to avoid keeping Node.js process alive (DC-P3-901).
@@ -91,10 +96,19 @@ export function createAccessTracker(
       }
       conn.run('COMMIT');
       pending.clear();
+      consecutiveFailures = 0;
     } catch {
       // DC-P3-902: Flush errors caught and logged. Never propagated.
       // Access tracking is QUALITY_GATE. Rollback and retry next cycle.
       try { conn!.run('ROLLBACK'); } catch { /* already rolled back */ }
+
+      // F-P3-010: Track consecutive failures. Clear pending after MAX_CONSECUTIVE_FAILURES
+      // to prevent unbounded memory growth under persistent DB failure.
+      consecutiveFailures++;
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        pending.clear();
+        consecutiveFailures = 0;
+      }
     }
   }
 
@@ -117,6 +131,12 @@ export function createAccessTracker(
           existing.count += 1;
           existing.latestAt = accessedAt;
         } else {
+          // F-P3-010: Cap pending size to prevent unbounded memory growth.
+          // If we've hit the cap, force a flush first. If flush fails repeatedly,
+          // the consecutive failure handler will clear pending.
+          if (pending.size >= MAX_PENDING_SIZE) {
+            doFlush();
+          }
           pending.set(id, { count: 1, latestAt: accessedAt });
         }
       }
@@ -137,6 +157,12 @@ export function createAccessTracker(
 
     destroy(): void {
       if (destroyed) return;
+
+      // F-P3-009: Defensively flush pending events before destroying.
+      // The caller (index.ts) calls flush() before destroy(), but the API should
+      // not rely on external ordering. Flush is idempotent and safe here.
+      doFlush();
+
       destroyed = true;
 
       // I-P3-13: Explicit clearInterval using stored ID (PA Amendment)
