@@ -19,6 +19,7 @@ import { createHash } from 'node:crypto';
 import type { Result } from '../../kernel/interfaces/index.js';
 import type { MissionId, TaskId } from '../../kernel/interfaces/index.js';
 import type { DatabaseConnection } from '../../kernel/interfaces/database.js';
+import type { TimeProvider } from '../../kernel/interfaces/time.js';
 import type {
   ClaimCreateInput,
   ClaimQueryInput,
@@ -42,6 +43,7 @@ import {
   VALID_RELATIONSHIP_TYPES,
   VALID_CATEGORIES,
   MAX_STATEMENT_LENGTH,
+  MAX_REFLECT_ENTRIES,
   DEFAULT_RECALL_LIMIT,
 } from './convenience_types.js';
 
@@ -79,6 +81,7 @@ function hashSubject(text: string): string {
 export interface ConvenienceLayerDeps {
   readonly claims: ClaimApi;
   readonly getConnection: () => DatabaseConnection;
+  readonly time: TimeProvider;
   readonly missionId: MissionId;
   readonly taskId: TaskId | null;
   readonly maxAutoConfidence: number;
@@ -90,6 +93,7 @@ export interface ConvenienceLayerDeps {
 export interface ConvenienceLayer {
   remember(subject: string, predicate: string, value: string, options?: RememberOptions): Result<RememberResult>;
   remember(text: string, options?: RememberOptions): Result<RememberResult>;
+  remember(subjectOrText: string, predicateOrOptions?: string | RememberOptions, value?: string, options?: RememberOptions): Result<RememberResult>;
   recall(subject?: string, predicate?: string, options?: RecallOptions): Result<readonly BeliefView[]>;
   forget(claimId: string, reason?: string): Result<void>;
   connect(claimId1: string, claimId2: string, type: 'supports' | 'contradicts' | 'supersedes' | 'derived_from'): Result<void>;
@@ -107,7 +111,7 @@ export interface ConvenienceLayer {
  * Closure captures deps -- survives Object.freeze (I-CONV-15).
  */
 export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceLayer {
-  const { claims, getConnection, missionId, taskId, maxAutoConfidence } = deps;
+  const { claims, getConnection, time, missionId, taskId, maxAutoConfidence } = deps;
 
   /**
    * Compute effective confidence, applying the maxAutoConfidence cap
@@ -151,7 +155,7 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
     const groundingMode = options?.groundingMode ?? 'runtime_witness';
     const evidenceRefs = options?.evidenceRefs ?? [];
     const confidence = effectiveConfidence(options?.confidence, groundingMode, evidenceRefs);
-    const validAt = options?.validAt ?? new Date().toISOString();
+    const validAt = options?.validAt ?? time.nowISO();
     const objectType = options?.objectType ?? 'string';
 
     // Design Source §Grounding Mode Decision:
@@ -319,11 +323,6 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
         return err('CONV_INVALID_RELATIONSHIP', `Invalid relationship type: ${type}. Must be one of: ${VALID_RELATIONSHIP_TYPES.join(', ')}`);
       }
 
-      // Reject self-reference
-      if (claimId1 === claimId2) {
-        return err('CONV_SELF_REFERENCE', 'Cannot create a relationship from a claim to itself');
-      }
-
       const input: RelationshipCreateInput = {
         fromClaimId: claimId1 as ClaimId,
         toClaimId: claimId2 as ClaimId,
@@ -353,6 +352,11 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
       // Validate: non-empty entries
       if (!entries || entries.length === 0) {
         return err('CONV_EMPTY_ENTRIES', 'reflect() requires at least one entry');
+      }
+
+      // Validate: entries count limit (F-P1-008: DoS protection)
+      if (entries.length > MAX_REFLECT_ENTRIES) {
+        return err('CONV_ENTRIES_LIMIT', `reflect() accepts at most ${MAX_REFLECT_ENTRIES} entries, got ${entries.length}`);
       }
 
       // Pre-validate all entries before starting transaction
@@ -387,7 +391,7 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
         for (const entry of entries) {
           const subject = hashSubject(entry.statement);
           const confidence = Math.min(entry.confidence ?? maxAutoConfidence, maxAutoConfidence);
-          const validAt = new Date().toISOString();
+          const validAt = time.nowISO();
 
           const input: ClaimCreateInput = {
             subject,

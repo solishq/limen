@@ -200,6 +200,7 @@ export type ConvenienceErrorCode =
   | 'CONV_INVALID_CATEGORY'     // reflect() category not in allowed set
   | 'CONV_STATEMENT_TOO_LONG'   // reflect() statement exceeds 500 chars
   | 'CONV_EMPTY_ENTRIES'        // reflect() called with empty array
+  | 'CONV_ENTRIES_LIMIT'        // reflect() entries count exceeds maximum (100)
   | 'CONV_BATCH_PARTIAL'        // reflect() transaction failed mid-batch (rolled back)
   | 'CONV_CLAIM_NOT_FOUND'      // forget() target not found
   | 'CONV_ALREADY_RETRACTED'    // forget() target already retracted
@@ -222,3 +223,6 @@ export const DEFAULT_MAX_AUTO_CONFIDENCE = 0.7;
 
 /** Default recall limit */
 export const DEFAULT_RECALL_LIMIT = 50;
+
+/** Maximum number of entries in a single reflect() call */
+export const MAX_REFLECT_ENTRIES = 100;
