@@ -54,6 +54,9 @@ import {
   SEARCH_DEFAULT_LIMIT, SEARCH_MAX_LIMIT,
 } from '../interfaces/claim_types.js';
 import { analyzeQuery, sanitizeFts5Query } from '../../search/search_utils.js';
+import { computeAgeMs, computeEffectiveConfidence } from '../../cognitive/decay.js';
+import { classifyFreshness } from '../../cognitive/freshness.js';
+import { resolveStability } from '../../cognitive/stability.js';
 
 // ============================================================================
 // Helpers
@@ -235,6 +238,9 @@ function rowToClaim(row: Record<string, unknown>): Claim {
     status: row['status'] as ClaimStatus,
     archived: Boolean(row['archived']),
     createdAt: row['created_at'] as string,
+    lastAccessedAt: (row['last_accessed_at'] ?? null) as string | null,
+    accessCount: (row['access_count'] ?? 0) as number,
+    stability: (row['stability'] ?? 90) as number,
   };
 }
 
@@ -266,26 +272,68 @@ function rowToRelationship(row: Record<string, unknown>): ClaimRelationship {
 // ============================================================================
 
 function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
+  // Phase 3: Lazy detection of v39 schema (stability column).
+  // Cached after first check to avoid repeated PRAGMA queries.
+  let hasStabilityColumn: boolean | null = null;
+  function checkHasStabilityColumn(conn: DatabaseConnection): boolean {
+    if (hasStabilityColumn !== null) return hasStabilityColumn;
+    try {
+      const cols = conn.query<Record<string, unknown>>(
+        "PRAGMA table_info(claim_assertions)",
+        [],
+      );
+      hasStabilityColumn = cols.some(c => c['name'] === 'stability');
+    } catch {
+      hasStabilityColumn = false;
+    }
+    return hasStabilityColumn;
+  }
+
   return {
     create(conn: DatabaseConnection, ctx: OperationContext, input: ClaimCreateInput): Result<Claim> {
+      const hasStabCol = checkHasStabilityColumn(conn);
       const id = newId() as ClaimId;
       const now = deps.time.nowISO();
+      // Phase 3: Resolve stability from predicate pattern at creation time (I-P3-03).
+      const stability = resolveStability(input.predicate, deps.stabilityConfig);
       try {
-        conn.run(
-          `INSERT INTO claim_assertions (id, tenant_id, subject, predicate, object_type, object_value, confidence, valid_at, source_agent_id, source_mission_id, source_task_id, grounding_mode, runtime_witness, status, archived, idempotency_key, idempotency_hash, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, ?, ?, ?)`,
-          [
-            id, ctx.tenantId, input.subject, input.predicate,
-            input.object.type, JSON.stringify(input.object.value),
-            input.confidence, input.validAt,
-            ctx.agentId, input.missionId, input.taskId ?? null,
-            input.groundingMode,
-            input.runtimeWitness ? JSON.stringify(input.runtimeWitness) : null,
-            input.idempotencyKey?.key ?? null,
-            input.idempotencyKey?.key ? computeIdempotencyHash(input) : null,
-            now,
-          ],
-        );
+        // Phase 3: Include stability column if v39 schema has the column.
+        // Detection via hasStabilityColumn (cached at store creation time).
+        if (hasStabCol) {
+          conn.run(
+            `INSERT INTO claim_assertions (id, tenant_id, subject, predicate, object_type, object_value, confidence, valid_at, source_agent_id, source_mission_id, source_task_id, grounding_mode, runtime_witness, status, archived, idempotency_key, idempotency_hash, created_at, stability)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, ?, ?, ?, ?)`,
+            [
+              id, ctx.tenantId, input.subject, input.predicate,
+              input.object.type, JSON.stringify(input.object.value),
+              input.confidence, input.validAt,
+              ctx.agentId, input.missionId, input.taskId ?? null,
+              input.groundingMode,
+              input.runtimeWitness ? JSON.stringify(input.runtimeWitness) : null,
+              input.idempotencyKey?.key ?? null,
+              input.idempotencyKey?.key ? computeIdempotencyHash(input) : null,
+              now,
+              stability,
+            ],
+          );
+        } else {
+          // Pre-v39 schema: stability column doesn't exist yet.
+          conn.run(
+            `INSERT INTO claim_assertions (id, tenant_id, subject, predicate, object_type, object_value, confidence, valid_at, source_agent_id, source_mission_id, source_task_id, grounding_mode, runtime_witness, status, archived, idempotency_key, idempotency_hash, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, ?, ?, ?)`,
+            [
+              id, ctx.tenantId, input.subject, input.predicate,
+              input.object.type, JSON.stringify(input.object.value),
+              input.confidence, input.validAt,
+              ctx.agentId, input.missionId, input.taskId ?? null,
+              input.groundingMode,
+              input.runtimeWitness ? JSON.stringify(input.runtimeWitness) : null,
+              input.idempotencyKey?.key ?? null,
+              input.idempotencyKey?.key ? computeIdempotencyHash(input) : null,
+              now,
+            ],
+          );
+        }
         const claim: Claim = {
           id,
           tenantId: ctx.tenantId,
@@ -302,6 +350,9 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
           status: 'active',
           archived: false,
           createdAt: now,
+          lastAccessedAt: null,
+          accessCount: 0,
+          stability,
         };
         return ok(claim);
       } catch (e: unknown) {
@@ -441,8 +492,16 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-      const limit = Math.min(filters.limit ?? CLAIM_QUERY_DEFAULT_LIMIT, CLAIM_QUERY_MAX_LIMIT);
+      const requestedLimit = Math.min(filters.limit ?? CLAIM_QUERY_DEFAULT_LIMIT, CLAIM_QUERY_MAX_LIMIT);
       const offset = filters.offset ?? 0;
+
+      // Phase 3: Two-phase minConfidence filtering (I-P3-07).
+      // Phase 1 (SQL): confidence >= minConfidence is a necessary condition.
+      // Phase 2 (TypeScript): effectiveConfidence >= minConfidence is the exact condition.
+      // Over-fetch by 2x when minConfidence is set to account for decay filtering.
+      const hasMinConfidence = filters.minConfidence !== undefined && filters.minConfidence !== null;
+      const overFetchFactor = hasMinConfidence ? 2 : 1;
+      const sqlLimit = requestedLimit * overFetchFactor;
 
       // Count query
       const countRow = conn.get<{ total: number }>(`SELECT COUNT(*) as total FROM claim_assertions c ${whereClause}`, params);
@@ -451,12 +510,30 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
       // Data query
       const dataRows = conn.query<Record<string, unknown>>(
         `SELECT c.* FROM claim_assertions c ${whereClause} ORDER BY c.created_at DESC LIMIT ? OFFSET ?`,
-        [...params, limit, offset],
+        [...params, sqlLimit, offset],
       );
 
-      const claims: ClaimQueryResultItem[] = dataRows.map(row => {
+      // Phase 3: Compute effectiveConfidence and freshness for each result (I-P3-02, I-P3-06).
+      // Use a single nowMs for consistency within a single query invocation (Decision 9).
+      const nowMs = deps.time.nowMs();
+      const allItems: ClaimQueryResultItem[] = [];
+
+      for (const row of dataRows) {
         const claim = rowToClaim(row);
         const claimIdVal = claim.id;
+
+        // Phase 3: Compute decay
+        const ageMs = computeAgeMs(claim.validAt, nowMs);
+        const effConf = computeEffectiveConfidence(claim.confidence, ageMs, claim.stability);
+
+        // Phase 3: Two-phase minConfidence filter (Phase 2 -- TypeScript exact filter)
+        if (hasMinConfidence && effConf < filters.minConfidence!) {
+          continue;
+        }
+
+        // Phase 3: Classify freshness
+        const lastAccessMs = claim.lastAccessedAt ? Date.parse(claim.lastAccessedAt) : null;
+        const freshness = classifyFreshness(lastAccessMs, nowMs, deps.freshnessThresholds);
 
         // Computed properties — check relationship graph
         const supersededRow = conn.get<{ cnt: number }>(
@@ -472,6 +549,8 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
           claim,
           superseded: (supersededRow?.cnt ?? 0) > 0,
           disputed: (disputedRow?.cnt ?? 0) > 0,
+          effectiveConfidence: effConf,
+          freshness,
         };
 
         // Include evidence if requested
@@ -492,13 +571,25 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
           (item as unknown as { relationships: readonly ClaimRelationship[] }).relationships = relRows.map(rowToRelationship);
         }
 
-        return item;
-      });
+        allItems.push(item);
+      }
+
+      // Apply requested limit after Phase 2 filtering
+      const claims = allItems.slice(0, requestedLimit);
+
+      // F-P3-007: total and hasMore must reflect post-filter count, not SQL COUNT(*).
+      // SQL pre-filter (confidence >= minConfidence) is a necessary condition, but the
+      // TypeScript post-filter (effectiveConfidence >= minConfidence) is the exact condition.
+      // Using the SQL total misleads consumers: API would claim total=10 but only return 3.
+      // When minConfidence filtering is active, use allItems.length as the total.
+      const postFilterTotal = hasMinConfidence ? allItems.length : total;
 
       return ok({
         claims,
-        total,
-        hasMore: total > offset + limit,
+        total: postFilterTotal,
+        hasMore: hasMinConfidence
+          ? allItems.length > requestedLimit
+          : total > offset + requestedLimit,
       });
     },
 
@@ -638,14 +729,21 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
 
         const results: SearchClaimResultItem[] = [];
 
+        // Phase 3: Use single nowMs for consistency within this search invocation
+        const nowMs = deps.time.nowMs();
+
         for (const row of claimRows) {
           const claim = rowToClaim(row);
           const entry = scoreMap.get(claim.id as string);
           if (!entry) continue;
 
-          // PA Amendment 2: score = -bm25() * confidence
+          // Phase 3: Compute decay and effective confidence (I-P3-02, I-P3-08)
+          const ageMs = computeAgeMs(claim.validAt, nowMs);
+          const effConf = computeEffectiveConfidence(claim.confidence, ageMs, claim.stability);
+
+          // Phase 3: score = -bm25() * effectiveConfidence (was * confidence)
           // BM25 returns negative (lower = more relevant), negate to make higher = better
-          const score = -entry.relevance * claim.confidence;
+          const score = -entry.relevance * effConf;
 
           // Compute superseded/disputed
           const supersededRow = conn.get<{ cnt: number }>(
@@ -660,8 +758,8 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
           const superseded = (supersededRow?.cnt ?? 0) > 0;
           const disputed = (disputedRow?.cnt ?? 0) > 0;
 
-          // Apply minConfidence filter
-          if (input.minConfidence !== undefined && claim.confidence < input.minConfidence) {
+          // Phase 3: minConfidence filters by effectiveConfidence (I-P3-07, DC-P3-801)
+          if (input.minConfidence !== undefined && effConf < input.minConfidence) {
             continue;
           }
 
@@ -670,12 +768,18 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
             continue;
           }
 
+          // Phase 3: Classify freshness
+          const lastAccessMs = claim.lastAccessedAt ? Date.parse(claim.lastAccessedAt) : null;
+          const freshness = classifyFreshness(lastAccessMs, nowMs, deps.freshnessThresholds);
+
           results.push({
             claim,
             relevance: entry.relevance,
             score,
             superseded,
             disputed,
+            effectiveConfidence: effConf,
+            freshness,
           });
         }
 

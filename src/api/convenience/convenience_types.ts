@@ -11,10 +11,17 @@
  */
 
 import type { ClaimId, RelationshipType, EvidenceRef } from '../../claims/interfaces/claim_types.js';
+import type { FreshnessLabel, FreshnessThresholds } from '../../cognitive/freshness.js';
+import type { StabilityConfig } from '../../cognitive/stability.js';
+import type { AccessTrackerConfig } from '../../cognitive/access_tracker.js';
 
 // Re-export for consumer convenience
 export type { ClaimId } from '../../claims/interfaces/claim_types.js';
 export type { EvidenceRef } from '../../claims/interfaces/claim_types.js';
+export type { FreshnessLabel } from '../../cognitive/freshness.js';
+export type { FreshnessThresholds } from '../../cognitive/freshness.js';
+export type { StabilityConfig } from '../../cognitive/stability.js';
+export type { AccessTrackerConfig } from '../../cognitive/access_tracker.js';
 
 // ── Configuration ──
 
@@ -34,6 +41,13 @@ export interface CognitiveConfig {
    * CONSTITUTIONAL: Primary defense against confidence laundering.
    */
   readonly maxAutoConfidence?: number;
+
+  /** Phase 3 §3.2: Stability configuration for decay computation. */
+  readonly stability?: StabilityConfig;
+  /** Phase 3 §3.5: Freshness thresholds. */
+  readonly freshness?: FreshnessThresholds;
+  /** Phase 3 §3.4: Access tracking configuration (includes flushIntervalMs per PA Amendment). */
+  readonly accessTracking?: AccessTrackerConfig;
 }
 
 // ── remember() Types ──
@@ -141,6 +155,16 @@ export interface BeliefView {
   readonly superseded: boolean;
   /** Whether this claim has been contradicted */
   readonly disputed: boolean;
+  /** Phase 3: Effective confidence after time-based decay. confidence * R(age, stability). */
+  readonly effectiveConfidence: number;
+  /** Phase 3: Freshness classification based on last access time. */
+  readonly freshness: FreshnessLabel;
+  /** Phase 3: Stability value in days (determines decay rate). */
+  readonly stability: number;
+  /** Phase 3: Last access timestamp (ISO 8601), null if never accessed via recall/search. */
+  readonly lastAccessedAt: string | null;
+  /** Phase 3: Number of times this claim has been accessed via recall/search. */
+  readonly accessCount: number;
 }
 
 // ── forget() Types ──
@@ -261,7 +285,7 @@ export interface SearchResult {
   readonly relevance: number;
   /**
    * Combined score: higher = better match.
-   * Computed as: -bm25(claims_fts) * confidence.
+   * Phase 3: Computed as: -bm25(claims_fts) * effectiveConfidence.
    * PA Amendment 2: BM25 negated to make higher = better.
    */
   readonly score: number;

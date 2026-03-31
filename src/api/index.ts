@@ -100,6 +100,11 @@ import { getInteractionsRetentionMigrations } from './migration/027_interactions
 import { getFts5SearchMigrations } from './migration/028_fts5_search.js';
 import { getFts5CjkMigrations } from './migration/029_fts5_cjk.js';
 
+// Phase 3: Cognitive Metabolism migration (v39) + Access Tracker
+import { getCognitiveMetabolismMigrations } from './migration/030_cognitive_metabolism.js';
+import { createAccessTracker } from '../cognitive/access_tracker.js';
+import type { AccessTracker } from '../cognitive/access_tracker.js';
+
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
 
@@ -173,6 +178,8 @@ export type {
   CognitiveConfig, RememberOptions, RememberResult,
   RecallOptions, BeliefView, ReflectEntry, ReflectResult,
   ConvenienceErrorCode, EvidenceRef, ForgetOptions,
+  FreshnessLabel, FreshnessThresholds,
+  StabilityConfig, AccessTrackerConfig,
   WorkingMemoryApi, WriteWorkingMemoryInput, WriteWorkingMemoryOutput,
   ReadWorkingMemoryInput, ReadWorkingMemoryOutput,
   DiscardWorkingMemoryInput, DiscardWorkingMemoryOutput,
@@ -367,10 +374,11 @@ function buildOrchestrationAdapter(
       ...getInteractionsRetentionMigrations(),          // v36: expand retention CHECK constraint, seed interactions policy
       ...getFts5SearchMigrations(),                      // v37: FTS5 full-text search index + sync triggers
       ...getFts5CjkMigrations(),                         // v38: FTS5 CJK trigram index + sync triggers
+      ...getCognitiveMetabolismMigrations(),              // v39: Phase 3 cognitive metabolism columns
     ]);
     if (!phase4Governance.ok) {
       conn.close();
-      throw new LimenError('ENGINE_UNHEALTHY', `Failed to run migrations (v16-v38): ${phase4Governance.error.message}`);
+      throw new LimenError('ENGINE_UNHEALTHY', `Failed to run migrations (v16-v39): ${phase4Governance.error.message}`);
     }
 
     // CF-004 / self-review: cleanup connection if orchestration construction fails
@@ -612,6 +620,7 @@ export async function createLimen(
         ...getInteractionsRetentionMigrations(),
         ...getFts5SearchMigrations(),
         ...getFts5CjkMigrations(),
+        ...getCognitiveMetabolismMigrations(),
       ]);
       if (recoveryMigResult.ok) {
         // P0-A: Pass transition service to recovery for governance-enforced transitions.
@@ -714,6 +723,10 @@ export async function createLimen(
     rateLimiter: kernel.rateLimiter,
     capabilityResultScopeValidator,
     time: kernel.time,
+    // Phase 3: Stability and freshness configuration for decay computation.
+    // Spread conditionally to avoid passing undefined with exactOptionalPropertyTypes.
+    ...(config?.cognitive?.stability ? { stabilityConfig: config.cognitive.stability } : {}),
+    ...(config?.cognitive?.freshness ? { freshnessThresholds: config.cognitive.freshness } : {}),
   });
 
   // WMP working memory system (closure-local — DC-P4-406, C-SEC-05)
@@ -869,7 +882,11 @@ export async function createLimen(
   // Phase 4: Create facade instances (DC-P4-404, DC-P4-405, DC-P4-406)
   const rawClaimsFacade = createRawClaimFacade(claimSystem, rbac, rateLimiter);
   const rawWmFacade = createRawWorkingMemoryFacade(wmpSystem, rbac, rateLimiter);
-  const claimsApi = new ClaimApiImpl(rawClaimsFacade, getConnection, getContext);
+
+  // Phase 3: Create AccessTracker for cognitive metabolism (I-P3-12, I-P3-13).
+  // PA Amendment: flushIntervalMs exposed via CognitiveConfig.accessTracking.
+  const accessTracker: AccessTracker = createAccessTracker(getConnection, config?.cognitive?.accessTracking);
+  const claimsApi = new ClaimApiImpl(rawClaimsFacade, getConnection, getContext, accessTracker, kernel.time);
   const wmApi = new WorkingMemoryApiImpl(rawWmFacade, getConnection, getContext);
 
   // Phase 1: Eager convenience initialization (I-CONV-01, I-CONV-02)
@@ -1134,6 +1151,16 @@ export async function createLimen(
         }
       } catch (err) {
         log({ level: 'warn', category: 'shutdown', message: 'Webhook flush failed (non-fatal)', context: { error: err instanceof Error ? err.message : String(err) } });
+      }
+
+      // 1.7. Phase 3: Flush and destroy AccessTracker before closing DB.
+      // I-P3-12: flush() then destroy() during shutdown.
+      try {
+        accessTracker.flush();
+        accessTracker.destroy();
+      } catch (err) {
+        // DC-P3-902: Flush errors non-fatal. Log and continue.
+        log({ level: 'warn', category: 'shutdown', message: 'AccessTracker flush failed (non-fatal)', context: { error: err instanceof Error ? err.message : String(err) } });
       }
 
       // 2. Shutdown substrate (stop workers, drain queues)

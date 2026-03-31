@@ -281,6 +281,12 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
         createdAt: item.claim.createdAt,
         superseded: item.superseded,
         disputed: item.disputed,
+        // Phase 3: Cognitive Metabolism fields
+        effectiveConfidence: item.effectiveConfidence,
+        freshness: item.freshness,
+        stability: item.claim.stability,
+        lastAccessedAt: item.claim.lastAccessedAt,
+        accessCount: item.claim.accessCount,
       }));
 
       return ok(beliefs);
@@ -485,6 +491,12 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
           createdAt: item.claim.createdAt,
           superseded: item.superseded,
           disputed: item.disputed,
+          // Phase 3: Cognitive Metabolism fields
+          effectiveConfidence: item.effectiveConfidence,
+          freshness: item.freshness,
+          stability: item.claim.stability,
+          lastAccessedAt: item.claim.lastAccessedAt,
+          accessCount: item.claim.accessCount,
         },
         relevance: item.relevance,
         score: item.score,
