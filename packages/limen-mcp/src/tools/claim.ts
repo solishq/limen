@@ -3,8 +3,9 @@
  *
  * limen_claim_assert — Assert a new claim with evidence grounding
  * limen_claim_query  — Query claims with filters and pagination
+ * limen_recall       — Recall beliefs via convenience API (Phase 7 §7.5: includes decay visibility)
  *
- * Maps to: limen.claims.assertClaim/queryClaims
+ * Maps to: limen.claims.assertClaim/queryClaims, limen.recall()
  *
  * ClaimCreateInput requires branded MissionId/TaskId types.
  * The MCP layer casts plain string IDs to branded types since
@@ -42,24 +43,47 @@ export function registerClaimTools(server: McpServer, limen: Limen): void {
       } else if (args.objectType === 'boolean') {
         parsedValue = args.objectValue === 'true';
       } else if (args.objectType === 'json') {
-        parsedValue = JSON.parse(args.objectValue);
+        try {
+          parsedValue = JSON.parse(args.objectValue);
+        } catch {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'INVALID_INPUT', message: `objectValue is not valid JSON: ${args.objectValue}` }) }],
+            isError: true,
+          };
+        }
       }
 
       // Parse evidence refs if provided. EvidenceType is a string union:
       // 'memory' | 'artifact' | 'claim' | 'capability_result'
       type EvidenceType = 'memory' | 'artifact' | 'claim' | 'capability_result';
-      const evidenceRefs = args.evidenceRefs
-        ? JSON.parse(args.evidenceRefs) as ReadonlyArray<{ type: EvidenceType; id: string }>
-        : [];
+      let evidenceRefs: ReadonlyArray<{ type: EvidenceType; id: string }> = [];
+      if (args.evidenceRefs) {
+        try {
+          evidenceRefs = JSON.parse(args.evidenceRefs) as ReadonlyArray<{ type: EvidenceType; id: string }>;
+        } catch {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'INVALID_INPUT', message: `evidenceRefs is not valid JSON: ${args.evidenceRefs}` }) }],
+            isError: true,
+          };
+        }
+      }
 
       // Parse runtime witness if provided
-      const runtimeWitness = args.runtimeWitness
-        ? JSON.parse(args.runtimeWitness) as {
+      let runtimeWitness: { witnessType: string; witnessedValues: Record<string, unknown>; witnessTimestamp: string } | undefined;
+      if (args.runtimeWitness) {
+        try {
+          runtimeWitness = JSON.parse(args.runtimeWitness) as {
             witnessType: string;
             witnessedValues: Record<string, unknown>;
             witnessTimestamp: string;
-          }
-        : undefined;
+          };
+        } catch {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'INVALID_INPUT', message: `runtimeWitness is not valid JSON: ${args.runtimeWitness}` }) }],
+            isError: true,
+          };
+        }
+      }
 
       const result = limen.claims.assertClaim({
         subject: args.subject,
@@ -112,6 +136,42 @@ export function registerClaimTools(server: McpServer, limen: Limen): void {
         includeEvidence: args.includeEvidence,
         includeRelationships: args.includeRelationships,
       });
+
+      if (!result.ok) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: result.error.code, message: result.error.message }) }],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result.value, null, 2) }],
+      };
+    },
+  );
+
+  // ── limen_recall (Phase 7 §7.5: Decay Visibility) ──
+  // Convenience API wrapper. BeliefView includes effectiveConfidence and freshness.
+  server.tool(
+    'limen_recall',
+    'Query knowledge claims, excluding superseded by default. Returns BeliefView with effectiveConfidence (after time-decay) and freshness label. Uses the convenience API.',
+    {
+      subject: z.string().optional().describe('Subject filter — exact match or trailing wildcard (e.g. "entity:project:*")'),
+      predicate: z.string().optional().describe('Predicate filter — exact match or trailing wildcard (e.g. "decision.*")'),
+      minConfidence: z.number().optional().describe('Minimum confidence threshold'),
+      includeSuperseded: z.boolean().optional().describe('Include superseded claims (default: false)'),
+      limit: z.number().optional().describe('Maximum results (default: 50, max: 1000)'),
+    },
+    async (args) => {
+      const result = limen.recall(
+        args.subject,
+        args.predicate,
+        {
+          minConfidence: args.minConfidence,
+          includeSuperseded: args.includeSuperseded,
+          limit: args.limit,
+        },
+      );
 
       if (!result.ok) {
         return {

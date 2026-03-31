@@ -20,6 +20,13 @@
  *   limen_wm_read         — Read from working memory
  *   limen_wm_discard      — Discard from working memory
  *
+ * Phase 7 enhancement tools (convenience API wrappers):
+ *   limen_recall          — Recall beliefs with decay visibility (effectiveConfidence, freshness)
+ *   limen_context         — Generate knowledge summary for system prompts
+ *   limen_health_cognitive— Cognitive health report (freshness, conflicts, gaps)
+ *   limen_search          — Full-text search across claim content
+ *   limen_recall_bulk     — Recall beliefs for multiple subjects in one call
+ *
  * High-level knowledge tools (session-managed):
  *   limen_session_open    — Open a knowledge session for a project
  *   limen_session_close   — Close session with optional summary
@@ -43,6 +50,9 @@ import { registerAgentTools } from './tools/agent.js';
 import { registerMissionTools } from './tools/mission.js';
 import { registerClaimTools } from './tools/claim.js';
 import { registerWmTools } from './tools/wm.js';
+import { registerContextTools } from './tools/context.js';
+import { registerCognitiveTools } from './tools/cognitive.js';
+import { registerSearchTools } from './tools/search.js';
 import { registerHealthResource } from './resources/health.js';
 
 async function main(): Promise<void> {
@@ -70,6 +80,11 @@ async function main(): Promise<void> {
   registerMissionTools(server, limen);
   registerClaimTools(server, limen);
   registerWmTools(server, limen);
+
+  // Register Phase 7 enhancement tools (convenience API wrappers)
+  registerContextTools(server, limen);
+  registerCognitiveTools(server, limen);
+  registerSearchTools(server, limen);
 
   // Register resources
   registerHealthResource(server, limen);
