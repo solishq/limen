@@ -93,6 +93,12 @@ export interface RememberOptions {
    * Default: 'string'.
    */
   readonly objectType?: 'string' | 'number' | 'boolean' | 'date' | 'json';
+
+  /**
+   * Phase 5 §5.2: Free-text reasoning for why this claim is being asserted.
+   * Max 1000 characters. Immutable after creation (CCP-I1).
+   */
+  readonly reasoning?: string;
 }
 
 /**
@@ -166,6 +172,8 @@ export interface BeliefView {
   readonly lastAccessedAt: string | null;
   /** Phase 3: Number of times this claim has been accessed via recall/search. */
   readonly accessCount: number;
+  /** Phase 5: Free-text reasoning for why this belief was asserted. Null if not provided. */
+  readonly reasoning: string | null;
 }
 
 // ── forget() Types ──
@@ -236,7 +244,8 @@ export type ConvenienceErrorCode =
   | 'CONV_ALREADY_RETRACTED'    // forget() target already retracted
   | 'CONV_INVALID_RELATIONSHIP' // connect() invalid relationship type
   | 'CONV_SELF_REFERENCE'       // connect() same claim on both sides
-  | 'CONV_INVALID_REASON';      // Phase 4: forget() with invalid retraction reason
+  | 'CONV_INVALID_REASON'       // Phase 4: forget() with invalid retraction reason
+  | 'CONV_REASONING_TOO_LONG';  // Phase 5: remember() reasoning exceeds MAX_REASONING_LENGTH
 
 /** Valid relationship types for connect() */
 export const VALID_RELATIONSHIP_TYPES: readonly RelationshipType[] = [
@@ -257,6 +266,9 @@ export const DEFAULT_RECALL_LIMIT = 50;
 
 /** Maximum number of entries in a single reflect() call */
 export const MAX_REFLECT_ENTRIES = 100;
+
+/** Phase 5: Maximum reasoning text length for convenience API */
+export const MAX_REASONING_LENGTH = 1000;
 
 // ── Phase 2: search() Types ──
 
