@@ -43,6 +43,7 @@ import type {
   EvidenceRef, EvidenceType, RelationshipType, RelationshipId,
   GroundingMode, ClaimStatus, ClaimLifecycleState, SourceState,
   ObjectType, RuntimeWitnessInput,
+  SearchClaimInput, SearchClaimResult, SearchClaimResultItem,
 } from '../interfaces/claim_types.js';
 import {
   CCP_TRACE_EVENTS, CCP_EVENTS,
@@ -50,7 +51,9 @@ import {
   CLAIM_MAX_EVIDENCE_REFS, CLAIM_MAX_OUTGOING_RELATIONSHIPS,
   CLAIM_QUERY_MAX_LIMIT, CLAIM_QUERY_DEFAULT_LIMIT, CLAIM_JSON_MAX_BYTES,
   CLAIM_RATE_LIMIT,
+  SEARCH_DEFAULT_LIMIT, SEARCH_MAX_LIMIT,
 } from '../interfaces/claim_types.js';
+import { analyzeQuery, sanitizeFts5Query } from '../../search/search_utils.js';
 
 // ============================================================================
 // Helpers
@@ -514,6 +517,185 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
         purgedAt: row['purged_at'] as string,
         purgeReason: row['purge_reason'] as string,
       });
+    },
+
+    /**
+     * Phase 2: FTS5 full-text search over claim content.
+     *
+     * Query routing (Design Source Decision 4):
+     *   - CJK-only query -> trigram table only
+     *   - Latin-only or other -> both tables (primary for BM25, trigram for substring)
+     *   - Mixed -> both tables, merge by best score
+     *
+     * PA Amendment 1: Latin queries also search trigram table for substring matching.
+     * PA Amendment 2: score = -bm25() * confidence (negate BM25 so higher = better).
+     *
+     * Invariants: I-P2-01 (sync), I-P2-02 (tenant isolation), I-P2-03 (retracted exclusion),
+     *             I-P2-05 (score), I-P2-06 (error containment)
+     */
+    search(conn: DatabaseConnection, tenantId: TenantId | null, input: SearchClaimInput): Result<SearchClaimResult> {
+      const limit = Math.min(input.limit ?? SEARCH_DEFAULT_LIMIT, SEARCH_MAX_LIMIT);
+      const analysis = analyzeQuery(input.query);
+
+      // DC-P2-008, I-P2-06: Sanitize user query before FTS5 MATCH.
+      // Prevents FTS5 syntax injection (column filters, boolean operators, unbalanced quotes).
+      // F-P2-003: sanitizeFts5Query was dead code — now wired into search path.
+      const sanitizedQuery = sanitizeFts5Query(input.query);
+
+      try {
+        // Collect results from relevant FTS5 tables
+        // Map: claim_id -> { relevance, source }
+        const scoreMap = new Map<string, { relevance: number; source: string }>();
+
+        // Tenant filter for UNINDEXED columns
+        const tenantFilter = tenantId !== null
+          ? 'AND f.tenant_id = ?'
+          : 'AND f.tenant_id IS NULL';
+        const tenantParam = tenantId !== null ? [tenantId] : [];
+
+        // Query primary unicode61 table
+        if (analysis.tables.includes('primary')) {
+          try {
+            const primaryRows = conn.query<Record<string, unknown>>(
+              `SELECT f.id, bm25(claims_fts) as rank
+               FROM claims_fts f
+               WHERE claims_fts MATCH ?
+                 ${tenantFilter}
+                 AND f.status = 'active'
+               ORDER BY rank
+               LIMIT ?`,
+              [sanitizedQuery, ...tenantParam, limit * 2],
+            );
+
+            for (const row of primaryRows) {
+              const claimId = row['id'] as string;
+              const rank = row['rank'] as number;
+              const existing = scoreMap.get(claimId);
+              // Keep the better (more negative) rank
+              if (!existing || rank < existing.relevance) {
+                scoreMap.set(claimId, { relevance: rank, source: 'primary' });
+              }
+            }
+          } catch (ftsErr) {
+            // FTS5 syntax error on primary table -- continue to trigram
+            const msg = ftsErr instanceof Error ? ftsErr.message : String(ftsErr);
+            if (msg.includes('fts5: syntax error') || msg.includes('fts5:')) {
+              // For syntax errors, skip primary but try trigram
+            } else {
+              return err('CONV_SEARCH_FTS5_ERROR', `FTS5 search error: ${msg}`, 'Phase-2');
+            }
+          }
+        }
+
+        // Query trigram table
+        if (analysis.tables.includes('cjk')) {
+          try {
+            // Trigram requires at least 3 characters for matching
+            if (input.query.length >= 3) {
+              const cjkRows = conn.query<Record<string, unknown>>(
+                `SELECT f.id, bm25(claims_fts_cjk) as rank
+                 FROM claims_fts_cjk f
+                 WHERE claims_fts_cjk MATCH ?
+                   ${tenantFilter}
+                   AND f.status = 'active'
+                 ORDER BY rank
+                 LIMIT ?`,
+                [sanitizedQuery, ...tenantParam, limit * 2],
+              );
+
+              for (const row of cjkRows) {
+                const claimId = row['id'] as string;
+                const rank = row['rank'] as number;
+                const existing = scoreMap.get(claimId);
+                // Keep the better rank (more negative = more relevant)
+                if (!existing || rank < existing.relevance) {
+                  scoreMap.set(claimId, { relevance: rank, source: 'cjk' });
+                }
+              }
+            }
+          } catch (ftsErr) {
+            const msg = ftsErr instanceof Error ? ftsErr.message : String(ftsErr);
+            if (!msg.includes('fts5: syntax error') && !msg.includes('fts5:')) {
+              return err('CONV_SEARCH_FTS5_ERROR', `FTS5 CJK search error: ${msg}`, 'Phase-2');
+            }
+          }
+        }
+
+        if (scoreMap.size === 0) {
+          return ok({ results: [], total: 0 });
+        }
+
+        // Hydrate claims and compute final scores
+        const claimIds = Array.from(scoreMap.keys());
+        const placeholders = claimIds.map(() => '?').join(',');
+
+        const claimRows = conn.query<Record<string, unknown>>(
+          `SELECT c.* FROM claim_assertions c
+           WHERE c.id IN (${placeholders})
+             AND c.purged_at IS NULL`,
+          claimIds,
+        );
+
+        const results: SearchClaimResultItem[] = [];
+
+        for (const row of claimRows) {
+          const claim = rowToClaim(row);
+          const entry = scoreMap.get(claim.id as string);
+          if (!entry) continue;
+
+          // PA Amendment 2: score = -bm25() * confidence
+          // BM25 returns negative (lower = more relevant), negate to make higher = better
+          const score = -entry.relevance * claim.confidence;
+
+          // Compute superseded/disputed
+          const supersededRow = conn.get<{ cnt: number }>(
+            `SELECT COUNT(*) as cnt FROM claim_relationships WHERE to_claim_id = ? AND type = 'supersedes'`,
+            [claim.id],
+          );
+          const disputedRow = conn.get<{ cnt: number }>(
+            `SELECT COUNT(*) as cnt FROM claim_relationships WHERE to_claim_id = ? AND type = 'contradicts'`,
+            [claim.id],
+          );
+
+          const superseded = (supersededRow?.cnt ?? 0) > 0;
+          const disputed = (disputedRow?.cnt ?? 0) > 0;
+
+          // Apply minConfidence filter
+          if (input.minConfidence !== undefined && claim.confidence < input.minConfidence) {
+            continue;
+          }
+
+          // Apply superseded filter (default: exclude)
+          if (!input.includeSuperseded && superseded) {
+            continue;
+          }
+
+          results.push({
+            claim,
+            relevance: entry.relevance,
+            score,
+            superseded,
+            disputed,
+          });
+        }
+
+        // Sort by score descending (higher = better match)
+        results.sort((a, b) => b.score - a.score);
+
+        // Apply limit
+        const limited = results.slice(0, limit);
+
+        return ok({
+          results: limited,
+          total: results.length,
+        });
+      } catch (searchErr) {
+        const msg = searchErr instanceof Error ? searchErr.message : String(searchErr);
+        if (msg.includes('fts5: syntax error') || msg.includes('fts5:')) {
+          return err('CONV_SEARCH_QUERY_SYNTAX', `FTS5 query syntax error: ${msg}`, 'Phase-2');
+        }
+        return err('CONV_SEARCH_FTS5_ERROR', `FTS5 search error: ${msg}`, 'Phase-2');
+      }
     },
   };
 }

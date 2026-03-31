@@ -96,6 +96,10 @@ import { getReplayPipelineMigrations } from './migration/026_replay_pipeline.js'
 // PRR-PE-016: Interactions retention policy (v36)
 import { getInteractionsRetentionMigrations } from './migration/027_interactions_retention.js';
 
+// Phase 2: FTS5 search migrations (v37, v38)
+import { getFts5SearchMigrations } from './migration/028_fts5_search.js';
+import { getFts5CjkMigrations } from './migration/029_fts5_cjk.js';
+
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
 
@@ -361,10 +365,12 @@ function buildOrchestrationAdapter(
       ...getKnowledgeGraphMigrations(),                // v34: staleness_flag, core_drift_assessments
       ...getReplayPipelineMigrations(),                // v35: core_replay_snapshots, LLM log immutability, recovery index
       ...getInteractionsRetentionMigrations(),          // v36: expand retention CHECK constraint, seed interactions policy
+      ...getFts5SearchMigrations(),                      // v37: FTS5 full-text search index + sync triggers
+      ...getFts5CjkMigrations(),                         // v38: FTS5 CJK trigram index + sync triggers
     ]);
     if (!phase4Governance.ok) {
       conn.close();
-      throw new LimenError('ENGINE_UNHEALTHY', `Failed to run Phase 4 governance migrations (v16-v36): ${phase4Governance.error.message}`);
+      throw new LimenError('ENGINE_UNHEALTHY', `Failed to run migrations (v16-v38): ${phase4Governance.error.message}`);
     }
 
     // CF-004 / self-review: cleanup connection if orchestration construction fails
@@ -604,6 +610,8 @@ export async function createLimen(
         ...getKnowledgeGraphMigrations(),
         ...getReplayPipelineMigrations(),
         ...getInteractionsRetentionMigrations(),
+        ...getFts5SearchMigrations(),
+        ...getFts5CjkMigrations(),
       ]);
       if (recoveryMigResult.ok) {
         // P0-A: Pass transition service to recovery for governance-enforced transitions.
@@ -1072,6 +1080,11 @@ export async function createLimen(
     promptInstructions() {
       if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
       return convenienceLayer.promptInstructions();
+    },
+
+    search(query: string, options?: import('./convenience/convenience_types.js').SearchOptions) {
+      if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
+      return convenienceLayer.search(query, options);
     },
 
     // Library-mode agent identity setter.
