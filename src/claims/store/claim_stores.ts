@@ -52,9 +52,12 @@ import {
   CLAIM_QUERY_MAX_LIMIT, CLAIM_QUERY_DEFAULT_LIMIT, CLAIM_JSON_MAX_BYTES,
   CLAIM_RATE_LIMIT,
   SEARCH_DEFAULT_LIMIT, SEARCH_MAX_LIMIT,
+  VALID_RETRACTION_REASONS,
 } from '../interfaces/claim_types.js';
 import { analyzeQuery, sanitizeFts5Query } from '../../search/search_utils.js';
 import { computeAgeMs, computeEffectiveConfidence } from '../../cognitive/decay.js';
+import { computeCascadePenalty } from '../../cognitive/cascade.js';
+import { detectStructuralConflicts } from '../../cognitive/conflict.js';
 import { classifyFreshness } from '../../cognitive/freshness.js';
 import { resolveStability } from '../../cognitive/stability.js';
 
@@ -524,7 +527,12 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
 
         // Phase 3: Compute decay
         const ageMs = computeAgeMs(claim.validAt, nowMs);
-        const effConf = computeEffectiveConfidence(claim.confidence, ageMs, claim.stability);
+        const decayConf = computeEffectiveConfidence(claim.confidence, ageMs, claim.stability);
+
+        // Phase 4 I-P4-05: Compose cascade penalty with decay
+        // effective_confidence = confidence * decayFactor * cascadePenalty
+        const cascadePenalty = computeCascadePenalty(conn, claimIdVal);
+        const effConf = decayConf * cascadePenalty;
 
         // Phase 3: Two-phase minConfidence filter (Phase 2 -- TypeScript exact filter)
         if (hasMinConfidence && effConf < filters.minConfidence!) {
@@ -540,9 +548,11 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
           `SELECT COUNT(*) as cnt FROM claim_relationships WHERE to_claim_id = ? AND type = 'supersedes'`,
           [claimIdVal],
         );
+        // Phase 4 I-P4-09: Bidirectional disputed check for 'contradicts'
+        // Both the asserting claim (from_claim_id) and contradicted claim (to_claim_id) are disputed
         const disputedRow = conn.get<{ cnt: number }>(
-          `SELECT COUNT(*) as cnt FROM claim_relationships WHERE to_claim_id = ? AND type = 'contradicts'`,
-          [claimIdVal],
+          `SELECT COUNT(*) as cnt FROM claim_relationships WHERE (to_claim_id = ? OR from_claim_id = ?) AND type = 'contradicts'`,
+          [claimIdVal, claimIdVal],
         );
 
         const item: ClaimQueryResultItem = {
@@ -739,7 +749,11 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
 
           // Phase 3: Compute decay and effective confidence (I-P3-02, I-P3-08)
           const ageMs = computeAgeMs(claim.validAt, nowMs);
-          const effConf = computeEffectiveConfidence(claim.confidence, ageMs, claim.stability);
+          const decayConf = computeEffectiveConfidence(claim.confidence, ageMs, claim.stability);
+
+          // Phase 4 I-P4-05: Compose cascade penalty with decay
+          const cascadePenalty = computeCascadePenalty(conn, claim.id as string);
+          const effConf = decayConf * cascadePenalty;
 
           // Phase 3: score = -bm25() * effectiveConfidence (was * confidence)
           // BM25 returns negative (lower = more relevant), negate to make higher = better
@@ -750,9 +764,10 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
             `SELECT COUNT(*) as cnt FROM claim_relationships WHERE to_claim_id = ? AND type = 'supersedes'`,
             [claim.id],
           );
+          // Phase 4 I-P4-09: Bidirectional disputed check for 'contradicts'
           const disputedRow = conn.get<{ cnt: number }>(
-            `SELECT COUNT(*) as cnt FROM claim_relationships WHERE to_claim_id = ? AND type = 'contradicts'`,
-            [claim.id],
+            `SELECT COUNT(*) as cnt FROM claim_relationships WHERE (to_claim_id = ? OR from_claim_id = ?) AND type = 'contradicts'`,
+            [claim.id, claim.id],
           );
 
           const superseded = (supersededRow?.cnt ?? 0) > 0;
@@ -1382,6 +1397,49 @@ function createAssertClaimHandlerImpl(
           }
         }
 
+        // 17b. Phase 4 §4.1: Structural conflict detection (I-P4-06: synchronous)
+        // Detect existing active claims with same subject+predicate but different value.
+        // Create 'contradicts' relationships for each conflict found.
+        // Design Source Decision 1: Post-creation, same transaction.
+        const autoConflictEnabled = deps.autoConflict !== false; // default true
+        let conflictCount = 0;
+        if (autoConflictEnabled) {
+          // object_value is stored as JSON.stringify(input.object.value) in the DB
+          const serializedValue = JSON.stringify(input.object.value);
+          const conflicts = detectStructuralConflicts(
+            conn, claim.id, input.subject, input.predicate, serializedValue,
+          );
+          for (const existingId of conflicts.conflictingClaimIds) {
+            // Create directional contradicts: new claim -> existing claim
+            // CCP-I6: Append-only relationships. Same transaction as assertion.
+            const relId = newId();
+            conn.run(
+              `INSERT INTO claim_relationships (id, from_claim_id, to_claim_id, type, declared_by_agent_id, mission_id, created_at, tenant_id)
+               VALUES (?, ?, ?, 'contradicts', ?, ?, ?, ?)`,
+              [relId, claim.id, existingId, ctx.agentId ?? 'system', input.missionId ?? '', deps.time.nowISO(), ctx.tenantId],
+            );
+            conflictCount++;
+
+            // Audit the auto-created contradiction
+            deps.audit.append(conn, {
+              tenantId: ctx.tenantId,
+              actorType: 'system',
+              actorId: 'conflict_detector',
+              operation: 'auto_contradiction',
+              resourceType: 'claim_relationship',
+              resourceId: relId,
+              detail: {
+                fromClaimId: claim.id,
+                toClaimId: existingId,
+                type: 'contradicts',
+                reason: 'structural_conflict',
+                newSubject: input.subject,
+                newPredicate: input.predicate,
+              },
+            });
+          }
+        }
+
         // 18. Audit entry (I-03: same transaction)
         deps.audit.append(conn, {
           tenantId: ctx.tenantId,
@@ -1396,6 +1454,7 @@ function createAssertClaimHandlerImpl(
             confidence: input.confidence,
             traversalPath: groundingResult.traversalPath,
             ...(wmpCaptureId ? { preEmissionWmpCaptureId: wmpCaptureId, wmpSourcingStatus } : {}),
+            ...(conflictCount > 0 ? { conflictsDetected: conflictCount } : {}),
           },
         });
 
@@ -1470,9 +1529,18 @@ function createRetractClaimHandlerImpl(
           return err('UNAUTHORIZED', 'Agent not authorized to retract claims', 'SC-11');
         }
 
-        // 1. Validate reason
+        // 1. Validate reason (non-empty)
         if (!input.reason || input.reason.trim().length === 0) {
           return err('INVALID_REASON', 'Retraction reason is required', '§10.4');
+        }
+
+        // 1b. Phase 4 §4.4: Validate reason against taxonomy (I-P4-15, I-P4-17)
+        if (!(VALID_RETRACTION_REASONS as readonly string[]).includes(input.reason)) {
+          return err(
+            'INVALID_REASON',
+            `Invalid retraction reason: '${input.reason}'. Must be one of: ${VALID_RETRACTION_REASONS.join(', ')}`,
+            'A.2 Rule 5',
+          );
         }
 
         // 2. Get claim (tenant-scoped)

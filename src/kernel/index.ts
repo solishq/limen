@@ -100,7 +100,8 @@ export function createKernel(config: KernelConfig): Result<Readonly<Kernel>> {
 
     // ─── Build Order 6: RBAC + Rate limiter ───
     // CF-006: Pass conn to restore RBAC active state from existing custom roles
-    const rbac = createRbacEngine(conn);
+    // Phase 4 §4.5, C.8: Pass requireRbac to force RBAC active when configured
+    const rbac = createRbacEngine(conn, config.requireRbac);
     const rateLimiter = createRateLimiter();
 
     // CF-005 / DEC-4D-001: Clean stale archive flag on startup.

@@ -37,6 +37,7 @@ import type {
   ClaimQueryInput, ClaimQueryResult,
   RetractClaimInput,
   SearchClaimInput, SearchClaimResult,
+  RetractionReason,
 } from '../../claims/interfaces/claim_types.js';
 
 // Phase 1: Convenience API types
@@ -166,6 +167,30 @@ export interface LimenConfig {
    * Controls remember/recall/forget/connect/reflect behavior.
    */
   readonly cognitive?: CognitiveConfig;
+
+  /**
+   * Phase 4 §4.5, C.8: RBAC enforcement flag.
+   * When true, all operations require valid agent role via requirePermission().
+   * When false (default), RBAC checks pass through (dormant per §3.7).
+   * CONSTITUTIONAL: Security boundary activation.
+   * I-P4-10: Default false. I-P4-11: When true, enforces.
+   */
+  readonly requireRbac?: boolean;
+
+  /**
+   * Phase 4 §4.1, A.3: Enable structural conflict detection on assertion.
+   * When true (default), asserting a claim with same subject+predicate+different value
+   * as an existing active claim creates a 'contradicts' relationship.
+   * I-P4-06: Synchronous with assertion.
+   */
+  readonly autoConflict?: boolean;
+
+  /**
+   * Phase 4 §4.3: Cascade retraction penalty configuration.
+   * Phase 4 has no configurable settings — multipliers are CONSTITUTIONAL.
+   * This field exists for future Phase 12 (Cognitive Engine) extensions.
+   */
+  readonly cascade?: Record<string, never>;
 
   /**
    * CF-021: Structured logging callback.
@@ -354,7 +379,7 @@ export interface Limen {
    * The retracted claim remains in the database with status='retracted'.
    * All derived claims retain their relationships for audit continuity.
    */
-  forget(claimId: string, reason?: string): Result<void>;
+  forget(claimId: string, reason?: RetractionReason): Result<void>;
 
   /**
    * Phase 1 §1.5: Create a relationship between two claims.

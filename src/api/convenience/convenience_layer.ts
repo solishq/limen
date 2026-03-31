@@ -27,7 +27,9 @@ import type {
   RetractClaimInput,
   ClaimId,
   RelationshipType,
+  RetractionReason,
 } from '../../claims/interfaces/claim_types.js';
+import { VALID_RETRACTION_REASONS } from '../../claims/interfaces/claim_types.js';
 import type { ClaimApi } from '../interfaces/api.js';
 
 import type {
@@ -99,7 +101,7 @@ export interface ConvenienceLayer {
   remember(text: string, options?: RememberOptions): Result<RememberResult>;
   remember(subjectOrText: string, predicateOrOptions?: string | RememberOptions, value?: string, options?: RememberOptions): Result<RememberResult>;
   recall(subject?: string, predicate?: string, options?: RecallOptions): Result<readonly BeliefView[]>;
-  forget(claimId: string, reason?: string): Result<void>;
+  forget(claimId: string, reason?: RetractionReason): Result<void>;
   connect(claimId1: string, claimId2: string, type: 'supports' | 'contradicts' | 'supersedes' | 'derived_from'): Result<void>;
   reflect(entries: readonly ReflectEntry[]): Result<ReflectResult>;
   promptInstructions(): string;
@@ -298,10 +300,16 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
      * I-CONV-11: Delegates to ClaimApi.retractClaim().
      * I-CONV-14: Maps system-call errors to convenience error codes.
      */
-    forget(claimId: string, reason?: string): Result<void> {
+    forget(claimId: string, reason?: RetractionReason): Result<void> {
+      // Phase 4 §4.4: Validate retraction reason taxonomy
+      const resolvedReason: RetractionReason = reason ?? 'manual';
+      if (!VALID_RETRACTION_REASONS.includes(resolvedReason)) {
+        return err('CONV_INVALID_REASON', `Invalid retraction reason: '${resolvedReason}'. Must be one of: ${VALID_RETRACTION_REASONS.join(', ')}`);
+      }
+
       const input: RetractClaimInput = {
         claimId: claimId as ClaimId,
-        reason: reason ?? 'Retracted via forget()',
+        reason: resolvedReason,
       };
 
       const result = claims.retractClaim(input);
