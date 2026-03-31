@@ -226,3 +226,58 @@ export const DEFAULT_RECALL_LIMIT = 50;
 
 /** Maximum number of entries in a single reflect() call */
 export const MAX_REFLECT_ENTRIES = 100;
+
+// ── Phase 2: search() Types ──
+
+/**
+ * Phase 2: Options for search() calls.
+ *
+ * Design Source: docs/sprints/PHASE-2-DESIGN-SOURCE.md (Decision 6)
+ */
+export interface SearchOptions {
+  /** Minimum confidence threshold. Default: none. */
+  readonly minConfidence?: number;
+  /** Maximum results. Default: 20. */
+  readonly limit?: number;
+  /** Include superseded claims. Default: false. */
+  readonly includeSuperseded?: boolean;
+  /**
+   * Search mode. Default: 'fulltext'.
+   * Phase 11 extends to: 'semantic' | 'hybrid'.
+   */
+  readonly mode?: 'fulltext';
+}
+
+/**
+ * Phase 2: Search result for convenience API.
+ *
+ * Composition over inheritance: SearchResult HAS a BeliefView.
+ * Design Source Decision 6.
+ */
+export interface SearchResult {
+  /** The belief (same shape as recall() results) */
+  readonly belief: BeliefView;
+  /** FTS5 BM25 relevance score (raw, negative -- lower = more relevant) */
+  readonly relevance: number;
+  /**
+   * Combined score: higher = better match.
+   * Computed as: -bm25(claims_fts) * confidence.
+   * PA Amendment 2: BM25 negated to make higher = better.
+   */
+  readonly score: number;
+}
+
+/**
+ * Phase 2: Search-specific error codes.
+ */
+export type SearchErrorCode =
+  | 'CONV_SEARCH_EMPTY_QUERY'
+  | 'CONV_SEARCH_INVALID_LIMIT'
+  | 'CONV_SEARCH_FTS5_ERROR'
+  | 'CONV_SEARCH_QUERY_SYNTAX';
+
+/** Phase 2: Default search limit */
+export const DEFAULT_SEARCH_LIMIT = 20;
+
+/** Phase 2: Maximum search limit */
+export const MAX_SEARCH_LIMIT = 200;

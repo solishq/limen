@@ -36,6 +36,7 @@ import type {
   RelationshipCreateInput, RelateClaimsOutput,
   ClaimQueryInput, ClaimQueryResult,
   RetractClaimInput,
+  SearchClaimInput, SearchClaimResult,
 } from '../../claims/interfaces/claim_types.js';
 
 // Phase 1: Convenience API types
@@ -44,6 +45,7 @@ import type {
   RememberOptions, RememberResult,
   RecallOptions, BeliefView,
   ReflectEntry, ReflectResult,
+  SearchOptions, SearchResult,
 } from '../convenience/convenience_types.js';
 
 // Phase 4: WMP input/output types for consumer-facing WorkingMemoryApi
@@ -59,6 +61,7 @@ export type {
   RelationshipCreateInput, RelateClaimsOutput,
   ClaimQueryInput, ClaimQueryResult,
   RetractClaimInput,
+  SearchClaimInput, SearchClaimResult,
 } from '../../claims/interfaces/claim_types.js';
 
 export type {
@@ -75,6 +78,7 @@ export type {
   ReflectEntry, ReflectResult,
   ConvenienceErrorCode, EvidenceRef,
   ForgetOptions,
+  SearchOptions, SearchResult, SearchErrorCode,
 } from '../convenience/convenience_types.js';
 
 // Sprint 7: Consumer-facing ClaimApi — no conn/ctx required (DC-P4-406, C-SEC-05)
@@ -84,6 +88,8 @@ export interface ClaimApi {
   queryClaims(input: ClaimQueryInput): Result<ClaimQueryResult>;
   /** Phase 1 prerequisite: Retract a claim (active -> retracted, audited per I-03). */
   retractClaim(input: RetractClaimInput): Result<void>;
+  /** Phase 2: Full-text search over claim content using FTS5. Not a new system call. */
+  searchClaims(input: SearchClaimInput): Result<SearchClaimResult>;
 }
 
 // Sprint 7: Consumer-facing WorkingMemoryApi — no conn/ctx required (DC-P4-406, C-SEC-05)
@@ -371,6 +377,17 @@ export interface Limen {
    * Pure function -- no I/O, deterministic output.
    */
   promptInstructions(): string;
+
+  /**
+   * Phase 2 §2.4: Full-text search across claim content.
+   *
+   * Uses FTS5 for efficient text search with BM25 relevance ranking.
+   * Supports CJK content via trigram secondary index.
+   * Results ranked by combined score: -bm25() * confidence.
+   *
+   * Tenant-isolated. Retracted claims excluded. Superseded excluded by default.
+   */
+  search(query: string, options?: SearchOptions): Result<readonly SearchResult[]>;
 
   // -- Lifecycle --
 

@@ -28,6 +28,7 @@ import type {
   RelationshipCreateInput, RelateClaimsOutput,
   ClaimQueryInput, ClaimQueryResult,
   RetractClaimInput,
+  SearchClaimInput, SearchClaimResult,
 } from '../../claims/interfaces/claim_types.js';
 
 import { requirePermission } from '../enforcement/rbac_guard.js';
@@ -49,6 +50,8 @@ export interface RawClaimFacade {
   queryClaims(conn: DatabaseConnection, ctx: OperationContext, input: ClaimQueryInput): Result<ClaimQueryResult>;
   /** Phase 1 prerequisite: Retract a claim (active -> retracted, audited per I-03). */
   retractClaim(conn: DatabaseConnection, ctx: OperationContext, input: RetractClaimInput): Result<void>;
+  /** Phase 2: Full-text search. RBAC-gated, rate-limited. Not a new system call. */
+  searchClaims(conn: DatabaseConnection, ctx: OperationContext, input: SearchClaimInput): Result<SearchClaimResult>;
 }
 
 // ============================================================================
@@ -131,6 +134,21 @@ export function createRawClaimFacade(
       requireRateLimit(rateLimiter, conn, ctx, 'api_calls');
 
       return claimSystem.retractClaim.execute(conn, ctx, input);
+    },
+
+    /**
+     * Phase 2: Search claims via FTS5.
+     * DC-P2-010: RBAC + rate limit before search.
+     */
+    searchClaims(
+      conn: DatabaseConnection,
+      ctx: OperationContext,
+      input: SearchClaimInput,
+    ): Result<SearchClaimResult> {
+      requirePermission(rbac, ctx, 'create_mission');
+      requireRateLimit(rateLimiter, conn, ctx, 'api_calls');
+
+      return claimSystem.store.search(conn, ctx.tenantId, input);
     },
   });
 }
