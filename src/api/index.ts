@@ -124,6 +124,11 @@ import { createRawWorkingMemoryFacade } from './facades/working_memory_facade.js
 import { ClaimApiImpl } from './facades/claim_api_impl.js';
 import { WorkingMemoryApiImpl } from './facades/working_memory_api_impl.js';
 
+// Phase 1: Convenience API
+import { createConvenienceLayer } from './convenience/convenience_layer.js';
+import { initializeConvenience } from './convenience/convenience_init.js';
+import { DEFAULT_MAX_AUTO_CONFIDENCE } from './convenience/convenience_types.js';
+
 // ============================================================================
 // Re-export public types (convenience for consumers)
 // ============================================================================
@@ -160,7 +165,10 @@ export type {
   BackpressureConfig,
   ClaimApi, ClaimCreateInput, AssertClaimOutput,
   RelationshipCreateInput, RelateClaimsOutput,
-  ClaimQueryInput, ClaimQueryResult,
+  ClaimQueryInput, ClaimQueryResult, RetractClaimInput,
+  CognitiveConfig, RememberOptions, RememberResult,
+  RecallOptions, BeliefView, ReflectEntry, ReflectResult,
+  ConvenienceErrorCode, EvidenceRef, ForgetOptions,
   WorkingMemoryApi, WriteWorkingMemoryInput, WriteWorkingMemoryOutput,
   ReadWorkingMemoryInput, ReadWorkingMemoryOutput,
   DiscardWorkingMemoryInput, DiscardWorkingMemoryOutput,
@@ -466,6 +474,13 @@ export async function createLimen(
   const tenancyMode = resolvedConfig.tenancy?.mode ?? 'single';
   const defaultTimeoutMs = resolvedConfig.defaultTimeoutMs ?? 60000;
   const maxConcurrentStreams = resolvedConfig.rateLimiting?.maxConcurrentStreams ?? 50;
+
+  // Phase 1: Validate CognitiveConfig.maxAutoConfidence (I-CONV-03)
+  const maxAutoConfidence = resolvedConfig.cognitive?.maxAutoConfidence ?? DEFAULT_MAX_AUTO_CONFIDENCE;
+  if (!Number.isFinite(maxAutoConfidence) || maxAutoConfidence < 0 || maxAutoConfidence > 1) {
+    throw new LimenError('INVALID_CONFIG',
+      `cognitive.maxAutoConfidence must be a finite number in [0.0, 1.0], got ${maxAutoConfidence}.`);
+  }
 
   // CF-021: Logger callback (no-op if not configured — zero behavioral change)
   const log = resolvedConfig.logger ?? (() => {});
@@ -849,6 +864,32 @@ export async function createLimen(
   const claimsApi = new ClaimApiImpl(rawClaimsFacade, getConnection, getContext);
   const wmApi = new WorkingMemoryApiImpl(rawWmFacade, getConnection, getContext);
 
+  // Phase 1: Eager convenience initialization (I-CONV-01, I-CONV-02)
+  // Register convenience agent + create convenience mission during createLimen().
+  // All convenience methods become synchronous Result<T> after this point.
+  let convenienceLayer: ReturnType<typeof createConvenienceLayer> | null = null;
+  try {
+    const convInit = await initializeConvenience(agentsApi, missionsApi, (agentId) => {
+      defaultAgentId = agentId;
+    }, kernel.time);
+
+    convenienceLayer = createConvenienceLayer({
+      claims: claimsApi,
+      getConnection,
+      time: kernel.time,
+      missionId: convInit.missionId,
+      taskId: convInit.taskId,
+      maxAutoConfidence,
+    });
+
+    log({ level: 'info', category: 'init', message: 'Convenience API initialized', context: { missionId: convInit.missionId, agentId: String(convInit.agentId) } });
+  } catch (convErr) {
+    // Convenience init failure is non-fatal for backward compatibility.
+    // Existing consumers who don't use convenience methods are unaffected.
+    // Convenience methods will throw if called without initialization.
+    log({ level: 'warn', category: 'init', message: 'Convenience API initialization failed (non-fatal)', context: { error: convErr instanceof Error ? convErr.message : String(convErr) } });
+  }
+
   // Build the Limen object
   const engine: Limen = {
     // S27, S48: Chat API
@@ -994,6 +1035,44 @@ export async function createLimen(
     // Sprint 7: Working memory management — consumer convenience wrapper (SC-14, SC-15, SC-16)
     // DC-P4-406: Raw WorkingMemorySystem is closure-local, wrapped by WorkingMemoryApiImpl
     workingMemory: wmApi,
+
+    // Phase 1: Convenience API methods
+    // Delegates to convenienceLayer (created during eager init).
+    // If convenience init failed, methods throw LimenError.
+    remember(
+      subjectOrText: string,
+      predicateOrOptions?: string | import('./interfaces/api.js').RememberOptions,
+      value?: string,
+      options?: import('./interfaces/api.js').RememberOptions,
+    ) {
+      if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
+      return convenienceLayer.remember(subjectOrText, predicateOrOptions, value, options);
+    },
+
+    recall(subject?: string, predicate?: string, options?: import('./interfaces/api.js').RecallOptions) {
+      if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
+      return convenienceLayer.recall(subject, predicate, options);
+    },
+
+    forget(claimId: string, reason?: string) {
+      if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
+      return convenienceLayer.forget(claimId, reason);
+    },
+
+    connect(claimId1: string, claimId2: string, type: 'supports' | 'contradicts' | 'supersedes' | 'derived_from') {
+      if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
+      return convenienceLayer.connect(claimId1, claimId2, type);
+    },
+
+    reflect(entries: readonly import('./interfaces/api.js').ReflectEntry[]) {
+      if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
+      return convenienceLayer.reflect(entries);
+    },
+
+    promptInstructions() {
+      if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
+      return convenienceLayer.promptInstructions();
+    },
 
     // Library-mode agent identity setter.
     // Modifies closure-captured defaultAgentId — safe after deep freeze

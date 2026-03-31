@@ -35,7 +35,16 @@ import type {
   ClaimCreateInput, AssertClaimOutput,
   RelationshipCreateInput, RelateClaimsOutput,
   ClaimQueryInput, ClaimQueryResult,
+  RetractClaimInput,
 } from '../../claims/interfaces/claim_types.js';
+
+// Phase 1: Convenience API types
+import type {
+  CognitiveConfig,
+  RememberOptions, RememberResult,
+  RecallOptions, BeliefView,
+  ReflectEntry, ReflectResult,
+} from '../convenience/convenience_types.js';
 
 // Phase 4: WMP input/output types for consumer-facing WorkingMemoryApi
 import type {
@@ -49,6 +58,7 @@ export type {
   ClaimCreateInput, AssertClaimOutput,
   RelationshipCreateInput, RelateClaimsOutput,
   ClaimQueryInput, ClaimQueryResult,
+  RetractClaimInput,
 } from '../../claims/interfaces/claim_types.js';
 
 export type {
@@ -57,11 +67,23 @@ export type {
   DiscardWorkingMemoryInput, DiscardWorkingMemoryOutput,
 } from '../../working-memory/interfaces/wmp_types.js';
 
+// Phase 1: Convenience API types
+export type {
+  CognitiveConfig,
+  RememberOptions, RememberResult,
+  RecallOptions, BeliefView,
+  ReflectEntry, ReflectResult,
+  ConvenienceErrorCode, EvidenceRef,
+  ForgetOptions,
+} from '../convenience/convenience_types.js';
+
 // Sprint 7: Consumer-facing ClaimApi — no conn/ctx required (DC-P4-406, C-SEC-05)
 export interface ClaimApi {
   assertClaim(input: ClaimCreateInput): Result<AssertClaimOutput>;
   relateClaims(input: RelationshipCreateInput): Result<RelateClaimsOutput>;
   queryClaims(input: ClaimQueryInput): Result<ClaimQueryResult>;
+  /** Phase 1 prerequisite: Retract a claim (active -> retracted, audited per I-03). */
+  retractClaim(input: RetractClaimInput): Result<void>;
 }
 
 // Sprint 7: Consumer-facing WorkingMemoryApi — no conn/ctx required (DC-P4-406, C-SEC-05)
@@ -129,6 +151,12 @@ export interface LimenConfig {
 
   /** FM-12: Failover policy */
   readonly failoverPolicy?: 'degrade' | 'allow-overdraft' | 'block';
+
+  /**
+   * Phase 1: Cognitive configuration for the convenience API.
+   * Controls remember/recall/forget/connect/reflect behavior.
+   */
+  readonly cognitive?: CognitiveConfig;
 
   /**
    * CF-021: Structured logging callback.
@@ -286,6 +314,63 @@ export interface Limen {
    * No-op in multi-tenant mode (agentId is per-session).
    */
   setDefaultAgent(agentId: AgentId): void;
+
+  // -- Phase 1: Convenience API (remember/recall/forget/connect/reflect) --
+
+  /**
+   * Phase 1 §1.1/§1.2: Store a belief.
+   *
+   * 3-param form (primary): explicit subject, predicate, value.
+   * 1-param form (sugar): auto-generates subject from content hash,
+   *   predicate defaults to 'observation.note'.
+   *
+   * Confidence capped at maxAutoConfidence (default 0.7) unless
+   * groundingMode is 'evidence_path' with non-empty evidenceRefs.
+   */
+  remember(subject: string, predicate: string, value: string, options?: RememberOptions): Result<RememberResult>;
+  remember(text: string, options?: RememberOptions): Result<RememberResult>;
+
+  /**
+   * Phase 1 §1.3: Retrieve beliefs.
+   *
+   * Returns simplified BeliefView objects.
+   * Excludes superseded claims by default.
+   * Both parameters optional -- omitting both returns recent claims.
+   */
+  recall(subject?: string, predicate?: string, options?: RecallOptions): Result<readonly BeliefView[]>;
+
+  /**
+   * Phase 1 §1.4: Retract a belief (governed, audited).
+   *
+   * The retracted claim remains in the database with status='retracted'.
+   * All derived claims retain their relationships for audit continuity.
+   */
+  forget(claimId: string, reason?: string): Result<void>;
+
+  /**
+   * Phase 1 §1.5: Create a relationship between two claims.
+   *
+   * Types: 'supports', 'contradicts', 'supersedes', 'derived_from'.
+   * Directed: from claimId1 to claimId2.
+   */
+  connect(claimId1: string, claimId2: string, type: 'supports' | 'contradicts' | 'supersedes' | 'derived_from'): Result<void>;
+
+  /**
+   * Phase 1 §1.6: Batch-store categorized learnings.
+   *
+   * Each entry becomes a claim with predicate 'reflection.<category>'.
+   * Subject auto-generated from content hash.
+   * Runs in a transaction -- all-or-nothing.
+   */
+  reflect(entries: readonly ReflectEntry[]): Result<ReflectResult>;
+
+  /**
+   * Phase 1 §1.7: Get system prompt instructions for agents.
+   *
+   * Returns a multi-line string teaching an AI agent how to use Limen.
+   * Pure function -- no I/O, deterministic output.
+   */
+  promptInstructions(): string;
 
   // -- Lifecycle --
 
