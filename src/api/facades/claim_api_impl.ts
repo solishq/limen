@@ -20,6 +20,7 @@ import type {
   RelationshipCreateInput, RelateClaimsOutput,
   ClaimQueryInput, ClaimQueryResult,
   RetractClaimInput,
+  SearchClaimInput, SearchClaimResult,
 } from '../../claims/interfaces/claim_types.js';
 import type { ClaimApi } from '../interfaces/api.js';
 import type { RawClaimFacade } from './claim_facade.js';
@@ -45,5 +46,9 @@ export class ClaimApiImpl implements ClaimApi {
 
   retractClaim(input: RetractClaimInput): Result<void> {
     return this.raw.retractClaim(this.getConnection(), this.getContext(), input);
+  }
+
+  searchClaims(input: SearchClaimInput): Result<SearchClaimResult> {
+    return this.raw.searchClaims(this.getConnection(), this.getContext(), input);
   }
 }
