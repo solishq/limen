@@ -5,6 +5,25 @@ All notable changes to Limen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-03-31
+
+### Added
+- **Structural conflict detection** — auto-creates `contradicts` relationships when new claims conflict with existing same-subject+predicate claims. Contradiction-triggered review for high-confidence (≥0.8) claims.
+- **Cascade retraction** — `derived_from` claims penalized at query-time: 0.5× first-degree, 0.25× second-degree. CONSTITUTIONAL multipliers. Composes with decay: `final = confidence × decay × cascade`.
+- **Retraction reason taxonomy** — `incorrect | superseded | expired | manual`. Validated on retraction.
+- **`requireRbac` config** — when true, all operations require valid agent role. Default: false (backward compatible).
+- **`.raw` access gating** — audit-logged, requires `rawAccessTag` when RBAC active.
+- **`reasoning` column** — optional free-text reasoning on claims, immutable per CCP-I1.
+- **`limen.cognitive.health()`** — CognitiveHealthReport: total claims, freshness distribution, conflict count, confidence stats, gap detection, stale domains.
+- **Gap detection** — identifies predicates with no recent claims.
+- **Stale domain detection** — identifies predicates with no recent access.
+- Migrations v40 (conflict index), v41 (reasoning column).
+
+### Changed
+- `forget()` now accepts typed `reason` parameter from taxonomy.
+- `effectiveConfidence` now includes cascade penalty alongside decay.
+- Search score formula: `effectiveConfidence × BM25` (includes cascade).
+
 ## [1.3.0] - 2026-03-31
 
 ### Added
