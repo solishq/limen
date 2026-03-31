@@ -53,7 +53,7 @@ import {
   CLAIM_RATE_LIMIT,
   SEARCH_DEFAULT_LIMIT, SEARCH_MAX_LIMIT,
 } from '../interfaces/claim_types.js';
-import { analyzeQuery } from '../../search/search_utils.js';
+import { analyzeQuery, sanitizeFts5Query } from '../../search/search_utils.js';
 
 // ============================================================================
 // Helpers
@@ -537,6 +537,11 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
       const limit = Math.min(input.limit ?? SEARCH_DEFAULT_LIMIT, SEARCH_MAX_LIMIT);
       const analysis = analyzeQuery(input.query);
 
+      // DC-P2-008, I-P2-06: Sanitize user query before FTS5 MATCH.
+      // Prevents FTS5 syntax injection (column filters, boolean operators, unbalanced quotes).
+      // F-P2-003: sanitizeFts5Query was dead code — now wired into search path.
+      const sanitizedQuery = sanitizeFts5Query(input.query);
+
       try {
         // Collect results from relevant FTS5 tables
         // Map: claim_id -> { relevance, source }
@@ -559,7 +564,7 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
                  AND f.status = 'active'
                ORDER BY rank
                LIMIT ?`,
-              [input.query, ...tenantParam, limit * 2],
+              [sanitizedQuery, ...tenantParam, limit * 2],
             );
 
             for (const row of primaryRows) {
@@ -595,7 +600,7 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
                    AND f.status = 'active'
                  ORDER BY rank
                  LIMIT ?`,
-                [input.query, ...tenantParam, limit * 2],
+                [sanitizedQuery, ...tenantParam, limit * 2],
               );
 
               for (const row of cjkRows) {

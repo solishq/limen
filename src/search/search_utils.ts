@@ -86,25 +86,30 @@ export function analyzeQuery(query: string): QueryAnalysis {
 }
 
 /**
- * Escape special FTS5 characters in a query string.
- * FTS5 operators that need escaping: *, ^, NEAR, AND, OR, NOT, +, -
- * Double-quotes are used for phrase queries and should be preserved if balanced.
+ * Sanitize user input for safe use in FTS5 MATCH expressions.
  *
- * For safety, we wrap the query in double quotes if it contains special chars
- * (unless it already looks like a deliberate FTS5 query with operators).
+ * FTS5 query syntax includes operators (AND, OR, NOT, NEAR), column filters
+ * (column:term), wildcards (*), prefix/caret (^), and phrase quotes ("...").
+ * Unsanitized user input can cause FTS5 syntax errors (unbalanced quotes) or
+ * injection (column filters, boolean operators changing query semantics).
+ *
+ * Strategy: Escape all double-quotes within the input by doubling them,
+ * then wrap the entire query in double quotes to force FTS5 to treat it as
+ * a literal phrase. This neutralizes ALL FTS5 operators, column filters,
+ * and special syntax while preserving the search intent.
+ *
+ * Invariant: I-P2-06 (error containment), DC-P2-008 (syntax error defense)
+ *
+ * @param query - Raw user search input (already trimmed, non-empty)
+ * @returns Sanitized string safe for FTS5 MATCH
  */
 export function sanitizeFts5Query(query: string): string {
-  // If query is already quoted, preserve it
-  if (query.startsWith('"') && query.endsWith('"')) {
-    return query;
-  }
+  // Step 1: Escape any existing double-quotes by doubling them.
+  // FTS5 phrase queries use "..." and "" is the escape for a literal quote.
+  const escaped = query.replace(/"/g, '""');
 
-  // If query contains FTS5 boolean operators, let it pass through
-  // (user is crafting an advanced query)
-  if (/\b(AND|OR|NOT|NEAR)\b/.test(query) || query.includes('*')) {
-    return query;
-  }
-
-  // For simple queries, return as-is (FTS5 handles single terms fine)
-  return query;
+  // Step 2: Wrap in double quotes to create a phrase query.
+  // This neutralizes: AND, OR, NOT, NEAR, *, ^, +, -, column:term syntax.
+  // FTS5 treats the entire content as a literal phrase to match.
+  return `"${escaped}"`;
 }
