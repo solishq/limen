@@ -37,6 +37,8 @@ import type {
   BeliefView,
   ReflectEntry,
   ReflectResult,
+  SearchOptions,
+  SearchResult,
 } from './convenience_types.js';
 
 import {
@@ -45,6 +47,8 @@ import {
   MAX_STATEMENT_LENGTH,
   MAX_REFLECT_ENTRIES,
   DEFAULT_RECALL_LIMIT,
+  DEFAULT_SEARCH_LIMIT,
+  MAX_SEARCH_LIMIT,
 } from './convenience_types.js';
 
 import { generatePromptInstructions } from './convenience_prompt.js';
@@ -99,6 +103,8 @@ export interface ConvenienceLayer {
   connect(claimId1: string, claimId2: string, type: 'supports' | 'contradicts' | 'supersedes' | 'derived_from'): Result<void>;
   reflect(entries: readonly ReflectEntry[]): Result<ReflectResult>;
   promptInstructions(): string;
+  /** Phase 2 §2.4: Full-text search across claim content. */
+  search(query: string, options?: SearchOptions): Result<readonly SearchResult[]>;
 }
 
 /**
@@ -434,6 +440,57 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
      */
     promptInstructions(): string {
       return generatePromptInstructions();
+    },
+
+    /**
+     * Phase 2 §2.4: Full-text search across claim content.
+     *
+     * Delegates to ClaimApi.searchClaims(). Maps SearchClaimResultItem -> SearchResult.
+     *
+     * Invariants: I-P2-02 (tenant isolation via facade), I-P2-05 (score), I-P2-07 (input validation)
+     * DCs: DC-P2-012 (limit validation), DC-P2-013 (empty query validation)
+     */
+    search(query: string, options?: SearchOptions): Result<readonly SearchResult[]> {
+      // I-P2-07: Validate query is non-empty
+      if (!query || query.trim().length === 0) {
+        return err('CONV_SEARCH_EMPTY_QUERY', 'Search query must be non-empty and not whitespace-only');
+      }
+
+      // I-P2-07: Validate limit
+      const limit = options?.limit ?? DEFAULT_SEARCH_LIMIT;
+      if (limit <= 0 || limit > MAX_SEARCH_LIMIT) {
+        return err('CONV_SEARCH_INVALID_LIMIT', `Search limit must be in [1, ${MAX_SEARCH_LIMIT}], got ${limit}`);
+      }
+
+      const input: import('../../claims/interfaces/claim_types.js').SearchClaimInput = {
+        query: query.trim(),
+        ...(options?.minConfidence !== undefined ? { minConfidence: options.minConfidence } : {}),
+        limit,
+        ...(options?.includeSuperseded !== undefined ? { includeSuperseded: options.includeSuperseded } : {}),
+      };
+
+      const result = claims.searchClaims(input);
+
+      if (!result.ok) return result;
+
+      // Map SearchClaimResultItem -> SearchResult (convenience type)
+      const searchResults: SearchResult[] = result.value.results.map(item => ({
+        belief: {
+          claimId: item.claim.id,
+          subject: item.claim.subject,
+          predicate: item.claim.predicate,
+          value: String(item.claim.object.value),
+          confidence: item.claim.confidence,
+          validAt: item.claim.validAt,
+          createdAt: item.claim.createdAt,
+          superseded: item.superseded,
+          disputed: item.disputed,
+        },
+        relevance: item.relevance,
+        score: item.score,
+      }));
+
+      return ok(searchResults);
     },
   };
 }

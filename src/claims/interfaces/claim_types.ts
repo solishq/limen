@@ -489,6 +489,15 @@ export interface ClaimStore {
    * Prevents accidental content retrieval from purged claims.
    */
   getAsTombstone(conn: DatabaseConnection, claimId: ClaimId, tenantId: TenantId | null): Result<ClaimTombstone | null>;
+
+  /**
+   * Phase 2: Full-text search over claim content using FTS5.
+   * NOT a new system call. Internal method on ClaimStore.
+   *
+   * Invariants: I-P2-01 (sync), I-P2-02 (tenant isolation), I-P2-03 (retracted exclusion),
+   *             I-P2-05 (score monotonicity), I-P2-06 (error containment)
+   */
+  search(conn: DatabaseConnection, tenantId: TenantId | null, input: SearchClaimInput): Result<SearchClaimResult>;
 }
 
 /**
@@ -981,3 +990,60 @@ export const CLAIM_RATE_LIMIT = 100;
 
 /** SC-4 §11.1: Artifact assertion type classification. Nullable — null means no assertion type. */
 export type AssertionType = 'factual' | 'speculative' | 'procedural';
+
+// ============================================================================
+// Phase 2: Search Types (FTS5 Full-Text Search)
+// ============================================================================
+
+/**
+ * Phase 2: Search claim input.
+ * Full-text search across claim content using FTS5.
+ * NOT a system call (no new SC-17). Implemented as internal method on ClaimApi.
+ *
+ * Invariants: I-P2-02 (tenant isolation), I-P2-07 (input validation)
+ */
+export interface SearchClaimInput {
+  /** FTS5 search query. Supports phrase ("exact match"), boolean (AND/OR/NOT), prefix (term*). */
+  readonly query: string;
+  /** Minimum confidence threshold. Default: none. */
+  readonly minConfidence?: number;
+  /** Maximum results. Default: 20. Max: 200. */
+  readonly limit?: number;
+  /** Include superseded claims. Default: false. */
+  readonly includeSuperseded?: boolean;
+}
+
+/**
+ * Phase 2: Search result item.
+ */
+export interface SearchClaimResultItem {
+  /** The matching claim (full Claim object) */
+  readonly claim: Claim;
+  /** FTS5 BM25 relevance score (raw, negative -- lower = more relevant) */
+  readonly relevance: number;
+  /**
+   * Combined score: -bm25(claims_fts) * confidence. Higher = better match.
+   * PA Amendment 2: BM25 negated to make higher = better.
+   */
+  readonly score: number;
+  /** Whether this claim has been superseded (computed) */
+  readonly superseded: boolean;
+  /** Whether this claim is disputed (computed) */
+  readonly disputed: boolean;
+}
+
+/**
+ * Phase 2: Search result.
+ */
+export interface SearchClaimResult {
+  /** Matching claims, ordered by score descending */
+  readonly results: readonly SearchClaimResultItem[];
+  /** Total matching count (before limit) */
+  readonly total: number;
+}
+
+/** Phase 2: Default search result limit */
+export const SEARCH_DEFAULT_LIMIT = 20;
+
+/** Phase 2: Maximum search result limit (same as query) */
+export const SEARCH_MAX_LIMIT = 200;
