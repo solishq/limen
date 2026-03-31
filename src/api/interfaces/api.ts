@@ -240,10 +240,6 @@ export interface Limen {
 
   readonly missions: MissionApi;
 
-  // -- Knowledge Management (S9, UC-6) --
-
-  readonly knowledge: KnowledgeApi;
-
   // -- Claim Management (SC-11, SC-12, SC-13 via CCP) --
   // Phase 4: Facade-only exposure (DC-P4-406, C-SEC-05)
 
@@ -985,64 +981,6 @@ export interface AgentPipeline {
 }
 
 // ============================================================================
-// §6.9: Knowledge Management Types (S9, UC-6)
-// ============================================================================
-
-/**
- * S9, UC-6: Knowledge management API.
- * Convenience wrapper over memory operations (not a new system call).
- */
-export interface KnowledgeApi {
-  /** S9: Ingest documents as source memories. Permission: 'modify_agent' */
-  ingest(options: IngestOptions): Promise<IngestResult>;
-
-  /** S9: Search memories. Permission: tenant-scoped */
-  search(query: string, options?: SearchOptions): Promise<readonly MemoryView[]>;
-
-  /** I-02: Purge memories by filter. Permission: 'purge_data' */
-  purge(filter: PurgeFilter): Promise<{ purged: number }>;
-}
-
-export interface IngestOptions {
-  readonly source: string;
-  readonly type?: string;
-  readonly chunking?: {
-    readonly strategy: 'semantic' | 'fixed';
-    readonly maxTokens?: number;
-  };
-  readonly agentId?: AgentId;
-}
-
-export interface IngestResult {
-  readonly memoriesCreated: number;
-  readonly chunksProcessed: number;
-  readonly totalTokens: number;
-}
-
-export interface SearchOptions {
-  readonly limit?: number;
-  readonly agentId?: AgentId;
-  readonly type?: string;
-  readonly minScore?: number;
-}
-
-export interface MemoryView {
-  readonly id: string;
-  readonly type: 'episodic' | 'semantic' | 'procedural' | 'source';
-  readonly content: string;
-  readonly score: number;
-  readonly createdAt: string;
-  readonly accessCount: number;
-}
-
-export interface PurgeFilter {
-  readonly userId?: string;
-  readonly sessionId?: SessionId;
-  readonly missionId?: MissionId;
-  readonly olderThan?: string;
-}
-
-// ============================================================================
 // §6.10: RBAC Management Types (S34)
 // ============================================================================
 
@@ -1134,6 +1072,13 @@ export interface HistogramData {
 // ============================================================================
 // §6.12: Data Management Types (I-02)
 // ============================================================================
+
+export interface PurgeFilter {
+  readonly userId?: string;
+  readonly sessionId?: SessionId;
+  readonly missionId?: MissionId;
+  readonly olderThan?: string;
+}
 
 /**
  * I-02: User data ownership. All data accessible, exportable, deletable.
