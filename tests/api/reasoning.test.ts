@@ -18,6 +18,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
+import Database from 'better-sqlite3';
 
 import { createLimen } from '../../src/api/index.js';
 import type { Limen } from '../../src/api/index.js';
@@ -65,6 +66,19 @@ async function createTestLimen(): Promise<Limen> {
       providers: [],
     }),
   );
+}
+
+/** Create test Limen AND return the data directory (for direct DB access). */
+async function createTestLimenWithDir(): Promise<{ limen: Limen; dir: string }> {
+  const dir = trackDir(makeTempDir());
+  const limen = trackInstance(
+    await createLimen({
+      dataDir: dir,
+      masterKey: makeKey(),
+      providers: [],
+    }),
+  );
+  return { limen, dir };
 }
 
 // ============================================================================
@@ -211,8 +225,11 @@ describe('Phase 5: reasoning immutability (I-P5-01) [A21]', () => {
     assert.equal(result.ok, true);
   });
 
-  it('DC-P5-102 rejection: UPDATE reasoning on existing claim is blocked by trigger', async () => {
-    const limen = await createTestLimen();
+  it('DC-P5-102 rejection: direct SQL UPDATE of reasoning is blocked by CCP-I1 trigger', async () => {
+    // F-P5-003 fix: Previous test only read the claim back, never attempted UPDATE.
+    // This test opens the DB directly and attempts UPDATE on reasoning column,
+    // asserting the CCP-I1 immutability trigger fires.
+    const { limen, dir } = await createTestLimenWithDir();
 
     const remResult = limen.remember(
       'entity:test:immut2',
@@ -223,12 +240,23 @@ describe('Phase 5: reasoning immutability (I-P5-01) [A21]', () => {
     assert.equal(remResult.ok, true);
     if (!remResult.ok) return;
 
-    // Attempt direct SQL update (bypass API to test trigger enforcement)
-    // We need to use the claim API's raw access -- but since we can't
-    // access the internal connection directly from the public API,
-    // we verify immutability through the fact that the reasoning field
-    // on Claim is `readonly` and the trigger fires on UPDATE.
-    // The trigger test is covered by the migration verification below.
+    const claimId = remResult.value.claimId;
+
+    // Open DB directly and attempt UPDATE on reasoning
+    const dbPath = join(dir, 'limen.db');
+    const db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    try {
+      assert.throws(
+        () => db.prepare(
+          `UPDATE claim_assertions SET reasoning = ? WHERE id = ?`,
+        ).run('tampered reasoning', claimId),
+        (err: Error) => err.message.includes('CCP-I1'),
+        'UPDATE reasoning must be blocked by CCP-I1 immutability trigger',
+      );
+    } finally {
+      db.close();
+    }
 
     // Verify the reasoning is still the original
     const recResult = limen.recall('entity:test:immut2', 'test.fact');
@@ -246,18 +274,42 @@ describe('Phase 5: migration trigger protection (DC-P5-601)', () => {
   it('DC-P5-601 success: existing content immutability still works after migration', async () => {
     const limen = await createTestLimen();
 
-    // Create a claim and verify subject immutability (CCP-I1 pre-Phase-5 behavior)
     const r = limen.remember('entity:test:trigger', 'test.fact', 'value');
     assert.equal(r.ok, true);
 
-    // The subject field is immutable -- attempting to create another claim
-    // with the same ID would fail, but that's not how to test the trigger.
-    // The trigger fires on UPDATE, which we can't do through the public API.
-    // We verify the claim data is intact.
     const rec = limen.recall('entity:test:trigger', 'test.fact');
     assert.equal(rec.ok, true);
     if (!rec.ok) return;
     assert.equal(rec.value[0]!.subject, 'entity:test:trigger');
+  });
+
+  it('DC-P5-601 rejection: direct SQL UPDATE of subject is blocked by CCP-I1 trigger after migration', async () => {
+    // F-P5-008 fix: Previous test never attempted UPDATE to verify the trigger fires.
+    // This test opens the DB directly and attempts UPDATE on the subject column
+    // (a pre-Phase-5 immutable field), confirming the recreated trigger still enforces
+    // immutability for original columns.
+    const { limen, dir } = await createTestLimenWithDir();
+
+    const r = limen.remember('entity:test:trigger2', 'test.fact', 'value');
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+
+    const claimId = r.value.claimId;
+
+    const dbPath = join(dir, 'limen.db');
+    const db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    try {
+      assert.throws(
+        () => db.prepare(
+          `UPDATE claim_assertions SET subject = ? WHERE id = ?`,
+        ).run('entity:test:tampered', claimId),
+        (err: Error) => err.message.includes('CCP-I1'),
+        'UPDATE subject must be blocked by CCP-I1 immutability trigger after migration 041',
+      );
+    } finally {
+      db.close();
+    }
   });
 });
 
