@@ -60,10 +60,31 @@ import { computeCascadePenalty } from '../../cognitive/cascade.js';
 import { detectStructuralConflicts } from '../../cognitive/conflict.js';
 import { classifyFreshness } from '../../cognitive/freshness.js';
 import { resolveStability } from '../../cognitive/stability.js';
+import { scanClaimContent } from '../../security/claim_scanner.js';
+import { checkPoisoning } from '../../security/poisoning_defense.js';
+import { DEFAULT_SECURITY_POLICY } from '../../security/security_types.js';
+import type { ContentScanResult } from '../../security/security_types.js';
 
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/** Phase 9: Cached detection of v42 security columns on claim_assertions. */
+let _hasPiiDetectedCol: boolean | null = null;
+function hasPiiDetectedColumn(conn: DatabaseConnection): boolean {
+  if (_hasPiiDetectedCol !== null) return _hasPiiDetectedCol;
+  try {
+    const cols = conn.query<Record<string, unknown>>('PRAGMA table_info(claim_assertions)', []);
+    _hasPiiDetectedCol = cols.some(c => c['name'] === 'pii_detected');
+  } catch {
+    _hasPiiDetectedCol = false;
+  }
+  return _hasPiiDetectedCol;
+}
+/** Reset cache (for tests that create fresh databases). */
+export function resetSecurityColumnCache(): void {
+  _hasPiiDetectedCol = null;
+}
 
 function ok<T>(value: T): Result<T> {
   return { ok: true, value };
@@ -302,7 +323,6 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
     checkHasStabilityColumn(conn);
     return hasReasoningColumn ?? false;
   }
-
   return {
     create(conn: DatabaseConnection, ctx: OperationContext, input: ClaimCreateInput): Result<Claim> {
       const hasStabCol = checkHasStabilityColumn(conn);
@@ -1403,6 +1423,56 @@ function createAssertClaimHandlerImpl(
           groundingResult = rw;
         }
 
+        // 13b. Phase 9: Security scanning (PII detection + injection defense + poisoning)
+        // Runs after validation, before INSERT. I-P9-03: Same transaction.
+        const securityPolicy = deps.securityPolicy ?? DEFAULT_SECURITY_POLICY;
+        let contentScanResult: ContentScanResult | null = null;
+
+        // Phase 9: Content scanning (PII + injection)
+        if (securityPolicy.pii.enabled || securityPolicy.injection.enabled) {
+          const objectValueStr = typeof input.object.value === 'string'
+            ? input.object.value
+            : JSON.stringify(input.object.value);
+          contentScanResult = scanClaimContent(
+            { subject: input.subject, predicate: input.predicate, objectValue: objectValueStr },
+            securityPolicy,
+            deps.time,
+          );
+
+          // I-P9-04: PII reject enforcement
+          if (securityPolicy.pii.action === 'reject' && contentScanResult.pii.hasPii) {
+            return err(
+              'PII_DETECTED_REJECT',
+              `PII detected in claim content: ${contentScanResult.pii.categories.join(', ')}`,
+              'I-P9-04',
+            );
+          }
+
+          // I-P9-11: Injection reject enforcement
+          if (securityPolicy.injection.action === 'reject' && contentScanResult.injection.detected) {
+            return err(
+              'INJECTION_DETECTED_REJECT',
+              `Prompt injection detected: severity ${contentScanResult.injection.severity}`,
+              'I-P9-11',
+            );
+          }
+        }
+
+        // Phase 9: Poisoning defense (burst limit + diversity check)
+        if (securityPolicy.poisoning.enabled && ctx.agentId) {
+          const poisoningVerdict = checkPoisoning(
+            conn, ctx.agentId, ctx.tenantId, input.subject,
+            securityPolicy, deps.time,
+          );
+          if (!poisoningVerdict.allowed) {
+            // Determine specific error code based on reason
+            const code = poisoningVerdict.reason?.includes('burst')
+              ? 'POISONING_BURST_LIMIT'
+              : 'POISONING_LOW_DIVERSITY';
+            return err(code, poisoningVerdict.reason ?? 'Poisoning defense triggered', 'I-P9-30');
+          }
+        }
+
         // 14. WMP pre-emission capture (optional)
         let wmpCaptureId: string | undefined;
         let wmpSourcingStatus: string | undefined;
@@ -1417,6 +1487,25 @@ function createAssertClaimHandlerImpl(
         const createResult = stores.store.create(conn, ctx, input);
         if (!createResult.ok) return createResult as unknown as Result<AssertClaimOutput>;
         const claim = createResult.value;
+
+        // 15b. Phase 9: Write security scan columns (I-P9-01, I-P9-03: same transaction)
+        if (contentScanResult) {
+          // Check if v42 schema columns exist (module-level cached detection)
+          const hasSecCols = hasPiiDetectedColumn(conn);
+          if (hasSecCols) {
+            const piiDetected = contentScanResult.pii.hasPii ? 1 : 0;
+            const piiCategories = contentScanResult.pii.hasPii
+              ? JSON.stringify(contentScanResult.pii.categories)
+              : null;
+            // I-P9-02: ContentScanResult stored as JSON — matches contain offset+length, NOT matched text.
+            const scanResultJson = JSON.stringify(contentScanResult);
+
+            conn.run(
+              `UPDATE claim_assertions SET pii_detected = ?, pii_categories = ?, content_scan_result = ? WHERE id = ?`,
+              [piiDetected, piiCategories, scanResultJson, claim.id],
+            );
+          }
+        }
 
         // 16. Create evidence rows
         if (input.evidenceRefs.length > 0) {

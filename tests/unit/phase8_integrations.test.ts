@@ -925,15 +925,18 @@ describe('Phase 8: Dependency Boundary', () => {
     assert.deepEqual(depNames, ['better-sqlite3'], 'Only better-sqlite3 as production dependency');
   });
 
-  // DC-P8-601: No new migrations
-  it('DC-P8-601: no new migration files in Phase 8', () => {
-    // Phase 8 introduces no new database tables
-    // This is a structural constraint — verified by checking that
-    // the last migration file predates Phase 8.
+  // DC-P8-601: No new migrations (Phase 8 did not add migrations; Phase 9 added 033)
+  it('DC-P8-601: Phase 8 did not introduce migration files (Phase 9 added 033)', () => {
+    // Phase 8 introduced no new database tables.
+    // Phase 9 added 033_security_hardening.ts (v42).
+    // Verify that only 032 (Phase 5) and 033 (Phase 9) are the latest.
     const migrationDir = path.join(process.cwd(), 'src', 'api', 'migration');
     const files = fs.readdirSync(migrationDir).filter(f => f.endsWith('.ts')).sort();
     const lastMig = files[files.length - 1]!;
-    // Last migration is 032_reasoning.ts (Phase 5)
-    assert.ok(lastMig.includes('032'), `Last migration is 032 (Phase 5), not a new Phase 8 migration. Got: ${lastMig}`);
+    // Phase 9 adds 033. No migration between 032 and 033 (Phase 8 had none).
+    assert.ok(
+      lastMig.includes('033') || lastMig.includes('032'),
+      `Last migration should be 032 (Phase 5) or 033 (Phase 9). Got: ${lastMig}`,
+    );
   });
 });
