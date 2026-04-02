@@ -60,6 +60,11 @@ import type {
   ExportOptions, LimenExportDocument, ImportOptions, ImportResult,
 } from '../../exchange/exchange_types.js';
 
+// Phase 9: Security types for consumer-facing ConsentApi
+import type {
+  ConsentRecord, ConsentCreateInput,
+} from '../../security/security_types.js';
+
 // Phase 4: WMP input/output types for consumer-facing WorkingMemoryApi
 import type {
   WriteWorkingMemoryInput, WriteWorkingMemoryOutput,
@@ -81,6 +86,13 @@ export type {
   ReadWorkingMemoryInput, ReadWorkingMemoryOutput,
   DiscardWorkingMemoryInput, DiscardWorkingMemoryOutput,
 } from '../../working-memory/interfaces/wmp_types.js';
+
+// Phase 9: Security types
+export type {
+  ConsentRecord, ConsentCreateInput, ConsentBasis, ConsentStatus,
+  SecurityPolicy, PiiCategory, PiiAction, SecurityErrorCode,
+  ContentScanResult, PiiScanResult, InjectionScanResult,
+} from '../../security/security_types.js';
 
 // Phase 1: Convenience API types
 export type {
@@ -130,6 +142,18 @@ export interface WorkingMemoryApi {
   write(input: WriteWorkingMemoryInput): Result<WriteWorkingMemoryOutput>;
   read(input: ReadWorkingMemoryInput): Result<ReadWorkingMemoryOutput>;
   discard(input: DiscardWorkingMemoryInput): Result<DiscardWorkingMemoryOutput>;
+}
+
+// Phase 9: Consumer-facing ConsentApi — no conn/ctx required
+export interface ConsentApi {
+  /** Register a new consent record. Audited per I-P9-23. */
+  register(input: ConsentCreateInput): Result<ConsentRecord>;
+  /** Revoke consent. Terminal transition. Audited per I-P9-23. */
+  revoke(id: string): Result<ConsentRecord>;
+  /** Check if active consent exists for a data subject + scope. I-P9-22: expiry computed on read. */
+  check(dataSubjectId: string, scope: string): Result<ConsentRecord | null>;
+  /** List all consent records for a data subject. I-P9-22: expiry computed on read. */
+  list(dataSubjectId: string): Result<readonly ConsentRecord[]>;
 }
 
 // ============================================================================
@@ -242,6 +266,14 @@ export interface LimenConfig {
    * S ref: §3.3 (engine, not framework — consumer provides logging implementation)
    */
   readonly logger?: LimenLogger;
+
+  /**
+   * Phase 9 §9: Security policy configuration.
+   * Controls PII detection, prompt injection defense, poisoning defense.
+   * I-P9-50: Default policy is non-breaking (tag/warn, not reject).
+   * I-P9-51: Immutable after construction.
+   */
+  readonly security?: import('../../security/security_types.js').SecurityPolicy;
 }
 
 /**
@@ -401,6 +433,16 @@ export interface Limen {
    * PA Ruling: limen.cognitive.health() (not limen.health.cognitive()).
    */
   readonly cognitive: CognitiveNamespace;
+
+  // -- Phase 9: Consent Management --
+
+  /**
+   * Phase 9 §9.3: Data subject consent tracking.
+   * Framework stub — provides CRUD for consent records.
+   * Enforcement is Phase 10. This phase stores records and audits mutations.
+   * I-P9-23: All mutations produce audit entries.
+   */
+  readonly consent: ConsentApi;
 
   // -- Phase 1: Convenience API (remember/recall/forget/connect/reflect) --
 

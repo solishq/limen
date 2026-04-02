@@ -112,6 +112,12 @@ import { getConflictIndexMigrations } from './migration/031_conflict_index.js';
 import { getReasoningMigrations } from './migration/032_reasoning.js';
 import { createCognitiveNamespace } from './cognitive/cognitive_api.js';
 
+// Phase 9: Security Hardening migration (v42) + Consent Registry
+import { getSecurityHardeningMigrations } from './migration/033_security_hardening.js';
+import { createConsentRegistry } from '../security/consent_registry.js';
+import { freezeSecurityPolicy } from '../security/security_types.js';
+import type { ConsentApi } from './interfaces/api.js';
+
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
 
@@ -208,6 +214,10 @@ export type {
   ExportMetadata,
   ImportOptions, ImportResult, ImportError, ImportDedup,
   ExchangeErrorCode,
+  // Phase 9: Security and Consent types
+  ConsentApi, ConsentRecord, ConsentCreateInput, ConsentBasis, ConsentStatus,
+  SecurityPolicy, PiiCategory, PiiAction, SecurityErrorCode,
+  ContentScanResult, PiiScanResult, InjectionScanResult,
 } from './interfaces/api.js';
 
 export type {
@@ -402,6 +412,7 @@ function buildOrchestrationAdapter(
       ...getCognitiveMetabolismMigrations(),              // v39: Phase 3 cognitive metabolism columns
       ...getConflictIndexMigrations(),                     // v40: Phase 4 conflict detection index
       ...getReasoningMigrations(),                          // v41: Phase 5 reasoning column
+      ...getSecurityHardeningMigrations(),                    // v42: Phase 9 security hardening
     ]);
     if (!phase4Governance.ok) {
       conn.close();
@@ -653,6 +664,7 @@ export async function createLimen(
         ...getCognitiveMetabolismMigrations(),
         ...getConflictIndexMigrations(),
         ...getReasoningMigrations(),
+        ...getSecurityHardeningMigrations(),
       ]);
       if (recoveryMigResult.ok) {
         // P0-A: Pass transition service to recovery for governance-enforced transitions.
@@ -762,6 +774,9 @@ export async function createLimen(
     // Phase 4 §4.1: Structural conflict detection configuration.
     // Default true when undefined. Only false when explicitly set to false.
     ...(resolvedConfig.autoConflict === false ? { autoConflict: false } : {}),
+    // Phase 9: Security policy (I-P9-50: non-breaking defaults)
+    // F-P9-032: Deep-copy and freeze to prevent post-construction mutation (I-P9-51).
+    ...(resolvedConfig.security ? { securityPolicy: freezeSecurityPolicy(resolvedConfig.security) } : {}),
   });
 
   // WMP working memory system (closure-local — DC-P4-406, C-SEC-05)
@@ -961,6 +976,12 @@ export async function createLimen(
     freshnessThresholds: config?.cognitive?.freshness,
   });
 
+  // Phase 9: Create ConsentRegistry for limen.consent (I-P9-23: audit trail)
+  const consentRegistry = createConsentRegistry({
+    audit: kernel.audit,
+    time: kernel.time,
+  });
+
   // Phase 8: Create Plugin Registry (I-P8-01: before freeze)
   // PluginApi provider returns null until enableApi() is called (I-P8-03).
   let pluginApiRef: import('../plugins/plugin_types.js').PluginApi | null = null;
@@ -1132,6 +1153,30 @@ export async function createLimen(
 
     // Phase 5: Cognitive intelligence namespace (limen.cognitive.health())
     cognitive: cognitiveNamespace,
+
+    // Phase 9: Consent management (I-P9-23: all mutations audited)
+    consent: {
+      register(input: import('../security/security_types.js').ConsentCreateInput) {
+        const conn = getConnection();
+        const ctx = getContext();
+        return conn.transaction(() => consentRegistry.register(conn, ctx, input));
+      },
+      revoke(id: string) {
+        const conn = getConnection();
+        const ctx = getContext();
+        return conn.transaction(() => consentRegistry.revoke(conn, ctx, id));
+      },
+      check(dataSubjectId: string, scope: string) {
+        const conn = getConnection();
+        const ctx = getContext();
+        return consentRegistry.check(conn, ctx, dataSubjectId, scope);
+      },
+      list(dataSubjectId: string) {
+        const conn = getConnection();
+        const ctx = getContext();
+        return consentRegistry.list(conn, ctx, dataSubjectId);
+      },
+    } satisfies ConsentApi,
 
     // Phase 1: Convenience API methods
     // Delegates to convenienceLayer (created during eager init).

@@ -712,6 +712,12 @@ export interface ClaimSystemDeps {
    * creates a 'contradicts' relationship. I-P4-06: Synchronous.
    */
   readonly autoConflict?: boolean;
+  /**
+   * Phase 9: Security policy for PII detection, injection defense, poisoning defense.
+   * I-P9-50: Defaults are non-breaking (tag/warn, not reject).
+   * I-P9-51: Set at createLimen(), immutable during instance lifecycle.
+   */
+  readonly securityPolicy?: import('../../security/security_types.js').SecurityPolicy;
 }
 
 /**
