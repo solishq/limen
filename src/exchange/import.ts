@@ -100,8 +100,20 @@ export function importKnowledge(deps: ImportDeps, document: LimenExportDocument,
   let skipped = 0;
   let failed = 0;
 
+  // Valid objectType values
+  const VALID_OBJECT_TYPES = new Set(['string', 'number', 'boolean', 'date', 'json']);
+
   for (let i = 0; i < document.claims.length; i++) {
     const claim = document.claims[i]!;
+
+    // F-004: Boundary validation before delegation to assertClaim()
+    // Import is a trust boundary — external JSON must be validated here.
+    const validationError = validateImportClaim(claim, i, VALID_OBJECT_TYPES);
+    if (validationError) {
+      errors.push({ claimIndex: i, claimId: claim.id ?? `unknown-${i}`, reason: validationError });
+      failed++;
+      continue;
+    }
 
     // Dedup check (I-P8-22)
     if (dedup === 'by_content') {
@@ -238,4 +250,34 @@ export function parseExportDocument(json: string): Result<LimenExportDocument> {
 
 function contentKey(subject: string, predicate: string, objectValue: string, status: string): string {
   return `${subject}\0${predicate}\0${objectValue}\0${status}`;
+}
+
+/**
+ * Validate an individual claim at the import trust boundary.
+ * Returns an error message if invalid, or null if valid.
+ *
+ * F-004: Defense-in-depth — validate before delegating to assertClaim().
+ * Invalid claims are failed (not rejected wholesale), preserving partial import.
+ */
+function validateImportClaim(
+  claim: { subject?: unknown; predicate?: unknown; confidence?: unknown; objectType?: unknown; objectValue?: unknown },
+  index: number,
+  validObjectTypes: Set<string>,
+): string | null {
+  if (typeof claim.subject !== 'string' || claim.subject.trim() === '') {
+    return `Claim at index ${index}: subject must be a non-empty string.`;
+  }
+  if (typeof claim.predicate !== 'string' || claim.predicate.trim() === '') {
+    return `Claim at index ${index}: predicate must be a non-empty string.`;
+  }
+  if (typeof claim.confidence !== 'number' || !Number.isFinite(claim.confidence) || claim.confidence < 0 || claim.confidence > 1) {
+    return `Claim at index ${index}: confidence must be a number in [0.0, 1.0].`;
+  }
+  if (typeof claim.objectType !== 'string' || !validObjectTypes.has(claim.objectType)) {
+    return `Claim at index ${index}: objectType must be one of: ${Array.from(validObjectTypes).join(', ')}.`;
+  }
+  if (claim.objectValue === null || claim.objectValue === undefined) {
+    return `Claim at index ${index}: objectValue must be defined.`;
+  }
+  return null;
 }

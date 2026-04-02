@@ -74,13 +74,16 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
     }
 
     if (options.subject) {
-      conditions.push('ca.subject LIKE ?');
-      params.push(`${options.subject}%`);
+      // F-006: Escape LIKE wildcards in user input before appending prefix wildcard.
+      const escaped = escapeLikeWildcards(options.subject);
+      conditions.push("ca.subject LIKE ? ESCAPE '\\'");
+      params.push(`${escaped}%`);
     }
 
     if (options.predicate) {
-      conditions.push('ca.predicate LIKE ?');
-      params.push(`${options.predicate}%`);
+      const escaped = escapeLikeWildcards(options.predicate);
+      conditions.push("ca.predicate LIKE ? ESCAPE '\\'");
+      params.push(`${escaped}%`);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -236,9 +239,15 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
         return CSV_COLUMNS.map(col => {
           const value = claim[col as keyof ExportedClaim];
           if (value === null || value === undefined) return '';
-          const str = String(value);
+          let str = String(value);
+          // F-005: CSV formula injection defense.
+          // Prefix with tab if value starts with formula-triggering characters.
+          // Prevents spreadsheet software from interpreting values as formulas.
+          if (str.length > 0 && (str[0] === '=' || str[0] === '+' || str[0] === '-' || str[0] === '@')) {
+            str = '\t' + str;
+          }
           // CSV escape: quote if contains comma, newline, or quote
-          if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+          if (str.includes(',') || str.includes('\n') || str.includes('"') || str.includes('\t')) {
             return `"${str.replace(/"/g, '""')}"`;
           }
           return str;
@@ -253,4 +262,12 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
   } catch (queryError) {
     return err('EXPORT_QUERY_FAILED', `Export query failed: ${queryError instanceof Error ? queryError.message : String(queryError)}`);
   }
+}
+
+/**
+ * Escape SQL LIKE wildcard characters in user input.
+ * F-006: Prevents '%' and '_' in user input from being interpreted as wildcards.
+ */
+function escapeLikeWildcards(input: string): string {
+  return input.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
