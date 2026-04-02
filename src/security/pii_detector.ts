@@ -93,7 +93,9 @@ const PII_PATTERNS: readonly PiiPattern[] = [
   },
   {
     category: 'phone',
-    regex: /(?:\+?\d{1,3}[-.\s]?)?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}/g,
+    // F-P9-002: Requires at least one separator (dash, space, dot) between digit groups,
+    // OR a leading '+' with country code. Prevents false positives on standalone 8-digit numbers.
+    regex: /(?:\+\d{1,3}[-.\s])\(?\d{1,4}\)?[-.\s]\d{1,4}[-.\s]?\d{1,9}|\(?\d{1,4}\)?[-.\s]\d{1,4}[-.\s]\d{1,9}/g,
     confidence: 0.75,
     validate: hasMinPhoneDigits,
   },

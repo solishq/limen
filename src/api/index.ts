@@ -115,6 +115,7 @@ import { createCognitiveNamespace } from './cognitive/cognitive_api.js';
 // Phase 9: Security Hardening migration (v42) + Consent Registry
 import { getSecurityHardeningMigrations } from './migration/033_security_hardening.js';
 import { createConsentRegistry } from '../security/consent_registry.js';
+import { freezeSecurityPolicy } from '../security/security_types.js';
 import type { ConsentApi } from './interfaces/api.js';
 
 // Sprint 4: Mission recovery (I-18)
@@ -774,7 +775,8 @@ export async function createLimen(
     // Default true when undefined. Only false when explicitly set to false.
     ...(resolvedConfig.autoConflict === false ? { autoConflict: false } : {}),
     // Phase 9: Security policy (I-P9-50: non-breaking defaults)
-    ...(resolvedConfig.security ? { securityPolicy: resolvedConfig.security } : {}),
+    // F-P9-032: Deep-copy and freeze to prevent post-construction mutation (I-P9-51).
+    ...(resolvedConfig.security ? { securityPolicy: freezeSecurityPolicy(resolvedConfig.security) } : {}),
   });
 
   // WMP working memory system (closure-local — DC-P4-406, C-SEC-05)

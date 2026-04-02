@@ -68,12 +68,14 @@ const INJECTION_PATTERNS: readonly InjectionPattern[] = [
   },
   {
     name: 'you_are_now',
-    regex: /you\s+are\s+now/i,
+    // F-P9-012: Restrict to role hijacking context to avoid false positives
+    regex: /you\s+are\s+now\s+(?:a\s+)?(?:system|AI|assistant|chatbot|bot|admin|root|DAN)\b/i,
     severity: 'medium',
   },
   {
     name: 'act_as',
-    regex: /\bact\s+as\b/i,
+    // F-P9-011: Restrict to role hijacking context to avoid false positives
+    regex: /\bact\s+as\s+(?:a\s+)?(?:system|admin|root|AI|assistant|chatbot|bot|model)\b/i,
     severity: 'medium',
   },
 
@@ -106,19 +108,32 @@ const SEVERITY_ORDER: Record<InjectionSeverity, number> = {
 };
 
 /**
+ * F-P9-013/014: Strip zero-width characters and apply Unicode NFC normalization.
+ * Prevents bypass via zero-width char insertion or homoglyph substitution.
+ */
+function normalizeForScan(text: string): string {
+  // Strip zero-width characters: U+200B (ZWSP), U+200C (ZWNJ), U+200D (ZWJ), U+FEFF (BOM)
+  const stripped = text.replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
+  // Apply NFC normalization to collapse composed characters
+  return stripped.normalize('NFC');
+}
+
+/**
  * Scan text for prompt injection patterns.
  *
- * @param text - Concatenated claim content to scan
+ * @param text - Claim content field to scan
  * @returns InjectionScanResult with detected patterns and severity
  */
 function scanForInjection(text: string): InjectionScanResult {
+  // F-P9-013/014: Normalize before pattern matching to defeat Unicode bypass
+  const normalized = normalizeForScan(text);
   const matchedPatterns: string[] = [];
   let maxSeverity: InjectionSeverity = 'none';
 
   for (const pattern of INJECTION_PATTERNS) {
     // Reset lastIndex for global-capable regex
     pattern.regex.lastIndex = 0;
-    if (pattern.regex.test(text)) {
+    if (pattern.regex.test(normalized)) {
       matchedPatterns.push(pattern.name);
       if (SEVERITY_ORDER[pattern.severity] > SEVERITY_ORDER[maxSeverity]) {
         maxSeverity = pattern.severity;
@@ -129,6 +144,30 @@ function scanForInjection(text: string): InjectionScanResult {
   return {
     detected: matchedPatterns.length > 0,
     patterns: matchedPatterns,
+    severity: maxSeverity,
+  };
+}
+
+/**
+ * F-P9-019: Merge multiple per-field injection scan results into one.
+ * Deduplicates pattern names and takes the highest severity.
+ */
+function mergeInjectionResults(results: InjectionScanResult[]): InjectionScanResult {
+  const allPatterns: string[] = [];
+  let maxSeverity: InjectionSeverity = 'none';
+
+  for (const r of results) {
+    for (const p of r.patterns) {
+      if (!allPatterns.includes(p)) allPatterns.push(p);
+    }
+    if (SEVERITY_ORDER[r.severity] > SEVERITY_ORDER[maxSeverity]) {
+      maxSeverity = r.severity;
+    }
+  }
+
+  return {
+    detected: allPatterns.length > 0,
+    patterns: allPatterns,
     severity: maxSeverity,
   };
 }
@@ -162,10 +201,14 @@ export function scanClaimContent(
     ? scanForPii(fields, policy.pii.categories)
     : { hasPii: false, matches: [] as const, categories: [] as const };
 
-  // Injection scan — concatenate all fields for comprehensive detection
-  const fullText = `${fields.subject}\n${fields.predicate}\n${fields.objectValue}`;
+  // F-P9-019: Scan each field independently to prevent false injection detection
+  // from field concatenation creating double-newlines (e.g., empty predicate + "Human:" objectValue).
   const injection = policy.injection.enabled
-    ? scanForInjection(fullText)
+    ? mergeInjectionResults([
+        scanForInjection(fields.subject),
+        scanForInjection(fields.predicate),
+        scanForInjection(fields.objectValue),
+      ])
     : { detected: false, patterns: [] as const, severity: 'none' as const };
 
   return {
