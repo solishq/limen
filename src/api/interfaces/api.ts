@@ -52,6 +52,14 @@ import type {
 // Phase 5: Cognitive API types
 import type { CognitiveNamespace } from '../cognitive/cognitive_api.js';
 
+// Phase 8: Plugin and Exchange types
+import type {
+  LimenPlugin, LimenEventName, LimenEventHandler,
+} from '../../plugins/plugin_types.js';
+import type {
+  ExportOptions, LimenExportDocument, ImportOptions, ImportResult,
+} from '../../exchange/exchange_types.js';
+
 // Phase 4: WMP input/output types for consumer-facing WorkingMemoryApi
 import type {
   WriteWorkingMemoryInput, WriteWorkingMemoryOutput,
@@ -91,6 +99,20 @@ export type {
 // Phase 5: Cognitive API types
 export type { CognitiveNamespace } from '../cognitive/cognitive_api.js';
 export type { CognitiveHealthReport, CognitiveHealthConfig } from '../../cognitive/health.js';
+
+// Phase 8: Plugin and Exchange types
+export type {
+  LimenPlugin, LimenEventName, LimenEventHandler, LimenEvent,
+  PluginMeta, PluginContext, PluginApi, PluginLogger,
+  PluginErrorCode,
+} from '../../plugins/plugin_types.js';
+export type {
+  ExportOptions, ExportFormat,
+  LimenExportDocument, ExportedClaim, ExportedRelationship, ExportedEvidenceRef,
+  ExportMetadata,
+  ImportOptions, ImportResult, ImportError, ImportDedup,
+  ExchangeErrorCode,
+} from '../../exchange/exchange_types.js';
 
 // Sprint 7: Consumer-facing ClaimApi — no conn/ctx required (DC-P4-406, C-SEC-05)
 export interface ClaimApi {
@@ -198,6 +220,20 @@ export interface LimenConfig {
    * This field exists for future Phase 12 (Cognitive Engine) extensions.
    */
   readonly cascade?: Record<string, never>;
+
+  /**
+   * Phase 8 §8.1: Plugins to install during construction.
+   * Installed in order before Object.freeze().
+   * Destroyed in reverse order during shutdown().
+   * I-P8-01: Must be before freeze.
+   */
+  readonly plugins?: readonly LimenPlugin[];
+
+  /**
+   * Phase 8 §8.1: Per-plugin configuration.
+   * Keys are plugin names. Values passed to PluginContext.config.
+   */
+  readonly pluginConfig?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 
   /**
    * CF-021: Structured logging callback.
@@ -433,6 +469,46 @@ export interface Limen {
    * Tenant-isolated. Retracted claims excluded. Superseded excluded by default.
    */
   search(query: string, options?: SearchOptions): Result<readonly SearchResult[]>;
+
+  // -- Phase 8: Event Hooks (§8.5) --
+
+  /**
+   * Phase 8 §8.5: Subscribe to Limen events.
+   * Consumer-facing event names use colon separators.
+   * Returns subscription ID for later unsubscription.
+   *
+   * I-P8-10: Maps to internal EventBus.
+   * I-P8-11: Handler errors are isolated.
+   * I-P8-12: Works on frozen instance (closure-captured).
+   */
+  on(event: LimenEventName, handler: LimenEventHandler): string;
+
+  /**
+   * Phase 8 §8.5: Unsubscribe from events.
+   */
+  off(subscriptionId: string): void;
+
+  // -- Phase 8: Import/Export (§8.3, §8.4) --
+
+  /**
+   * Phase 8 §8.3: Export knowledge to a format.
+   * Returns serialized content as string.
+   *
+   * I-P8-20: JSON roundtrip preserves fidelity.
+   * I-P8-24: Version field is '1.0.0'.
+   * I-P8-26: Works on frozen instance.
+   */
+  exportData(options: ExportOptions): Result<string>;
+
+  /**
+   * Phase 8 §8.4: Import knowledge from JSON.
+   *
+   * I-P8-21: New IDs assigned.
+   * I-P8-22: Dedup by content.
+   * I-P8-23: Relationship rebinding.
+   * I-P8-26: Works on frozen instance.
+   */
+  importData(document: LimenExportDocument, options?: ImportOptions): Result<ImportResult>;
 
   // -- Lifecycle --
 

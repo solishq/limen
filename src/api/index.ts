@@ -25,7 +25,7 @@
 
 import type {
   Kernel, CreateKernelFn, DestroyKernelFn,
-  DatabaseConnection, OperationContext, Permission,
+  DatabaseConnection, OperationContext, Permission, MissionId,
 } from '../kernel/interfaces/index.js';
 import type { Substrate } from '../substrate/interfaces/substrate.js';
 import type { SubstrateConfig } from '../substrate/interfaces/substrate.js';
@@ -145,6 +145,13 @@ import { createConvenienceLayer } from './convenience/convenience_layer.js';
 import { initializeConvenience } from './convenience/convenience_init.js';
 import { DEFAULT_MAX_AUTO_CONFIDENCE } from './convenience/convenience_types.js';
 
+// Phase 8: Plugin Registry and Exchange
+import { createPluginRegistry } from '../plugins/plugin_registry.js';
+import { exportKnowledge } from '../exchange/export.js';
+import { importKnowledge } from '../exchange/import.js';
+import type { LimenEventName, LimenEventHandler } from '../plugins/plugin_types.js';
+import type { ExportOptions, LimenExportDocument, ImportOptions } from '../exchange/exchange_types.js';
+
 // ============================================================================
 // Re-export public types (convenience for consumers)
 // ============================================================================
@@ -192,6 +199,15 @@ export type {
   DiscardWorkingMemoryInput, DiscardWorkingMemoryOutput,
   // Phase 5: Cognitive API types
   CognitiveNamespace, CognitiveHealthReport, CognitiveHealthConfig,
+  // Phase 8: Plugin and Exchange types
+  LimenPlugin, LimenEventName, LimenEventHandler, LimenEvent,
+  PluginMeta, PluginContext, PluginApi, PluginLogger,
+  PluginErrorCode,
+  ExportOptions, ExportFormat,
+  LimenExportDocument, ExportedClaim, ExportedRelationship, ExportedEvidenceRef,
+  ExportMetadata,
+  ImportOptions, ImportResult, ImportError, ImportDedup,
+  ExchangeErrorCode,
 } from './interfaces/api.js';
 
 export type {
@@ -912,10 +928,13 @@ export async function createLimen(
   // Register convenience agent + create convenience mission during createLimen().
   // All convenience methods become synchronous Result<T> after this point.
   let convenienceLayer: ReturnType<typeof createConvenienceLayer> | null = null;
+  let convenienceMissionId: MissionId | null = null; // Phase 8: tracked for import
   try {
     const convInit = await initializeConvenience(agentsApi, missionsApi, (agentId) => {
       defaultAgentId = agentId;
     }, kernel.time);
+
+    convenienceMissionId = convInit.missionId;
 
     convenienceLayer = createConvenienceLayer({
       claims: claimsApi,
@@ -941,6 +960,29 @@ export async function createLimen(
     time: kernel.time,
     freshnessThresholds: config?.cognitive?.freshness,
   });
+
+  // Phase 8: Create Plugin Registry (I-P8-01: before freeze)
+  // PluginApi provider returns null until enableApi() is called (I-P8-03).
+  let pluginApiRef: import('../plugins/plugin_types.js').PluginApi | null = null;
+  const pluginRegistry = createPluginRegistry({
+    eventBus: kernel.events,
+    time: kernel.time,
+    log: (level, category, message, context) => {
+      log({ level: level as 'debug' | 'info' | 'warn' | 'error', category, message, ...(context ? { context } : {}) });
+    },
+    apiProvider: () => pluginApiRef,
+  });
+
+  // Phase 8: Install plugins from config (I-P8-01: before freeze, I-P8-06: non-fatal)
+  if (resolvedConfig.plugins && resolvedConfig.plugins.length > 0) {
+    const installResult = pluginRegistry.installAll(resolvedConfig.plugins, resolvedConfig.pluginConfig);
+    if (!installResult.ok) {
+      log({ level: 'error', category: 'plugin', message: `Plugin installation failed: ${installResult.error.message}` });
+    }
+  }
+
+  // Phase 8: Read package version for export metadata
+  const limenVersion = '1.4.0'; // Matches package.json
 
   // Build the Limen object
   const engine: Limen = {
@@ -1141,12 +1183,83 @@ export async function createLimen(
       defaultAgentId = agentId;
     },
 
+    // Phase 8 §8.5: Event hooks (I-P8-10, I-P8-11, I-P8-12)
+    on(event: LimenEventName, handler: LimenEventHandler): string {
+      const result = pluginRegistry.on(event, handler);
+      if (!result.ok) throw new LimenError('INVALID_CONFIG', result.error.message);
+      return result.value;
+    },
+
+    off(subscriptionId: string): void {
+      pluginRegistry.off(subscriptionId);
+    },
+
+    // Phase 8 §8.3: Export (I-P8-20, I-P8-24, I-P8-26)
+    exportData(options: ExportOptions) {
+      return exportKnowledge(
+        { getConnection, time: kernel.time, limenVersion },
+        options,
+      );
+    },
+
+    // Phase 8 §8.4: Import (I-P8-21, I-P8-22, I-P8-23, I-P8-26)
+    importData(document: LimenExportDocument, options?: ImportOptions) {
+      if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
+      // Provide import deps using the ClaimApi facade
+      return importKnowledge(
+        {
+          assertClaim: (input) => {
+            const result = claimsApi.assertClaim(input);
+            if (!result.ok) return result;
+            return { ok: true as const, value: { claim: { id: result.value.claim.id } } };
+          },
+          relateClaims: (input) => claimsApi.relateClaims(input),
+          queryClaims: (input) => {
+            const queryInput: import('../claims/interfaces/claim_types.js').ClaimQueryInput = {
+              ...(input.subject ? { subject: input.subject } : {}),
+              ...(input.predicate ? { predicate: input.predicate } : {}),
+              ...(input.status ? { status: input.status as 'active' | 'retracted' } : {}),
+              limit: input.limit ?? 100000,
+              includeEvidence: false,
+              includeRelationships: false,
+            };
+            const result = claimsApi.queryClaims(queryInput);
+            if (!result.ok) return result;
+            return {
+              ok: true as const,
+              value: {
+                claims: result.value.claims.map(c => ({
+                  claim: {
+                    subject: c.claim.subject,
+                    predicate: c.claim.predicate,
+                    object: { value: String(c.claim.object.value) },
+                    status: c.claim.status as string,
+                  },
+                })),
+              },
+            };
+          },
+          missionId: convenienceMissionId ?? 'mission:convenience' as MissionId,
+        },
+        document,
+        options,
+      );
+    },
+
     // S3.4, I-05, SD-06: Graceful shutdown
     // CF-011: Each step wrapped in try/catch so that one failure
     // does not prevent subsequent cleanup. Errors are collected.
     async shutdown(): Promise<void> {
       log({ level: 'info', category: 'shutdown', message: 'Limen shutdown starting' });
       const shutdownErrors: Error[] = [];
+
+      // Phase 8: Destroy plugins in reverse order (I-P8-04, DC-P8-204)
+      try {
+        await pluginRegistry.destroyAll();
+      } catch (err) {
+        // Non-fatal: plugin destroy errors do not block shutdown
+        log({ level: 'warn', category: 'shutdown', message: 'Plugin destroy failed (non-fatal)', context: { error: err instanceof Error ? err.message : String(err) } });
+      }
 
       // CF-017: Stop checkpoint expiry timer before closing connections
       try {
@@ -1239,6 +1352,18 @@ export async function createLimen(
       log({ level: 'info', category: 'shutdown', message: 'Limen shutdown complete' });
     },
   };
+
+  // ── Step 5.5: Phase 8 Plugin API Enable (I-P8-03) ──
+  // After engine construction, set the API reference so plugins can
+  // use the convenience API in event handlers (deferred calls).
+  pluginApiRef = {
+    remember: (s, p, v, o) => engine.remember(s, p, v, o as import('./interfaces/api.js').RememberOptions | undefined),
+    recall: (s, p, o) => engine.recall(s, p, o as import('./interfaces/api.js').RecallOptions | undefined),
+    forget: (id, r) => engine.forget(id, r as import('../claims/interfaces/claim_types.js').RetractionReason | undefined),
+    search: (q, o) => engine.search(q, o as import('./convenience/convenience_types.js').SearchOptions | undefined),
+    connect: (a, b, t) => engine.connect(a, b, t as 'supports' | 'contradicts' | 'supersedes' | 'derived_from'),
+  };
+  pluginRegistry.enableApi();
 
   // ── Step 6: Deep freeze (C-07, FPD-4) ──
 
