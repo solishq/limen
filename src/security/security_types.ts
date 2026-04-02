@@ -137,8 +137,23 @@ export interface SecurityPolicy {
   };
 }
 
+/**
+ * Recursively freeze an object and all nested objects.
+ * F-P9-031: Prevents mutation of shared default policy.
+ */
+function deepFreeze<T extends object>(obj: T): Readonly<T> {
+  Object.freeze(obj);
+  for (const value of Object.values(obj)) {
+    if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
+      deepFreeze(value as object);
+    }
+  }
+  return obj;
+}
+
 /** Default security policy — I-P9-50: non-breaking defaults */
-export const DEFAULT_SECURITY_POLICY: SecurityPolicy = {
+// F-P9-031: Deep-frozen at module load to prevent cross-instance contamination.
+export const DEFAULT_SECURITY_POLICY: SecurityPolicy = deepFreeze({
   pii: {
     enabled: true,
     action: 'tag',
@@ -154,7 +169,17 @@ export const DEFAULT_SECURITY_POLICY: SecurityPolicy = {
     windowSeconds: 60,        // 60-second sliding window
     subjectDiversityMin: 3,   // must assert about >= 3 different subjects
   },
-};
+});
+
+/**
+ * Deep-copy and freeze a SecurityPolicy.
+ * F-P9-032: Ensures post-construction mutation by the consumer has no effect.
+ * Used by createLimen() to isolate the live policy from the consumer's reference.
+ */
+export function freezeSecurityPolicy(policy: SecurityPolicy): Readonly<SecurityPolicy> {
+  const copy = structuredClone(policy);
+  return deepFreeze(copy);
+}
 
 // ── Error Codes ──
 

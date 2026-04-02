@@ -1459,9 +1459,12 @@ function createAssertClaimHandlerImpl(
         }
 
         // Phase 9: Poisoning defense (burst limit + diversity check)
-        if (securityPolicy.poisoning.enabled && ctx.agentId) {
+        // F-P9-020: Fall back to '__anonymous__' when agentId is absent (e.g., convenience API)
+        // so that poisoning defense is still enforced for non-agent claim paths.
+        if (securityPolicy.poisoning.enabled) {
+          const effectiveAgentId = ctx.agentId ?? '__anonymous__';
           const poisoningVerdict = checkPoisoning(
-            conn, ctx.agentId, ctx.tenantId, input.subject,
+            conn, effectiveAgentId, ctx.tenantId, input.subject,
             securityPolicy, deps.time,
           );
           if (!poisoningVerdict.allowed) {
