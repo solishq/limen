@@ -14,7 +14,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -617,7 +617,8 @@ describe('CF-015: data export .limen format', () => {
         'Format must be limen-archive-v1');
 
       const version = meta.find(m => m.key === 'limen_version');
-      assert.equal(version?.value, '1.2.0',
+      const expectedVersion = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf-8')).version;
+      assert.equal(version?.value, expectedVersion,
         'Limen version must match package.json version');
 
       const schemaVer = meta.find(m => m.key === 'schema_version');
