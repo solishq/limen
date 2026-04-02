@@ -642,24 +642,27 @@ describe('Phase 9: Security Scanning Integration', () => {
 
   // DC-P9-404: Poisoning diversity check
   it('DC-P9-404 success: low diversity blocks claims', async () => {
+    // Diversity check activates at burstLimit/2 claims.
+    // Set burstLimit=6 so threshold is 3. After 3 claims to same subject, 4th is blocked.
     const diversityPolicy: SecurityPolicy = {
       ...DEFAULT_SECURITY_POLICY,
       poisoning: {
         enabled: true,
-        burstLimit: 100,
+        burstLimit: 6,
         windowSeconds: 60,
         subjectDiversityMin: 3,
       },
     };
     await withLimen({ security: diversityPolicy }, async (limen) => {
-      // First 3 claims to the same subject — should succeed initially but then block
+      // First 3 claims to the same subject — passes because < diversityThreshold (3)
       const r1 = limen.remember('entity:single:target', 'observation.note', 'First');
       assert.equal(r1.ok, true, 'first claim passes');
       const r2 = limen.remember('entity:single:target', 'observation.note2', 'Second');
       assert.equal(r2.ok, true, 'second claim passes');
+      // 2 claims exist, threshold is floor(6/2) = 3. r2 was 2nd, so r3 would be 3rd.
+      // At 3 claims in window and < 3 unique subjects (only 1), repeated subject blocked.
       const r3 = limen.remember('entity:single:target', 'observation.note3', 'Third');
-      assert.equal(r3.ok, true, 'third claim passes');
-      // At 3 claims and < 3 unique subjects, repeated subject should be blocked
+      assert.equal(r3.ok, true, 'third claim passes (hits threshold but subject count check)');
       const blocked = limen.remember('entity:single:target', 'observation.note4', 'Fourth');
       assert.equal(blocked.ok, false);
       if (blocked.ok) return;

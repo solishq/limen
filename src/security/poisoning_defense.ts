@@ -89,9 +89,11 @@ export function checkPoisoning(
   }
 
   // I-P9-31: Diversity check
-  // Only enforce if agent has enough claims AND current subject is not new.
-  // The diversity check prevents an agent from hammering a single subject.
-  if (claimsInWindow >= policy.poisoning.subjectDiversityMin) {
+  // Only enforce when agent has significant volume (>= burstLimit/2).
+  // Below that threshold, diversity is irrelevant — not enough claims to be a poisoning threat.
+  // I-P9-50: Default policy must be non-breaking for normal usage patterns.
+  const diversityThreshold = Math.floor(policy.poisoning.burstLimit / 2);
+  if (claimsInWindow >= diversityThreshold) {
     // Check if current subject is already in the window
     const subjectExists = conn.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM claim_assertions
