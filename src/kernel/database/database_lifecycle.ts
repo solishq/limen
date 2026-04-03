@@ -46,6 +46,7 @@ function createConnection(
     dataDir,
     schemaVersion,
     tenancyMode,
+    rawHandle: db,
 
     /** §3.4: Execute within transaction. Automatic rollback on throw. I-05. */
     transaction<T>(fn: () => T): T {
