@@ -5,6 +5,45 @@ All notable changes to Limen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-04-03 (THINK)
+
+### Added
+- **Phase 11: Vector Search** — semantic search via `sqlite-vec` (optional dependency). Hybrid search combining FTS5 keyword + vector similarity. Duplicate detection before storage with configurable similarity threshold. Embedding queue with `embedPending()` for batch processing. `embeddingStats()` for monitoring. Falls back to full-text search when `sqlite-vec` is unavailable.
+- **Phase 12: Cognitive Engine** — self-healing retraction cascades (opt-in, disabled by default). Consolidation engine: merge similar claims, archive stale claims, suggest contradiction resolutions with dry-run mode. 5-factor importance scoring (recency, confidence, connections, access, centrality). KNN-based auto-connection suggestions via embedding similarity with accept/reject workflow. Mission-scoped narrative snapshots. External verification provider integration (advisory only, never mutates claims).
+- `limen.semanticSearch(query, options?)` — async semantic search via embedding provider.
+- `limen.checkDuplicate(subject, predicate, value)` — pre-storage duplicate detection.
+- `limen.embedPending()` — process embedding queue for pending claims.
+- `limen.embeddingStats()` — embedding pipeline statistics.
+- `limen.cognitive.consolidate(options?)` — merge, archive, suggest resolutions.
+- `limen.cognitive.importance(claimId, weights?)` — composite importance score.
+- `limen.cognitive.narrative(missionId?)` — knowledge state snapshot.
+- `limen.cognitive.verify(claimId)` — external claim verification (async).
+- `limen.cognitive.suggestConnections(claimId)` — KNN relationship suggestions.
+- `limen.cognitive.acceptSuggestion(id)` / `rejectSuggestion(id)` — suggestion workflow.
+- `selfHealing` configuration: `{ enabled, autoRetractThreshold, maxCascadeDepth }`.
+- `vector` configuration: `{ provider, dimensions }`.
+- Migration v036 (cognitive engine tables: connection_suggestions, consolidation_log).
+
+### Changed
+- **BREAKING:** `SearchOptions.mode` now includes `'semantic' | 'hybrid'` alongside existing `'fulltext'`.
+- **BREAKING:** Major version bump signals cognitive capabilities. No breaking API removals — all v1.x APIs continue to work.
+- `sqlite-vec` added as optional dependency (not required for core functionality).
+
+## [1.5.0] - 2026-04-03 (GOVERN)
+
+### Added
+- **Phase 9: Security Hardening** — PII detection engine with configurable patterns (emails, phone numbers, SSNs, credit cards). Claim content sanitization against prompt injection patterns. FTS5 query injection defense. Subject/predicate URI format validation. Sensitivity levels controlling enforcement (block, redact, log). Consent tracking API (`limen.consent`) with CRUD operations, expiry computation on read, and audit trail on all mutations.
+- **Phase 10: Governance Suite** — Data classification engine with configurable rules. Protected predicate system preventing unauthorized mutation of critical knowledge domains. GDPR Article 17 erasure with cryptographic certificate generation (`limen.governance.erasure()`). SOC 2 Type II audit package export (`limen.governance.exportAudit()`). Classification rule management (`addRule`, `removeRule`, `listRules`). Protected predicate management (`protectPredicate`, `listProtectedPredicates`).
+- `limen.consent.register()` / `revoke()` / `check()` / `list()` — consent lifecycle management.
+- `limen.governance.erasure()` — GDPR erasure with audit certificate.
+- `limen.governance.exportAudit()` — SOC 2 compliance export.
+- `limen.governance.addRule()` / `removeRule()` / `listRules()` — classification rule management.
+- `limen.governance.protectPredicate()` / `listProtectedPredicates()` — predicate access control.
+- Migrations for security tables and governance tables.
+
+### Changed
+- Security controls applied at the claim assertion boundary — PII detection and injection defense run before storage, not after.
+
 ## [1.4.0] - 2026-03-31
 
 ### Added

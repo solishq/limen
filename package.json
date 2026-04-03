@@ -1,7 +1,7 @@
 {
   "name": "limen-ai",
   "version": "2.0.0",
-  "description": "Governed knowledge engine for AI agents. Store beliefs with confidence, evidence chains, and lifecycle governance. SQLite-powered, zero-config, single dependency.",
+  "description": "Cognitive infrastructure for AI agents. Beliefs with confidence and decay, governance enforcement, self-healing knowledge, vector search. SQLite-powered, zero-config.",
   "type": "module",
   "license": "Apache-2.0",
   "author": {
