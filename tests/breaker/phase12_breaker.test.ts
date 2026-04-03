@@ -155,19 +155,17 @@ describe('Breaker: Self-Healing Retraction Reason (M-3 defense)', () => {
 // ============================================================================
 
 describe('Breaker: Self-Healing Depth Limit (M-2 defense)', () => {
-  it('F-P12-003: DEFECT — depth limit defeated by event-driven re-entry', async () => {
-    // FINDING: maxCascadeDepth is defeated because each retractClaim emits
-    // claim.retracted event, which fires the event listener with depth=0
-    // and a fresh visited Set. The recursive call respects depth, but the
-    // event-driven re-entry resets the counter to 0.
+  it('F-P12-003: FIXED — depth limit enforced despite event-driven re-entry', async () => {
+    // ORIGINAL FINDING: maxCascadeDepth was defeated because each retractClaim
+    // emitted claim.retracted event, which fired the event listener with depth=0
+    // and a fresh visited Set.
+    //
+    // FIX: isInActiveCascade guard prevents event re-entry. The event listener
+    // skips claims already being processed by an active cascade. The recursive
+    // traversal in processSelfHealing handles cascading with shared depth/visited.
     //
     // With maxCascadeDepth=2 and chain C0 <- C1 <- C2 <- C3:
-    // 1. Event for C0: processSelfHealing(C0, depth=0) -> retract C1 -> recurse(C1, depth=1) -> retract C2 -> recurse(C2, depth=2) -> STOP
-    // 2. Event for C1 retraction: processSelfHealing(C1, depth=0, new visited) -> C2 already retracted
-    // 3. Event for C2 retraction: processSelfHealing(C2, depth=0, new visited) -> retract C3!
-    //
-    // C3 IS retracted despite being beyond maxCascadeDepth from the original trigger.
-    // This means maxCascadeDepth provides NO protection against unbounded cascades.
+    // C1 retracted (depth=0), C2 retracted (depth=1), C3 SURVIVES (depth=2 = max).
     const limen = await createTestEngine({
       selfHealing: {
         enabled: true,
@@ -180,7 +178,7 @@ describe('Breaker: Self-Healing Depth Limit (M-2 defense)', () => {
       for (let i = 0; i < 4; i++) {
         const r = limen.remember(
           `entity:test:depth${i}`,
-          'test.depth',
+          `test.depth${i}`,
           `Depth claim ${i}`,
           { confidence: 0.05 },
         );
@@ -197,12 +195,12 @@ describe('Breaker: Self-Healing Depth Limit (M-2 defense)', () => {
       const retract = limen.forget(claims[0]!, 'incorrect');
       assert.ok(retract.ok);
 
-      // DEFECT PROOF: C3 is retracted despite being beyond maxCascadeDepth
+      // FIX VERIFIED: C3 survives because depth limit is now enforced
       const c3Recall = limen.recall('entity:test:depth3');
       assert.ok(c3Recall.ok);
       assert.strictEqual(
-        c3Recall.value.length, 0,
-        'DEFECT CONFIRMED: C3 retracted despite maxCascadeDepth=2 — event re-entry defeats depth limit',
+        c3Recall.value.length, 1,
+        'FIX VERIFIED: C3 survives — depth limit enforced via isInActiveCascade guard',
       );
     } finally {
       await limen.shutdown();
