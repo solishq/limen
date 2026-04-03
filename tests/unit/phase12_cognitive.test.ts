@@ -87,7 +87,7 @@ async function createTestEngine(overrides?: Partial<LimenConfig>): Promise<Limen
 
 describe('Phase 12: Cognitive Types', () => {
   it('DC-P12-602 success: DEFAULT_SELF_HEALING_CONFIG has safe defaults', () => {
-    assert.strictEqual(DEFAULT_SELF_HEALING_CONFIG.enabled, true);
+    assert.strictEqual(DEFAULT_SELF_HEALING_CONFIG.enabled, false); // disabled by default for backward compat
     assert.strictEqual(DEFAULT_SELF_HEALING_CONFIG.autoRetractThreshold, 0.1);
     assert.strictEqual(DEFAULT_SELF_HEALING_CONFIG.maxCascadeDepth, 5);
   });
