@@ -46,7 +46,11 @@ export type Permission =
   | 'view_telemetry' | 'view_audit'
   | 'manage_providers' | 'manage_budgets' | 'manage_roles'
   | 'purge_data'
-  | 'approve_response' | 'edit_response' | 'takeover_session' | 'review_batch';
+  | 'approve_response' | 'edit_response' | 'takeover_session' | 'review_batch'
+  // Phase 10: Governance permissions (I-P10-41: MUST NOT activate dormant RBAC)
+  | 'classify_claims' | 'manage_classification_rules'
+  | 'manage_protected_predicates'
+  | 'request_erasure' | 'export_compliance';
 
 /**
  * Operation context for identity threading and RBAC enforcement.
