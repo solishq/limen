@@ -30,10 +30,12 @@ export interface SelfHealingConfig {
 
 /**
  * Default self-healing configuration.
- * Conservative defaults: threshold 0.1, max depth 5.
+ * DISABLED by default for backward compatibility — existing applications
+ * upgrading to v2.0 must not see behavior changes unless explicitly configured.
+ * Enable via: createLimen({ selfHealing: { enabled: true } })
  */
 export const DEFAULT_SELF_HEALING_CONFIG: SelfHealingConfig = Object.freeze({
-  enabled: true,
+  enabled: false,
   autoRetractThreshold: 0.1,
   maxCascadeDepth: 5,
 });
