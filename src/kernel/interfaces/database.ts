@@ -79,6 +79,14 @@ export interface DatabaseConnection {
    * S ref: I-05 (crash recovery), §3.4 (WAL checkpoint on close)
    */
   close(): Result<void>;
+
+  /**
+   * Phase 11: Raw database handle for loading SQLite extensions (e.g., sqlite-vec).
+   * Returns the underlying better-sqlite3 Database instance.
+   * Optional: only present when the connection implementation supports it.
+   * I-P11-01: Used exclusively for sqlite-vec.load() during initialization.
+   */
+  readonly rawHandle?: unknown;
 }
 
 // ─── Migration ───
