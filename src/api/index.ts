@@ -46,6 +46,7 @@ import type {
   HealthStatus, BackpressureConfig, StreamChunk,
 } from './interfaces/api.js';
 
+import { randomUUID } from 'node:crypto';
 import { LimenError, ensureLimenError } from './errors/limen_error.js';
 import { resolveDefaults } from './defaults.js';
 import { buildOperationContext } from './enforcement/rbac_guard.js';
@@ -116,7 +117,13 @@ import { createCognitiveNamespace } from './cognitive/cognitive_api.js';
 import { getSecurityHardeningMigrations } from './migration/033_security_hardening.js';
 import { createConsentRegistry } from '../security/consent_registry.js';
 import { freezeSecurityPolicy } from '../security/security_types.js';
-import type { ConsentApi } from './interfaces/api.js';
+import type { ConsentApi, GovernanceApi } from './interfaces/api.js';
+
+// Phase 10: Governance Suite migration (v43) + engines
+import { getGovernanceSuiteMigrations } from './migration/034_governance_suite.js';
+import { executeErasure } from '../governance/compliance/erasure_engine.js';
+import { generateComplianceExport } from '../governance/compliance/compliance_export.js';
+import type { ClassificationRule, ProtectedPredicateRule, ErasureRequest, ComplianceExportOptions } from '../governance/classification/governance_types.js';
 
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
@@ -218,6 +225,12 @@ export type {
   ConsentApi, ConsentRecord, ConsentCreateInput, ConsentBasis, ConsentStatus,
   SecurityPolicy, PiiCategory, PiiAction, SecurityErrorCode,
   ContentScanResult, PiiScanResult, InjectionScanResult,
+  // Phase 10: Governance types
+  GovernanceApi,
+  ClassificationLevel, ClassificationRule, ClassificationResult,
+  ProtectedPredicateRule, ErasureRequest, ErasureCertificate,
+  Soc2AuditPackage, Soc2ControlEvidence, Soc2Statistics,
+  ComplianceExportOptions, GovernanceConfig, GovernanceErrorCode,
 } from './interfaces/api.js';
 
 export type {
@@ -413,6 +426,7 @@ function buildOrchestrationAdapter(
       ...getConflictIndexMigrations(),                     // v40: Phase 4 conflict detection index
       ...getReasoningMigrations(),                          // v41: Phase 5 reasoning column
       ...getSecurityHardeningMigrations(),                    // v42: Phase 9 security hardening
+      ...getGovernanceSuiteMigrations(),                       // v43: Phase 10 governance suite
     ]);
     if (!phase4Governance.ok) {
       conn.close();
@@ -665,6 +679,7 @@ export async function createLimen(
         ...getConflictIndexMigrations(),
         ...getReasoningMigrations(),
         ...getSecurityHardeningMigrations(),
+        ...getGovernanceSuiteMigrations(),
       ]);
       if (recoveryMigResult.ok) {
         // P0-A: Pass transition service to recovery for governance-enforced transitions.
@@ -777,6 +792,40 @@ export async function createLimen(
     // Phase 9: Security policy (I-P9-50: non-breaking defaults)
     // F-P9-032: Deep-copy and freeze to prevent post-construction mutation (I-P9-51).
     ...(resolvedConfig.security ? { securityPolicy: freezeSecurityPolicy(resolvedConfig.security) } : {}),
+    // Phase 10: Dynamic getters for governance rules (F-P10-001, F-P10-002, F-P10-003 fix).
+    // Rules are stored in governance_classification_rules and governance_protected_predicates tables.
+    // Getters read from DB at assertion/retraction time so custom rules added via GovernanceApi are enforced.
+    getClassificationRules: () => {
+      const conn = getConnection();
+      const ctx = getContext();
+      const rows = conn.query<Record<string, unknown>>(
+        `SELECT id, predicate_pattern, level, reason, created_at FROM governance_classification_rules ${ctx.tenantId !== null ? 'WHERE tenant_id = ?' : 'WHERE tenant_id IS NULL'}`,
+        ctx.tenantId !== null ? [ctx.tenantId] : [],
+      );
+      return rows.map(r => ({
+        id: r['id'] as string,
+        predicatePattern: r['predicate_pattern'] as string,
+        level: r['level'] as import('../governance/classification/governance_types.js').ClassificationLevel,
+        reason: r['reason'] as string,
+        createdAt: r['created_at'] as string,
+      }));
+    },
+    getProtectedPredicateRules: () => {
+      const conn = getConnection();
+      const ctx = getContext();
+      const rows = conn.query<Record<string, unknown>>(
+        `SELECT id, predicate_pattern, required_permission, action, created_at FROM governance_protected_predicates ${ctx.tenantId !== null ? 'WHERE tenant_id = ?' : 'WHERE tenant_id IS NULL'}`,
+        ctx.tenantId !== null ? [ctx.tenantId] : [],
+      );
+      return rows.map(r => ({
+        id: r['id'] as string,
+        predicatePattern: r['predicate_pattern'] as string,
+        requiredPermission: r['required_permission'] as import('../kernel/interfaces/common.js').Permission,
+        action: r['action'] as 'assert' | 'retract' | 'both',
+        createdAt: r['created_at'] as string,
+      }));
+    },
+    getRbacActive: () => kernel.rbac.isActive(),
   });
 
   // WMP working memory system (closure-local — DC-P4-406, C-SEC-05)
@@ -818,6 +867,10 @@ export async function createLimen(
     'manage_providers', 'manage_budgets', 'manage_roles',
     'purge_data',
     'approve_response', 'edit_response', 'takeover_session', 'review_batch',
+    // Phase 10: Governance permissions (I-P10-41: dormant RBAC unaffected)
+    'classify_claims', 'manage_classification_rules',
+    'manage_protected_predicates',
+    'request_erasure', 'export_compliance',
   ]);
 
   // Library-mode agent identity: set via setDefaultAgent() after agent registration.
@@ -1177,6 +1230,121 @@ export async function createLimen(
         return consentRegistry.list(conn, ctx, dataSubjectId);
       },
     } satisfies ConsentApi,
+
+    // Phase 10: Governance Suite (classification, protected predicates, erasure, SOC 2)
+    governance: {
+      erasure(request: ErasureRequest) {
+        const conn = getConnection();
+        const ctx = getContext();
+        return executeErasure(
+          { claimStore: claimSystem.store, audit: kernel.audit, consentRegistry, time: kernel.time },
+          conn, ctx, request,
+        );
+      },
+      exportAudit(options: ComplianceExportOptions) {
+        const conn = getConnection();
+        const ctx = getContext();
+        return generateComplianceExport(
+          { audit: kernel.audit, time: kernel.time },
+          conn, ctx, options,
+        );
+      },
+      addRule(rule: Omit<ClassificationRule, 'id' | 'createdAt'>) {
+        const conn = getConnection();
+        const ctx = getContext();
+        return conn.transaction(() => {
+          const id = randomUUID();
+          const now = kernel.time.nowISO();
+          conn.run(
+            `INSERT INTO governance_classification_rules (id, tenant_id, predicate_pattern, level, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+            [id, ctx.tenantId, rule.predicatePattern, rule.level, rule.reason, now],
+          );
+          kernel.audit.append(conn, {
+            tenantId: ctx.tenantId,
+            actorType: 'system',
+            actorId: ctx.agentId ?? 'system',
+            operation: 'governance.rule.add',
+            resourceType: 'classification_rule',
+            resourceId: id,
+            detail: { predicatePattern: rule.predicatePattern, level: rule.level, reason: rule.reason },
+          });
+          const result: ClassificationRule = { id, predicatePattern: rule.predicatePattern, level: rule.level, reason: rule.reason, createdAt: now };
+          return { ok: true as const, value: result };
+        });
+      },
+      removeRule(ruleId: string) {
+        const conn = getConnection();
+        const ctx = getContext();
+        return conn.transaction(() => {
+          conn.run(`DELETE FROM governance_classification_rules WHERE id = ? ${ctx.tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL'}`,
+            ctx.tenantId !== null ? [ruleId, ctx.tenantId] : [ruleId]);
+          kernel.audit.append(conn, {
+            tenantId: ctx.tenantId,
+            actorType: 'system',
+            actorId: ctx.agentId ?? 'system',
+            operation: 'governance.rule.remove',
+            resourceType: 'classification_rule',
+            resourceId: ruleId,
+          });
+          return { ok: true as const, value: undefined };
+        });
+      },
+      listRules() {
+        const conn = getConnection();
+        const ctx = getContext();
+        const rows = conn.query<Record<string, unknown>>(
+          `SELECT id, predicate_pattern, level, reason, created_at FROM governance_classification_rules ${ctx.tenantId !== null ? 'WHERE tenant_id = ?' : 'WHERE tenant_id IS NULL'}`,
+          ctx.tenantId !== null ? [ctx.tenantId] : [],
+        );
+        const rules: ClassificationRule[] = rows.map(r => ({
+          id: r['id'] as string,
+          predicatePattern: r['predicate_pattern'] as string,
+          level: r['level'] as import('../governance/classification/governance_types.js').ClassificationLevel,
+          reason: r['reason'] as string,
+          createdAt: r['created_at'] as string,
+        }));
+        return { ok: true as const, value: rules as readonly ClassificationRule[] };
+      },
+      protectPredicate(rule: Omit<ProtectedPredicateRule, 'id' | 'createdAt'>) {
+        const conn = getConnection();
+        const ctx = getContext();
+        return conn.transaction(() => {
+          const id = randomUUID();
+          const now = kernel.time.nowISO();
+          conn.run(
+            `INSERT INTO governance_protected_predicates (id, tenant_id, predicate_pattern, required_permission, action, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+            [id, ctx.tenantId, rule.predicatePattern, rule.requiredPermission, rule.action, now],
+          );
+          kernel.audit.append(conn, {
+            tenantId: ctx.tenantId,
+            actorType: 'system',
+            actorId: ctx.agentId ?? 'system',
+            operation: 'governance.predicate.protect',
+            resourceType: 'protected_predicate',
+            resourceId: id,
+            detail: { predicatePattern: rule.predicatePattern, requiredPermission: rule.requiredPermission, action: rule.action },
+          });
+          const result: ProtectedPredicateRule = { id, predicatePattern: rule.predicatePattern, requiredPermission: rule.requiredPermission, action: rule.action, createdAt: now };
+          return { ok: true as const, value: result };
+        });
+      },
+      listProtectedPredicates() {
+        const conn = getConnection();
+        const ctx = getContext();
+        const rows = conn.query<Record<string, unknown>>(
+          `SELECT id, predicate_pattern, required_permission, action, created_at FROM governance_protected_predicates ${ctx.tenantId !== null ? 'WHERE tenant_id = ?' : 'WHERE tenant_id IS NULL'}`,
+          ctx.tenantId !== null ? [ctx.tenantId] : [],
+        );
+        const rules: ProtectedPredicateRule[] = rows.map(r => ({
+          id: r['id'] as string,
+          predicatePattern: r['predicate_pattern'] as string,
+          requiredPermission: r['required_permission'] as import('../kernel/interfaces/common.js').Permission,
+          action: r['action'] as 'assert' | 'retract' | 'both',
+          createdAt: r['created_at'] as string,
+        }));
+        return { ok: true as const, value: rules as readonly ProtectedPredicateRule[] };
+      },
+    } satisfies GovernanceApi,
 
     // Phase 1: Convenience API methods
     // Delegates to convenienceLayer (created during eager init).
