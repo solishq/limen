@@ -1472,7 +1472,20 @@ export async function createLimen(
 
     reflect(entries: readonly import('./interfaces/api.js').ReflectEntry[]) {
       if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
-      return convenienceLayer.reflect(entries);
+      const result = convenienceLayer.reflect(entries);
+
+      // F-P11-007: Enqueue embedding for each claim created by reflect()
+      if (result.ok && embeddingQueue && vectorConfig?.provider) {
+        const conn = getConnection();
+        const ctx = getContext();
+        for (let i = 0; i < result.value.claimIds.length; i++) {
+          const entry = entries[i]!;
+          const content = `reflection.${entry.category} ${entry.statement}`;
+          embeddingQueue.enqueue(conn, result.value.claimIds[i]!, ctx.tenantId, content);
+        }
+      }
+
+      return result;
     },
 
     promptInstructions() {

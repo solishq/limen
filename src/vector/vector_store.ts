@@ -72,6 +72,17 @@ export function createVectorStore(
         );
       }
 
+      // F-P11-006: Reject vectors containing NaN, Infinity, or -Infinity
+      for (let i = 0; i < vector.length; i++) {
+        if (!Number.isFinite(vector[i])) {
+          return err(
+            'VECTOR_INVALID_VALUES',
+            `Vector contains non-finite value at index ${i}: ${vector[i]}`,
+            'I-P11-10',
+          );
+        }
+      }
+
       try {
         // I-P11-10: Store vector as-is (no normalization, no truncation)
         // sqlite-vec expects a Buffer from Float32Array

@@ -34,6 +34,8 @@ function ok<T>(value: T): Result<T> {
 
 /** Convert L2 distance to approximate cosine similarity for normalized vectors. */
 export function distanceToSimilarity(distance: number): number {
+  // F-P11-010: Guard against NaN input — NaN propagates through all arithmetic
+  if (Number.isNaN(distance)) return 0;
   // For normalized vectors: L2_distance^2 = 2 * (1 - cosine_similarity)
   // So: cosine_similarity = 1 - (L2_distance^2 / 2)
   // Clamp to [0, 1]
