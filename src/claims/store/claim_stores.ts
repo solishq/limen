@@ -66,7 +66,7 @@ import { DEFAULT_SECURITY_POLICY } from '../../security/security_types.js';
 import type { ContentScanResult } from '../../security/security_types.js';
 import { classify } from '../../governance/classification/classification_engine.js';
 import { checkPredicateGuard } from '../../governance/classification/predicate_guard.js';
-import { DEFAULT_CLASSIFICATION_RULES } from '../../governance/classification/governance_types.js';
+import { DEFAULT_CLASSIFICATION_RULES, CLASSIFICATION_LEVEL_ORDER } from '../../governance/classification/governance_types.js';
 
 // ============================================================================
 // Helpers
@@ -1560,9 +1560,21 @@ function createAssertClaimHandlerImpl(
             const defaultLevel = deps.classificationDefaultLevel ?? 'unrestricted';
             const classResult = classify(input.predicate, allRules, defaultLevel);
 
+            // I-P10-PII: PII-detected claims have minimum classification of 'restricted'.
+            // If PII was detected and rule-based classification is less restrictive, elevate.
+            let finalLevel = classResult.level;
+            let finalRuleId: string | null = classResult.matchedRule;
+            if (
+              contentScanResult?.pii.hasPii &&
+              CLASSIFICATION_LEVEL_ORDER[finalLevel] < CLASSIFICATION_LEVEL_ORDER['restricted']
+            ) {
+              finalLevel = 'restricted';
+              finalRuleId = null; // elevated by PII detection, not by a classification rule
+            }
+
             conn.run(
               `UPDATE claim_assertions SET classification = ?, classification_rule_id = ? WHERE id = ?`,
-              [classResult.level, classResult.matchedRule, claim.id],
+              [finalLevel, finalRuleId, claim.id],
             );
           }
         }
