@@ -138,6 +138,12 @@ import type { EmbeddingQueue } from '../vector/embedding_queue.js';
 import { generateComplianceExport } from '../governance/compliance/compliance_export.js';
 import type { ClassificationRule, ProtectedPredicateRule, ErasureRequest, ComplianceExportOptions } from '../governance/classification/governance_types.js';
 
+// Phase 12: Cognitive Engine migration (v45) + self-healing
+import { getCognitiveEngineMigrations } from './migration/036_cognitive_engine.js';
+import { processSelfHealing } from '../cognitive/self_healing.js';
+import { DEFAULT_SELF_HEALING_CONFIG } from '../cognitive/cognitive_types.js';
+import type { SelfHealingConfig } from '../cognitive/cognitive_types.js';
+
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
 
@@ -249,6 +255,14 @@ export type {
   DuplicateCandidate, DuplicateCheckResult,
   SearchMode, HybridScore, HybridWeights,
   VectorErrorCode, EmbeddingStats,
+  // Phase 12: Cognitive Engine types
+  SelfHealingConfig, SelfHealingEvent,
+  ConsolidationOptions, ConsolidationResult, ConsolidationLogEntry, ConflictResolution,
+  ImportanceScore, ImportanceWeights,
+  ConnectionSuggestion,
+  NarrativeSnapshot, NarrativeThread,
+  VerificationResult, VerificationProvider,
+  CognitiveErrorCode,
 } from './interfaces/api.js';
 
 export type {
@@ -446,6 +460,7 @@ function buildOrchestrationAdapter(
       ...getSecurityHardeningMigrations(),                    // v42: Phase 9 security hardening
       ...getGovernanceSuiteMigrations(),                       // v43: Phase 10 governance suite
       ...getVectorSearchMigrations(),                          // v44: Phase 11 vector search
+      ...getCognitiveEngineMigrations(),                         // v45: Phase 12 cognitive engine
     ]);
     if (!phase4Governance.ok) {
       conn.close();
@@ -1093,13 +1108,45 @@ export async function createLimen(
     }, vectorConfig.embeddingInterval);
   }
 
-  // Phase 5: Create CognitiveNamespace for limen.cognitive
+  // Phase 5 + Phase 12: Create CognitiveNamespace for limen.cognitive
+  // Phase 12: Extended with consolidation, importance, narrative, verify, auto-connection
+  const selfHealingConfig: SelfHealingConfig = resolvedConfig.selfHealing ?? DEFAULT_SELF_HEALING_CONFIG;
   const cognitiveNamespace = createCognitiveNamespace({
     getConnection,
+    getContext,
     getTenantId: () => getContext().tenantId,
     time: kernel.time,
     freshnessThresholds: config?.cognitive?.freshness,
+    stabilityConfig: config?.cognitive?.stability,
+    // Phase 12 additions
+    retractClaim: claimSystem.retractClaim,
+    relateClaims: claimSystem.relateClaims,
+    vectorStore: vectorStore ?? null,
+    embeddingProvider: vectorConfig?.provider ?? null,
+    verificationProvider: resolvedConfig.verificationProvider ?? null,
+    selfHealingConfig,
   });
+
+  // Phase 12: Register self-healing event listener on claim.retracted
+  if (selfHealingConfig.enabled) {
+    kernel.events.subscribe('claim.retracted', (event) => {
+      try {
+        const payload = event.payload as { claimId?: string };
+        if (payload?.claimId) {
+          processSelfHealing(payload.claimId, {
+            getConnection,
+            getContext,
+            retractClaim: claimSystem.retractClaim,
+            time: kernel.time,
+            config: selfHealingConfig,
+            stabilityConfig: config?.cognitive?.stability,
+          });
+        }
+      } catch {
+        // Self-healing errors are non-fatal — logged but never propagated to emitter
+      }
+    });
+  }
 
   // Phase 9: Create ConsentRegistry for limen.consent (I-P9-23: audit trail)
   const consentRegistry = createConsentRegistry({

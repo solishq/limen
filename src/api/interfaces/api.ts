@@ -128,6 +128,17 @@ export type {
 export type { CognitiveNamespace } from '../cognitive/cognitive_api.js';
 export type { CognitiveHealthReport, CognitiveHealthConfig } from '../../cognitive/health.js';
 
+// Phase 12: Cognitive Engine types
+export type {
+  SelfHealingConfig, SelfHealingEvent,
+  ConsolidationOptions, ConsolidationResult, ConsolidationLogEntry, ConflictResolution,
+  ImportanceScore, ImportanceWeights,
+  ConnectionSuggestion,
+  NarrativeSnapshot, NarrativeThread,
+  VerificationResult, VerificationProvider,
+  CognitiveErrorCode,
+} from '../../cognitive/cognitive_types.js';
+
 // Phase 8: Plugin and Exchange types
 export type {
   LimenPlugin, LimenEventName, LimenEventHandler, LimenEvent,
@@ -316,6 +327,20 @@ export interface LimenConfig {
    * I-P11-01: Core features work without this configuration.
    */
   readonly vector?: import('../../vector/vector_types.js').VectorConfig;
+
+  /**
+   * Phase 12: Self-healing configuration.
+   * Controls automatic retraction of derived claims when parent claims are retracted.
+   * Default: enabled=true, threshold=0.1, maxDepth=5.
+   */
+  readonly selfHealing?: import('../../cognitive/cognitive_types.js').SelfHealingConfig;
+
+  /**
+   * Phase 12: External verification provider.
+   * LLM-based claim verification. Advisory only — never auto-mutates.
+   * I-P12-50: verify() returns result; caller decides what to do.
+   */
+  readonly verificationProvider?: import('../../cognitive/cognitive_types.js').VerificationProvider | null;
 }
 
 /**
