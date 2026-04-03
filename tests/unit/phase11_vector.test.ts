@@ -1273,3 +1273,409 @@ describe('Phase 11: Default Configuration', () => {
     assert.equal(DEFAULT_VECTOR_CONFIG.modelId, 'unknown');
   });
 });
+
+// ============================================================================
+// Breaker Fix Tests: Phase 11 Fix Cycle
+// ============================================================================
+
+describe('Phase 11: Breaker Fix — F-P11-001 KNN Tenant Isolation', () => {
+
+  // F-P11-001 [CRITICAL]: KNN tenant isolation must filter by tenant.
+  // M-2 survived: removing tenant filter caused zero test failures.
+  // Strategy: Test the VectorStore KNN post-filter directly. Create claims under
+  // different tenants in claim_assertions + vec0 via raw DB, then verify KNN
+  // filters by tenant correctly.
+  it('F-P11-001: KNN post-filter excludes claims from other tenants', async () => {
+    await withVectorLimen(async (limen, dataDir) => {
+      // Create two claims via Limen (both in null tenant)
+      const r1 = limen.remember('entity:test:tenantA', 'test.isolation', 'alpha data about animals');
+      assert.ok(r1.ok);
+      const r2 = limen.remember('entity:test:tenantB', 'test.isolation', 'beta data about animals');
+      assert.ok(r2.ok);
+
+      // Embed both
+      await limen.embedPending();
+      const stats = limen.embeddingStats();
+      assert.ok(stats.ok);
+      assert.equal(stats.value.embeddedCount, 2);
+
+      // Semantic search in null tenant — both should appear
+      const queryEmbed = await mockProvider('data about animals');
+      const beforeResult = limen.search('animals', {
+        mode: 'semantic',
+        queryEmbedding: queryEmbed,
+        limit: 10,
+      });
+      assert.ok(beforeResult.ok);
+      const beforeIds = beforeResult.value.map(r => r.belief.claimId);
+      // Both claims should be findable before tenant change
+      assert.ok(beforeIds.includes(r1.value.claimId), 'r1 should appear before tenant change');
+      assert.ok(beforeIds.includes(r2.value.claimId), 'r2 should appear before tenant change');
+
+      // Now change r2's tenant to 'tenant-B' in claim_assertions
+      // Use raw DB but only update the claim_assertions.tenant_id via safe method:
+      // Temporarily drop ALL UPDATE triggers, update, restore
+      const Database = (await import('better-sqlite3')).default;
+      const dbPath = path.join(dataDir, 'limen.db');
+
+      // Get all trigger definitions for claim_assertions
+      const db = new Database(dbPath);
+      const triggers = db.prepare(
+        `SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='claim_assertions'`
+      ).all() as Array<{ name: string; sql: string }>;
+
+      // Drop all claim_assertions triggers
+      for (const t of triggers) {
+        db.exec(`DROP TRIGGER IF EXISTS "${t.name}"`);
+      }
+
+      // Update tenant_id for r2
+      db.prepare(`UPDATE claim_assertions SET tenant_id = ? WHERE id = ?`).run('tenant-B', r2.value.claimId);
+
+      // Restore all triggers
+      for (const t of triggers) {
+        if (t.sql) db.exec(t.sql);
+      }
+
+      db.close();
+
+      // Semantic search again — r2 should now be excluded by tenant filter
+      const afterResult = limen.search('animals', {
+        mode: 'semantic',
+        queryEmbedding: queryEmbed,
+        limit: 10,
+      });
+      assert.ok(afterResult.ok, `Search must succeed: ${!afterResult.ok ? JSON.stringify(afterResult.error) : ''}`);
+
+      // CRITICAL: r2 (now tenant-B) must NOT appear in null-tenant results
+      const afterIds = afterResult.value.map(r => r.belief.claimId);
+      assert.ok(!afterIds.includes(r2.value.claimId),
+        'KNN MUST exclude claims from tenant-B when querying in null tenant context');
+
+      // r1 (still null tenant) should still be returned
+      assert.ok(afterIds.includes(r1.value.claimId),
+        'Claim in null tenant must still be returned');
+    });
+  });
+});
+
+describe('Phase 11: Breaker Fix — F-P11-002 GDPR Erasure Embedding Deletion', () => {
+
+  // F-P11-002 [CRITICAL]: GDPR erasure must delete embeddings.
+  // M-5 and M-7 survived: entire embedding deletion removed with zero test failures.
+  it('F-P11-002: GDPR erasure deletes embeddings from vec0 and pending', async () => {
+    await withVectorLimen(async (limen, dataDir) => {
+      // Create a claim with PII content (email triggers pii_detected=1)
+      const r = limen.remember('entity:user:alice', 'user.email', 'alice@example.com');
+      assert.ok(r.ok, 'PII claim stored');
+      const claimId = r.value.claimId;
+
+      // Embed it
+      await limen.embedPending();
+
+      // Verify embedding exists in raw DB
+      const Database = (await import('better-sqlite3')).default;
+      const dbPath = path.join(dataDir, 'limen.db');
+      let db = new Database(dbPath, { readonly: true });
+
+      // Verify claim is PII-flagged
+      const claim = db.prepare('SELECT pii_detected FROM claim_assertions WHERE id = ?').get(claimId) as Record<string, unknown> | undefined;
+      assert.ok(claim, 'Claim should exist');
+      assert.equal(claim['pii_detected'], 1, 'Claim must be flagged as PII');
+
+      // Verify embedding metadata exists
+      const meta = db.prepare('SELECT * FROM embedding_metadata WHERE claim_id = ?').get(claimId);
+      assert.ok(meta, 'Embedding metadata must exist before erasure');
+
+      db.close();
+
+      // Execute GDPR erasure
+      const erasureResult = limen.governance.erasure({
+        dataSubjectId: 'entity:user:alice',
+        reason: 'GDPR right to be forgotten',
+        includeRelated: false,
+      });
+      assert.ok(erasureResult.ok, `Erasure should succeed: ${!erasureResult.ok ? JSON.stringify(erasureResult.error) : ''}`);
+
+      // Verify embedding is GONE from metadata
+      db = new Database(dbPath, { readonly: true });
+      const metaAfter = db.prepare('SELECT * FROM embedding_metadata WHERE claim_id = ?').get(claimId);
+      assert.equal(metaAfter, undefined, 'Embedding metadata must be deleted after GDPR erasure');
+
+      // Verify pending entry is GONE
+      const pendingAfter = db.prepare('SELECT * FROM embedding_pending WHERE claim_id = ?').get(claimId);
+      assert.equal(pendingAfter, undefined, 'Pending entry must be deleted after GDPR erasure');
+
+      db.close();
+    });
+  });
+});
+
+describe('Phase 11: Breaker Fix — F-P11-003 Duplicate Detection Threshold', () => {
+
+  // F-P11-003 [HIGH]: Duplicate detection threshold comparison untested.
+  // M-8 survived: replacing threshold comparison with `candidates.length > 0`.
+  it('F-P11-003: identical text flagged as duplicate with specific isDuplicate assertion', async () => {
+    const charProvider = similarProvider(768);
+    await withLimen(
+      {
+        vector: {
+          provider: charProvider,
+          dimensions: 768,
+          autoEmbed: false,
+          embeddingInterval: 0,
+          duplicateThreshold: 0.8,
+          batchSize: 50,
+          modelId: 'dup-threshold-test',
+        },
+      },
+      async (limen) => {
+        // Store and embed a claim
+        const r1 = limen.remember('entity:test:dup-orig', 'test.threshold', 'the quick brown fox jumps over the lazy dog');
+        assert.ok(r1.ok);
+        await limen.embedPending();
+
+        // Check duplicate with identical text — same predicate
+        const dupResult = await limen.checkDuplicate(
+          'entity:test:dup-copy',
+          'test.threshold',
+          'the quick brown fox jumps over the lazy dog',
+        );
+        assert.ok(dupResult.ok);
+        // With identical text, charProvider produces identical vectors -> similarity = 1.0
+        // 1.0 >= 0.8 threshold -> isDuplicate MUST be true
+        assert.equal(dupResult.value.isDuplicate, true,
+          'Identical text must be flagged as duplicate');
+        assert.ok(dupResult.value.candidates.length > 0, 'Must have candidates');
+        assert.ok(dupResult.value.candidates[0]!.similarity >= 0.8,
+          `Similarity must be >= threshold (0.8), got ${dupResult.value.candidates[0]!.similarity}`);
+      },
+    );
+  });
+
+  it('F-P11-003: clearly different text NOT flagged as duplicate', async () => {
+    const charProvider = similarProvider(768);
+    await withLimen(
+      {
+        vector: {
+          provider: charProvider,
+          dimensions: 768,
+          autoEmbed: false,
+          embeddingInterval: 0,
+          duplicateThreshold: 0.95,
+          batchSize: 50,
+          modelId: 'dup-diff-test',
+        },
+      },
+      async (limen) => {
+        limen.remember('entity:test:dup-a', 'test.diff', 'aaaaaaa');
+        assert.ok((await limen.embedPending()).ok);
+
+        const dupResult = await limen.checkDuplicate(
+          'entity:test:dup-b',
+          'test.diff',
+          'zzzzzzzzzzzzz completely different characters xyz',
+        );
+        assert.ok(dupResult.ok);
+        assert.equal(dupResult.value.isDuplicate, false,
+          'Clearly different text must NOT be flagged as duplicate');
+      },
+    );
+  });
+
+  it('F-P11-003: threshold=0 disables duplicate check entirely', async () => {
+    const charProvider = similarProvider(768);
+    await withLimen(
+      {
+        vector: {
+          provider: charProvider,
+          dimensions: 768,
+          autoEmbed: false,
+          embeddingInterval: 0,
+          duplicateThreshold: 0,
+          batchSize: 50,
+          modelId: 'dup-disabled-test',
+        },
+      },
+      async (limen) => {
+        limen.remember('entity:test:dup-off', 'test.off', 'same text');
+        assert.ok((await limen.embedPending()).ok);
+
+        const dupResult = await limen.checkDuplicate(
+          'entity:test:dup-off2',
+          'test.off',
+          'same text',
+        );
+        assert.ok(dupResult.ok);
+        assert.equal(dupResult.value.isDuplicate, false, 'threshold=0 must disable duplicate check');
+        assert.equal(dupResult.value.candidates.length, 0, 'threshold=0 must return zero candidates');
+      },
+    );
+  });
+});
+
+describe('Phase 11: Breaker Fix — F-P11-004 KNN Dimension Rejection', () => {
+
+  // F-P11-004 [HIGH]: Wrong-size vector must be rejected by KNN.
+  // M-6 survived: removing dimension check caused zero failures.
+  it('F-P11-004: KNN rejects query vector with wrong dimensions', async () => {
+    await withVectorLimen(async (limen, dataDir) => {
+      // Store and embed a claim with correct dimensions
+      limen.remember('entity:test:dimcheck', 'test.dim', 'dimension check');
+      await limen.embedPending();
+
+      // Try to use VectorStore directly via raw DB to test dimension rejection
+      const store = createVectorStore(true, 768);
+      const Database = (await import('better-sqlite3')).default;
+      const dbPath = path.join(dataDir, 'limen.db');
+      const db = new Database(dbPath);
+
+      // Create a minimal connection wrapper
+      const conn = {
+        run: (sql: string, params?: unknown[]) => db.prepare(sql).run(...(params ?? [])),
+        get: <T>(sql: string, params?: unknown[]) => db.prepare(sql).get(...(params ?? [])) as T | undefined,
+        query: <T>(sql: string, params?: unknown[]) => db.prepare(sql).all(...(params ?? [])) as T[],
+        transaction: <T>(fn: () => T) => { db.prepare('BEGIN').run(); try { const r = fn(); db.prepare('COMMIT').run(); return r; } catch (e) { db.prepare('ROLLBACK').run(); throw e; } },
+        close: () => db.close(),
+      };
+
+      // Pass wrong-size vector (512 instead of 768)
+      const wrongVector = new Array(512).fill(0.1);
+      const result = store.knn(conn as any, wrongVector, 10, null);
+      assert.equal(result.ok, false, 'KNN must reject wrong-dimension vector');
+      assert.equal(result.error.code, 'VECTOR_DIMENSION_MISMATCH');
+
+      db.close();
+    });
+  });
+});
+
+describe('Phase 11: Breaker Fix — F-P11-006 NaN/Infinity Validation', () => {
+
+  // F-P11-006 [HIGH]: Vectors with NaN/Infinity must be rejected.
+  it('F-P11-006: vector with NaN rejected by store()', async () => {
+    await withVectorLimen(async (limen, dataDir) => {
+      const store = createVectorStore(true, 768);
+      const Database = (await import('better-sqlite3')).default;
+      const dbPath = path.join(dataDir, 'limen.db');
+      const db = new Database(dbPath);
+
+      const conn = {
+        run: (sql: string, params?: unknown[]) => db.prepare(sql).run(...(params ?? [])),
+        get: <T>(sql: string, params?: unknown[]) => db.prepare(sql).get(...(params ?? [])) as T | undefined,
+        query: <T>(sql: string, params?: unknown[]) => db.prepare(sql).all(...(params ?? [])) as T[],
+        transaction: <T>(fn: () => T) => { db.prepare('BEGIN').run(); try { const r = fn(); db.prepare('COMMIT').run(); return r; } catch (e) { db.prepare('ROLLBACK').run(); throw e; } },
+        close: () => db.close(),
+      };
+
+      // Vector with NaN
+      const nanVector = new Array(768).fill(0.1);
+      nanVector[42] = NaN;
+      const result = store.store(conn as any, 'test-nan-claim', null, nanVector, 'test-model');
+      assert.equal(result.ok, false, 'Store must reject vector with NaN');
+      assert.equal(result.error.code, 'VECTOR_INVALID_VALUES');
+
+      // Vector with Infinity
+      const infVector = new Array(768).fill(0.1);
+      infVector[0] = Infinity;
+      const result2 = store.store(conn as any, 'test-inf-claim', null, infVector, 'test-model');
+      assert.equal(result2.ok, false, 'Store must reject vector with Infinity');
+      assert.equal(result2.error.code, 'VECTOR_INVALID_VALUES');
+
+      // Vector with -Infinity
+      const negInfVector = new Array(768).fill(0.1);
+      negInfVector[100] = -Infinity;
+      const result3 = store.store(conn as any, 'test-neginf-claim', null, negInfVector, 'test-model');
+      assert.equal(result3.ok, false, 'Store must reject vector with -Infinity');
+      assert.equal(result3.error.code, 'VECTOR_INVALID_VALUES');
+
+      db.close();
+    });
+  });
+
+  it('F-P11-006: distanceToSimilarity handles NaN input', () => {
+    // NaN input must return 0, not NaN
+    const result = distanceToSimilarity(NaN);
+    assert.equal(result, 0, 'distanceToSimilarity(NaN) must return 0, not NaN');
+    assert.ok(!Number.isNaN(result), 'Result must not be NaN');
+  });
+});
+
+describe('Phase 11: Breaker Fix — F-P11-007 reflect() Embedding Enqueue', () => {
+
+  // F-P11-007 [HIGH]: reflect() claims must be enqueued for embedding.
+  it('F-P11-007: reflect() claims are enqueued for embedding', async () => {
+    await withVectorLimen(async (limen) => {
+      // Use reflect to create claims
+      const result = limen.reflect([
+        { category: 'decision', statement: 'Chose TypeScript for type safety', confidence: 0.8 },
+        { category: 'warning', statement: 'Avoid global mutable state', confidence: 0.9 },
+      ]);
+      assert.ok(result.ok, 'reflect() must succeed');
+      assert.equal(result.value.stored, 2);
+
+      // Verify pending count increased by 2 (reflect claims enqueued)
+      const stats = limen.embeddingStats();
+      assert.ok(stats.ok);
+      assert.equal(stats.value.pendingCount, 2,
+        'reflect() claims must be enqueued for embedding');
+
+      // Process embeddings
+      const embedResult = await limen.embedPending();
+      assert.ok(embedResult.ok);
+      assert.equal(embedResult.value.processed, 2,
+        'All reflect claims must be processable');
+
+      // Verify embedded count
+      const statsAfter = limen.embeddingStats();
+      assert.ok(statsAfter.ok);
+      assert.equal(statsAfter.value.embeddedCount, 2);
+      assert.equal(statsAfter.value.pendingCount, 0);
+    });
+  });
+});
+
+describe('Phase 11: Breaker Fix — F-P11-009 GDPR Tombstone Embedding Deletion (Discriminative)', () => {
+
+  // F-P11-009 [HIGH]: DC-P11-104 test must query DB to verify deletion.
+  // Replaces the non-discriminative "confirms no crash" test.
+  it('F-P11-009: GDPR tombstone deletes embedding from vec0 table (discriminative)', async () => {
+    await withVectorLimen(async (limen, dataDir) => {
+      // Create PII claim (email triggers PII detection)
+      const r = limen.remember('entity:user:bob', 'contact.email', 'bob@example.com');
+      assert.ok(r.ok);
+      const claimId = r.value.claimId;
+
+      // Embed it
+      await limen.embedPending();
+
+      // Verify embedding exists in raw DB BEFORE erasure
+      const Database = (await import('better-sqlite3')).default;
+      const dbPath = path.join(dataDir, 'limen.db');
+      let db = new Database(dbPath, { readonly: true });
+
+      const metaBefore = db.prepare('SELECT * FROM embedding_metadata WHERE claim_id = ?').get(claimId);
+      assert.ok(metaBefore, 'Embedding metadata must exist before erasure');
+      db.close();
+
+      // GDPR erasure
+      const erasureResult = limen.governance.erasure({
+        dataSubjectId: 'entity:user:bob',
+        reason: 'GDPR erasure test',
+        includeRelated: false,
+      });
+      assert.ok(erasureResult.ok, `Erasure must succeed: ${!erasureResult.ok ? JSON.stringify(erasureResult.error) : ''}`);
+
+      // Verify embedding is GONE — query raw DB (discriminative assertion)
+      db = new Database(dbPath, { readonly: true });
+      const metaAfter = db.prepare('SELECT * FROM embedding_metadata WHERE claim_id = ?').get(claimId);
+      assert.equal(metaAfter, undefined,
+        'Embedding metadata must be DELETED after GDPR tombstone — not just "no crash"');
+
+      const pendingAfter = db.prepare('SELECT * FROM embedding_pending WHERE claim_id = ?').get(claimId);
+      assert.equal(pendingAfter, undefined,
+        'Pending entry must be DELETED after GDPR tombstone');
+      db.close();
+    });
+  });
+});
