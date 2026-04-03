@@ -108,6 +108,8 @@ describe('v1.5.0 E2E Integration — Cross-Phase Gap Verification', () => {
       // ================================================================
       // Step 6: Register consent for data subject
       //   GAP 6: consent handling during erasure
+      //   F-E2E-001 fix: Add expired and revoked consent records to verify
+      //   only active records are counted in consentRecordsRevoked.
       // ================================================================
       const consentResult = limen.consent.register({
         dataSubjectId: 'user:alice',
@@ -116,6 +118,18 @@ describe('v1.5.0 E2E Integration — Cross-Phase Gap Verification', () => {
         expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
       });
       assert.ok(consentResult.ok, `consent register failed: ${!consentResult.ok ? consentResult.error.message : ''}`);
+
+      // Register a second consent and immediately revoke it (terminal state)
+      const revokedConsentResult = limen.consent.register({
+        dataSubjectId: 'user:alice',
+        basis: 'explicit_consent',
+        scope: 'analytics',
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+      assert.ok(revokedConsentResult.ok, `revoked consent register failed: ${!revokedConsentResult.ok ? revokedConsentResult.error.message : ''}`);
+      if (!revokedConsentResult.ok) return;
+      const revokeResult = limen.consent.revoke(revokedConsentResult.value.id);
+      assert.ok(revokeResult.ok, `consent revoke failed: ${!revokeResult.ok ? revokeResult.error.message : ''}`);
 
       // ================================================================
       // Step 7: exportData(json) — verify Phase 9/10 columns present
@@ -232,10 +246,12 @@ describe('v1.5.0 E2E Integration — Cross-Phase Gap Verification', () => {
         `Expected at least 1 cascaded relationship, got ${cert.relationshipsCascaded}`,
       );
 
-      // GAP 6: Verify consent was revoked
-      assert.ok(
-        cert.consentRecordsRevoked >= 1,
-        `Expected at least 1 consent revoked, got ${cert.consentRecordsRevoked}`,
+      // GAP 6 + F-E2E-001 fix: Verify exactly 1 consent revoked (the active one).
+      // The revoked consent record should NOT be counted — it's already terminal.
+      assert.equal(
+        cert.consentRecordsRevoked,
+        1,
+        `Expected exactly 1 consent revoked (only the active one, not the already-revoked one), got ${cert.consentRecordsRevoked}`,
       );
 
       // GAP 9: Verify audit entries were tombstoned (single-tenant mode, tenantId=null)
@@ -281,6 +297,14 @@ describe('v1.5.0 E2E Integration — Cross-Phase Gap Verification', () => {
         auditStr.includes('alice@example.com'),
         false,
         'SOC2 audit export should not contain raw PII (email address)',
+      );
+
+      // F-E2E-003 fix verification: The dataSubjectId itself is PII metadata.
+      // After erasure, the audit entry should contain a hash, not the raw ID.
+      assert.equal(
+        auditStr.includes('user:alice'),
+        false,
+        'SOC2 audit export should not contain raw data subject ID after erasure (F-E2E-003)',
       );
 
     } finally {

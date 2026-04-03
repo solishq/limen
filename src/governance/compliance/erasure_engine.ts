@@ -31,6 +31,14 @@ import type { ErasureRequest, ErasureCertificate } from '../classification/gover
 // Helpers
 // ============================================================================
 
+/**
+ * Escape SQL LIKE wildcard characters in user input.
+ * F-E2E-008b: Prevents '%' and '_' in dataSubjectId from being interpreted as wildcards.
+ */
+function escapeLikeWildcards(input: string): string {
+  return input.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
 function ok<T>(value: T): Result<T> {
   return { ok: true, value };
 }
@@ -91,14 +99,22 @@ export function executeErasure(
 
     // 1. Query PII claims for data subject
     // I-P10-20: ALL claims with pii_detected=1 whose subject matches
-    const subjectPattern = `%${request.dataSubjectId}%`;
+    // F-E2E-002b fix: Use exact subject match instead of substring LIKE to prevent
+    // collateral erasure (e.g., 'user:alice' matching 'user:aliceberg').
+    // The dataSubjectId may be a full URN ('entity:user:alice') or a partial ID
+    // ('user:alice'). We match both forms exactly — no substring wildcards.
+    const fullUrn = request.dataSubjectId.startsWith('entity:')
+      ? request.dataSubjectId
+      : `entity:${request.dataSubjectId}`;
     const piiClaims = conn.query<Record<string, unknown>>(
       `SELECT id, subject FROM claim_assertions
        WHERE pii_detected = 1
-       AND subject LIKE ?
+       AND (subject = ? OR subject = ?)
        AND purged_at IS NULL
        ${tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL'}`,
-      tenantId !== null ? [subjectPattern, tenantId] : [subjectPattern],
+      tenantId !== null
+        ? [request.dataSubjectId, fullUrn, tenantId]
+        : [request.dataSubjectId, fullUrn],
     );
 
     if (piiClaims.length === 0) {
@@ -178,10 +194,21 @@ export function executeErasure(
     } else {
       // Single-tenant mode: sanitize audit entries containing data subject PII.
       // Query entries whose detail contains the data subject ID.
-      const subjectPattern = `%${request.dataSubjectId}%`;
+      // F-E2E-002b + F-E2E-008b fix: Escape SQL wildcards in the dataSubjectId
+      // before using in LIKE, and use bounded matching to prevent over-broad
+      // collateral tombstoning (e.g., 'user:alice' matching 'user:aliceberg').
+      // F-E2E-002b + F-E2E-008b fix: Escape SQL wildcards in the dataSubjectId
+      // and use JSON-quoted boundary matching to prevent over-broad tombstoning.
+      // The detail field is JSON text; the ID appears as a quoted value like "user:alice".
+      // Quote boundaries prevent "user:alice" from matching "user:aliceberg".
+      // Handle both the raw dataSubjectId and the full URN form.
+      const escapedId = escapeLikeWildcards(request.dataSubjectId);
+      const escapedFullUrn = escapeLikeWildcards(fullUrn);
+      const detailPattern1 = `%"${escapedId}"%`;
+      const detailPattern2 = `%"${escapedFullUrn}"%`;
       const auditEntries = conn.query<{ seq_no: number }>(
-        `SELECT seq_no FROM core_audit_log WHERE detail LIKE ? AND tenant_id IS NULL`,
-        [subjectPattern],
+        `SELECT seq_no FROM core_audit_log WHERE (detail LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\') AND tenant_id IS NULL`,
+        [detailPattern1, detailPattern2],
       );
       if (auditEntries.length > 0) {
         const purgeDate = deps.time.nowISO().split('T')[0]!;
@@ -189,8 +216,8 @@ export function executeErasure(
         // Set tombstone flag to bypass I-06 UPDATE trigger
         conn.run(`INSERT OR IGNORE INTO core_audit_tombstone_active (id) VALUES (1)`);
         conn.run(
-          `UPDATE core_audit_log SET detail = ?, actor_id = 'purged' WHERE detail LIKE ? AND tenant_id IS NULL`,
-          [tombstoneDetail, subjectPattern],
+          `UPDATE core_audit_log SET detail = ?, actor_id = 'purged' WHERE (detail LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\') AND tenant_id IS NULL`,
+          [tombstoneDetail, detailPattern1, detailPattern2],
         );
         auditEntriesTombstoned = auditEntries.length;
 
@@ -263,6 +290,82 @@ export function executeErasure(
       }
     }
 
+    // 5b. Second-pass audit tombstoning for single-tenant mode.
+    // Steps 2-5 (claim tombstoning, cascade, consent revocation) create new audit
+    // entries that may contain the dataSubjectId in their detail field. These entries
+    // are created AFTER the initial tombstoning pass in step 4. We need to sanitize
+    // them to prevent PII re-introduction (F-E2E-003).
+    if (tenantId === null) {
+      const escapedId2 = escapeLikeWildcards(request.dataSubjectId);
+      const escapedFullUrn2 = escapeLikeWildcards(fullUrn);
+      const detailPattern2a = `%"${escapedId2}"%`;
+      const detailPattern2b = `%"${escapedFullUrn2}"%`;
+      const newPiiEntries = conn.query<{ seq_no: number }>(
+        `SELECT seq_no FROM core_audit_log
+         WHERE (detail LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\')
+         AND tenant_id IS NULL`,
+        [detailPattern2a, detailPattern2b],
+      );
+      if (newPiiEntries.length > 0) {
+        const purgeDate2 = deps.time.nowISO().split('T')[0]!;
+        const tombstoneDetail2 = JSON.stringify({ purged: true, purge_date: purgeDate2 });
+        conn.run(`INSERT OR IGNORE INTO core_audit_tombstone_active (id) VALUES (1)`);
+        conn.run(
+          `UPDATE core_audit_log SET detail = ?, actor_id = 'purged'
+           WHERE (detail LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\')
+           AND tenant_id IS NULL`,
+          [tombstoneDetail2, detailPattern2a, detailPattern2b],
+        );
+        auditEntriesTombstoned += newPiiEntries.length;
+
+        // Re-hash from earliest modified entry to maintain chain integrity
+        const firstSeqNo2 = newPiiEntries[0]!.seq_no;
+        const allSubsequent2 = conn.query<{
+          seq_no: number; previous_hash: string; current_hash: string;
+          timestamp: string; actor_type: string; actor_id: string;
+          operation: string; resource_type: string; resource_id: string;
+          detail: string | null; tenant_id: string | null;
+        }>(
+          `SELECT seq_no, tenant_id, timestamp, actor_type, actor_id, operation,
+           resource_type, resource_id, detail, previous_hash, current_hash
+           FROM core_audit_log WHERE seq_no >= ? ORDER BY seq_no ASC`,
+          [firstSeqNo2],
+        );
+
+        let prevHash2: string;
+        if (firstSeqNo2 === 1) {
+          prevHash2 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+        } else {
+          const predecessor2 = conn.get<{ current_hash: string }>(
+            `SELECT current_hash FROM core_audit_log WHERE seq_no < ? ORDER BY seq_no DESC LIMIT 1`,
+            [firstSeqNo2],
+          );
+          prevHash2 = predecessor2?.current_hash ?? 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+        }
+
+        for (const entry of allSubsequent2) {
+          const data = [
+            prevHash2,
+            String(entry.seq_no),
+            entry.timestamp,
+            entry.actor_type,
+            entry.actor_id,
+            entry.operation,
+            entry.resource_type,
+            entry.resource_id,
+            entry.detail ? JSON.stringify(JSON.parse(entry.detail), entry.detail !== '{}' ? Object.keys(JSON.parse(entry.detail)).sort() : undefined) : '',
+          ].join('|');
+          const newHash = createHash('sha256').update(data).digest('hex');
+          conn.run(
+            `UPDATE core_audit_log SET previous_hash = ?, current_hash = ? WHERE seq_no = ?`,
+            [prevHash2, newHash, entry.seq_no],
+          );
+          prevHash2 = newHash;
+        }
+        conn.run(`DELETE FROM core_audit_tombstone_active WHERE id = 1`);
+      }
+    }
+
     // 6. Verify chain integrity (I-P10-23)
     const chainResult = deps.audit.verifyChain(conn, tenantId ?? undefined);
     const chainVerification: { valid: boolean; headHash: string } = {
@@ -329,6 +432,15 @@ export function executeErasure(
     );
 
     // 9. Audit entry (I-P10-25)
+    // F-E2E-003 fix: Sanitize PII — use a SHA-256 hash prefix instead of the raw
+    // dataSubjectId. The raw ID is PII metadata that identifies the data subject.
+    // After tombstoning audit entries containing the subject, re-introducing the
+    // raw ID in the erasure audit entry defeats the purpose of GDPR tombstoning.
+    // The certificate (stored separately) retains the full ID for compliance tracing.
+    const dataSubjectHash = createHash('sha256')
+      .update(request.dataSubjectId)
+      .digest('hex')
+      .substring(0, 16);
     deps.audit.append(conn, {
       tenantId,
       actorType: 'system',
@@ -337,8 +449,9 @@ export function executeErasure(
       resourceType: 'erasure_certificate',
       resourceId: certificate.id,
       detail: {
-        dataSubjectId: request.dataSubjectId,
+        dataSubjectHash,
         reason: request.reason,
+        certificateId: certificate.id,
         claimsTombstoned: certificate.claimsTombstoned,
         auditEntriesTombstoned: certificate.auditEntriesTombstoned,
         relationshipsCascaded: certificate.relationshipsCascaded,

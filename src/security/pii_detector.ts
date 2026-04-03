@@ -99,6 +99,14 @@ const PII_PATTERNS: readonly PiiPattern[] = [
     confidence: 0.75,
     validate: hasMinPhoneDigits,
   },
+  {
+    category: 'phone',
+    // F-E2E-011 fix: International phone format with leading '+' and continuous digits.
+    // Catches +1234567890 through +441234567890 (7-15 digits per E.164 standard).
+    // Separate pattern to avoid interference with the separator-based pattern above.
+    regex: /\+\d{7,15}/g,
+    confidence: 0.75,
+  },
 ];
 
 // ============================================================================
