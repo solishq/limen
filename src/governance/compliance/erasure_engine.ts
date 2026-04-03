@@ -26,6 +26,7 @@ import type { TimeProvider } from '../../kernel/interfaces/time.js';
 import type { ClaimStore } from '../../claims/interfaces/claim_types.js';
 import type { ConsentRegistry } from '../../security/security_types.js';
 import type { ErasureRequest, ErasureCertificate } from '../classification/governance_types.js';
+import type { VectorStore } from '../../vector/vector_store.js';
 
 // ============================================================================
 // Helpers
@@ -75,6 +76,8 @@ export interface ErasureEngineDeps {
   readonly audit: AuditTrail;
   readonly consentRegistry: ConsentRegistry;
   readonly time: TimeProvider;
+  /** Phase 11: Optional vector store for embedding deletion during GDPR erasure. */
+  readonly vectorStore?: VectorStore | null;
 }
 
 // ============================================================================
@@ -179,6 +182,32 @@ export function executeErasure(
           }
         }
       }
+    }
+
+    // 3b. Phase 11: Delete embeddings for tombstoned claims (I-P11-30, I-P11-31)
+    // GDPR: embedding is a projection of claim content — must be deleted when content is tombstoned.
+    if (deps.vectorStore) {
+      const allTombstonedIds = piiClaims.map((r: Record<string, unknown>) => r['id'] as string);
+      // If cascade happened, we need to include cascaded claim IDs too
+      // The claimsTombstoned count includes cascaded — collect all tombstoned IDs
+      if (request.includeRelated) {
+        // Re-query tombstoned claims (those we just tombstoned in steps 2+3)
+        const tombstonedNow = conn.query<Record<string, unknown>>(
+          `SELECT id FROM claim_assertions WHERE purged_at IS NOT NULL
+           AND (subject = ? OR subject = ?)
+           ${tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL'}`,
+          tenantId !== null
+            ? [request.dataSubjectId, fullUrn, tenantId]
+            : [request.dataSubjectId, fullUrn],
+        );
+        for (const row of tombstonedNow) {
+          const id = row['id'] as string;
+          if (!allTombstonedIds.includes(id)) {
+            allTombstonedIds.push(id);
+          }
+        }
+      }
+      deps.vectorStore.deleteBatch(conn, allTombstonedIds);
     }
 
     // 4. Tombstone audit entries (I-P10-23: chain integrity preserved via re-hash)

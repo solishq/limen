@@ -102,6 +102,14 @@ export type {
   ComplianceExportOptions, GovernanceConfig, GovernanceErrorCode,
 } from '../../governance/classification/governance_types.js';
 
+// Phase 11: Vector Search types
+export type {
+  EmbeddingProvider, VectorConfig, StoredEmbedding,
+  DuplicateCandidate, DuplicateCheckResult,
+  SearchMode, HybridScore, HybridWeights,
+  VectorErrorCode, EmbeddingStats,
+} from '../../vector/vector_types.js';
+
 // Phase 1: Convenience API types
 export type {
   CognitiveConfig,
@@ -300,6 +308,14 @@ export interface LimenConfig {
    * I-P9-51: Immutable after construction.
    */
   readonly security?: import('../../security/security_types.js').SecurityPolicy;
+
+  /**
+   * Phase 11: Vector search configuration.
+   * Enables semantic search, hybrid ranking, and duplicate detection.
+   * sqlite-vec is an optional peer dependency -- Limen degrades gracefully without it.
+   * I-P11-01: Core features work without this configuration.
+   */
+  readonly vector?: import('../../vector/vector_types.js').VectorConfig;
 }
 
 /**
@@ -545,6 +561,36 @@ export interface Limen {
    * Tenant-isolated. Retracted claims excluded. Superseded excluded by default.
    */
   search(query: string, options?: SearchOptions): Result<readonly SearchResult[]>;
+
+  // -- Phase 11: Vector Search --
+
+  /**
+   * Phase 11 §11.2: Process pending embedding queue.
+   * Calls the configured embedding provider for pending claims.
+   * No-op if vector config is not provided or sqlite-vec is unavailable.
+   * I-P11-50: Idempotent. I-P11-51: Failure isolation.
+   */
+  embedPending(): Promise<import('../../kernel/interfaces/common.js').Result<{ processed: number; failed: number }>>;
+
+  /**
+   * Phase 11 §11.5: Check if a claim would be a duplicate.
+   * Requires vector config with provider. Returns Promise since provider is async.
+   * I-P11-40: threshold. I-P11-41: tenant isolation. I-P11-42: disabled check.
+   */
+  checkDuplicate(subject: string, predicate: string, value: string): Promise<import('../../kernel/interfaces/common.js').Result<import('../../vector/vector_types.js').DuplicateCheckResult>>;
+
+  /**
+   * Phase 11 §11.3: Semantic search using vector similarity.
+   * Async because it calls the embedding provider for the query.
+   * Falls back to fulltext if sqlite-vec unavailable.
+   */
+  semanticSearch(query: string, options?: Omit<SearchOptions, 'mode'>): Promise<import('../../kernel/interfaces/common.js').Result<readonly SearchResult[]>>;
+
+  /**
+   * Phase 11: Get embedding statistics.
+   * Returns counts and configuration info. Works even without sqlite-vec.
+   */
+  embeddingStats(): import('../../kernel/interfaces/common.js').Result<import('../../vector/vector_types.js').EmbeddingStats>;
 
   // -- Phase 8: Event Hooks (§8.5) --
 

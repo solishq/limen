@@ -286,9 +286,15 @@ export interface SearchOptions {
   readonly includeSuperseded?: boolean;
   /**
    * Search mode. Default: 'fulltext'.
-   * Phase 11 extends to: 'semantic' | 'hybrid'.
+   * Phase 11: 'semantic' uses vector KNN. 'hybrid' combines FTS5 + vector.
    */
-  readonly mode?: 'fulltext';
+  readonly mode?: 'fulltext' | 'semantic' | 'hybrid';
+  /**
+   * Phase 11: Pre-computed query embedding for semantic/hybrid search.
+   * If provided, Limen uses it directly instead of calling the provider.
+   * If omitted for semantic/hybrid, provider is called (requires async).
+   */
+  readonly queryEmbedding?: readonly number[];
 }
 
 /**
@@ -317,7 +323,9 @@ export type SearchErrorCode =
   | 'CONV_SEARCH_EMPTY_QUERY'
   | 'CONV_SEARCH_INVALID_LIMIT'
   | 'CONV_SEARCH_FTS5_ERROR'
-  | 'CONV_SEARCH_QUERY_SYNTAX';
+  | 'CONV_SEARCH_QUERY_SYNTAX'
+  | 'VECTOR_NOT_AVAILABLE'
+  | 'VECTOR_NO_EMBEDDINGS';
 
 /** Phase 2: Default search limit */
 export const DEFAULT_SEARCH_LIMIT = 20;

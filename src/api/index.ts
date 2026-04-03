@@ -23,6 +23,7 @@
  * Failure modes defended: FM-10 (instance independence prevents cross-tenant leakage)
  */
 
+import { createRequire } from 'node:module';
 import type {
   Kernel, CreateKernelFn, DestroyKernelFn,
   DatabaseConnection, OperationContext, Permission, MissionId,
@@ -122,6 +123,18 @@ import type { ConsentApi, GovernanceApi } from './interfaces/api.js';
 // Phase 10: Governance Suite migration (v43) + engines
 import { getGovernanceSuiteMigrations } from './migration/034_governance_suite.js';
 import { executeErasure } from '../governance/compliance/erasure_engine.js';
+
+// Phase 11: Vector Search migration (v44) + modules
+import { getVectorSearchMigrations, createVec0Table } from './migration/035_vector_search.js';
+import { createVectorStore } from '../vector/vector_store.js';
+import { createEmbeddingQueue } from '../vector/embedding_queue.js';
+import { hybridRank } from '../vector/hybrid_ranker.js';
+import { checkDuplicate as checkDuplicateImpl } from '../vector/duplicate_detector.js';
+import { DEFAULT_VECTOR_CONFIG } from '../vector/vector_types.js';
+import type { EmbeddingStats, DuplicateCheckResult } from '../vector/vector_types.js';
+import type { VectorStore } from '../vector/vector_store.js';
+import type { ClaimId } from '../claims/interfaces/claim_types.js';
+import type { EmbeddingQueue } from '../vector/embedding_queue.js';
 import { generateComplianceExport } from '../governance/compliance/compliance_export.js';
 import type { ClassificationRule, ProtectedPredicateRule, ErasureRequest, ComplianceExportOptions } from '../governance/classification/governance_types.js';
 
@@ -231,6 +244,11 @@ export type {
   ProtectedPredicateRule, ErasureRequest, ErasureCertificate,
   Soc2AuditPackage, Soc2ControlEvidence, Soc2Statistics,
   ComplianceExportOptions, GovernanceConfig, GovernanceErrorCode,
+  // Phase 11: Vector Search types
+  EmbeddingProvider, VectorConfig, StoredEmbedding,
+  DuplicateCandidate, DuplicateCheckResult,
+  SearchMode, HybridScore, HybridWeights,
+  VectorErrorCode, EmbeddingStats,
 } from './interfaces/api.js';
 
 export type {
@@ -427,6 +445,7 @@ function buildOrchestrationAdapter(
       ...getReasoningMigrations(),                          // v41: Phase 5 reasoning column
       ...getSecurityHardeningMigrations(),                    // v42: Phase 9 security hardening
       ...getGovernanceSuiteMigrations(),                       // v43: Phase 10 governance suite
+      ...getVectorSearchMigrations(),                          // v44: Phase 11 vector search
     ]);
     if (!phase4Governance.ok) {
       conn.close();
@@ -680,6 +699,7 @@ export async function createLimen(
         ...getReasoningMigrations(),
         ...getSecurityHardeningMigrations(),
         ...getGovernanceSuiteMigrations(),
+        ...getVectorSearchMigrations(),
       ]);
       if (recoveryMigResult.ok) {
         // P0-A: Pass transition service to recovery for governance-enforced transitions.
@@ -1021,6 +1041,58 @@ export async function createLimen(
     log({ level: 'warn', category: 'init', message: 'Convenience API initialization failed (non-fatal)', context: { error: convErr instanceof Error ? convErr.message : String(convErr) } });
   }
 
+  // ── Phase 11: Vector Search Subsystem ──
+  // sqlite-vec is OPTIONAL. Try to load. If it fails, vector features degrade gracefully.
+  // I-P11-01: Core features work without sqlite-vec.
+  let vectorAvailable = false;
+  let vectorStore: VectorStore | null = null;
+  let embeddingQueue: EmbeddingQueue | null = null;
+  const vectorConfig = resolvedConfig.vector;
+  const vectorDimensions = vectorConfig?.dimensions ?? DEFAULT_VECTOR_CONFIG.dimensions;
+  const vectorModelId = vectorConfig?.modelId ?? DEFAULT_VECTOR_CONFIG.modelId;
+  const vectorBatchSize = vectorConfig?.batchSize ?? DEFAULT_VECTOR_CONFIG.batchSize;
+  const vectorDuplicateThreshold = vectorConfig?.duplicateThreshold ?? DEFAULT_VECTOR_CONFIG.duplicateThreshold;
+
+  try {
+    // Dynamic import of sqlite-vec -- optional peer dependency
+    // ESM-compatible require for native addon (sqlite-vec)
+    const esmRequire = createRequire(import.meta.url);
+    const sqliteVec = esmRequire('sqlite-vec') as { load: (db: unknown) => void };
+    // Get raw database handle from connection for extension loading (I-P11-01)
+    const conn = getConnection();
+    if (!conn.rawHandle) throw new Error('DatabaseConnection does not expose rawHandle');
+    sqliteVec.load(conn.rawHandle);
+    vectorAvailable = true;
+    // Create vec0 virtual table with configured dimensions
+    createVec0Table(conn, vectorDimensions);
+    log({ level: 'info', category: 'init', message: 'sqlite-vec loaded, vector search enabled', context: { dimensions: vectorDimensions } });
+  } catch (vecErr) {
+    // sqlite-vec not available -- vector features degrade gracefully
+    log({ level: 'info', category: 'init', message: 'sqlite-vec not available, vector features disabled', context: { error: vecErr instanceof Error ? vecErr.message : String(vecErr) } });
+  }
+
+  vectorStore = createVectorStore(vectorAvailable, vectorDimensions);
+  embeddingQueue = createEmbeddingQueue();
+
+  // Phase 11: Background embedding interval (if configured)
+  let embeddingTimer: ReturnType<typeof setInterval> | null = null;
+  if (vectorConfig && vectorConfig.embeddingInterval && vectorConfig.embeddingInterval > 0 && vectorAvailable) {
+    embeddingTimer = setInterval(async () => {
+      try {
+        if (vectorStore && embeddingQueue && vectorConfig.provider) {
+          const conn = getConnection();
+          await embeddingQueue.process(conn, vectorConfig.provider, vectorStore, {
+            batchSize: vectorBatchSize,
+            dimensions: vectorDimensions,
+            modelId: vectorModelId,
+          });
+        }
+      } catch {
+        // Background embedding errors are non-fatal
+      }
+    }, vectorConfig.embeddingInterval);
+  }
+
   // Phase 5: Create CognitiveNamespace for limen.cognitive
   const cognitiveNamespace = createCognitiveNamespace({
     getConnection,
@@ -1237,7 +1309,7 @@ export async function createLimen(
         const conn = getConnection();
         const ctx = getContext();
         return executeErasure(
-          { claimStore: claimSystem.store, audit: kernel.audit, consentRegistry, time: kernel.time },
+          { claimStore: claimSystem.store, audit: kernel.audit, consentRegistry, time: kernel.time, vectorStore },
           conn, ctx, request,
         );
       },
@@ -1356,7 +1428,31 @@ export async function createLimen(
       options?: import('./interfaces/api.js').RememberOptions,
     ) {
       if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
-      return convenienceLayer.remember(subjectOrText, predicateOrOptions, value, options);
+      const result = convenienceLayer.remember(subjectOrText, predicateOrOptions, value, options);
+
+      // Phase 11: Enqueue embedding for newly asserted claim (I-P11-12: same transaction scope)
+      if (result.ok && embeddingQueue && vectorConfig?.provider) {
+        const conn = getConnection();
+        // Determine subject, predicate, value from the overloaded arguments
+        let sub: string;
+        let pred: string;
+        let val: string;
+        if (typeof predicateOrOptions === 'string') {
+          sub = subjectOrText;
+          pred = predicateOrOptions;
+          val = value ?? '';
+        } else {
+          // 1-param form: text is the value, subject/predicate are auto-generated
+          sub = 'entity:reflection:auto';
+          pred = 'reflection.auto';
+          val = subjectOrText;
+        }
+        const content = `${sub} ${pred} ${val}`;
+        const ctx = getContext();
+        embeddingQueue.enqueue(conn, result.value.claimId, ctx.tenantId, content);
+      }
+
+      return result;
     },
 
     recall(subject?: string, predicate?: string, options?: import('./interfaces/api.js').RecallOptions) {
@@ -1386,7 +1482,220 @@ export async function createLimen(
 
     search(query: string, options?: import('./convenience/convenience_types.js').SearchOptions) {
       if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
+
+      // Phase 11: Handle semantic and hybrid modes
+      const mode = options?.mode ?? 'fulltext';
+      if (mode === 'semantic') {
+        // Semantic mode requires queryEmbedding to be sync
+        if (!options?.queryEmbedding) {
+          return { ok: false as const, error: { code: 'VECTOR_NOT_AVAILABLE', message: 'Semantic search requires queryEmbedding in sync mode. Use semanticSearch() for async provider calls.', spec: 'I-P11-02' } };
+        }
+        if (!vectorStore || !vectorStore.isAvailable()) {
+          return { ok: false as const, error: { code: 'VECTOR_NOT_AVAILABLE', message: 'sqlite-vec is not installed. Semantic search unavailable.', spec: 'I-P11-02' } };
+        }
+        const conn = getConnection();
+        const ctx = getContext();
+        const knnResult = vectorStore.knn(conn, [...options.queryEmbedding], options.limit ?? 20, ctx.tenantId);
+        if (!knnResult.ok) return knnResult;
+
+        if (knnResult.value.length === 0) {
+          return { ok: true as const, value: [] };
+        }
+
+        // Hydrate results into SearchResult format
+        const results: import('./convenience/convenience_types.js').SearchResult[] = [];
+        for (const kr of knnResult.value) {
+          const claimRow = conn.get<Record<string, unknown>>(
+            `SELECT * FROM claim_assertions WHERE id = ? AND purged_at IS NULL`,
+            [kr.claimId],
+          );
+          if (!claimRow) continue;
+          results.push({
+            belief: {
+              claimId: claimRow['id'] as ClaimId,
+              subject: claimRow['subject'] as string,
+              predicate: claimRow['predicate'] as string,
+              value: claimRow['object_value'] ? JSON.parse(claimRow['object_value'] as string) : '',
+              confidence: claimRow['confidence'] as number,
+              validAt: claimRow['valid_at'] as string,
+              createdAt: claimRow['created_at'] as string,
+              superseded: false,
+              disputed: false,
+              effectiveConfidence: claimRow['confidence'] as number,
+              freshness: 'fresh' as const,
+              stability: (claimRow['stability'] ?? 90) as number,
+              lastAccessedAt: (claimRow['last_accessed_at'] ?? null) as string | null,
+              accessCount: (claimRow['access_count'] ?? 0) as number,
+              reasoning: (claimRow['reasoning'] ?? null) as string | null,
+            },
+            relevance: -kr.distance, // Negate distance for consistency with FTS5 convention
+            score: 1 / (1 + kr.distance), // Convert distance to similarity-like score
+          });
+        }
+        return { ok: true as const, value: results };
+      }
+
+      if (mode === 'hybrid') {
+        if (!vectorStore || !vectorStore.isAvailable()) {
+          // I-P11-03: Fallback to fulltext
+          return convenienceLayer.search(query, { ...options, mode: 'fulltext' });
+        }
+        if (!options?.queryEmbedding) {
+          // No embedding provided -- fallback to fulltext
+          return convenienceLayer.search(query, { ...options, mode: 'fulltext' });
+        }
+        const conn = getConnection();
+        const ctx = getContext();
+
+        // Get FTS5 results
+        const fts5Result = convenienceLayer.search(query, { ...options, mode: 'fulltext' });
+        const fts5Items = fts5Result.ok ? fts5Result.value : [];
+
+        // Get vector results
+        const knnResult = vectorStore.knn(conn, [...options.queryEmbedding], (options.limit ?? 20) * 2, ctx.tenantId);
+        const knnItems = knnResult.ok ? knnResult.value : [];
+
+        // Combine using hybrid ranker
+        const hybridScores = hybridRank(
+          fts5Items.map(r => ({ claimId: r.belief.claimId, relevance: r.relevance })),
+          knnItems.map(r => ({ claimId: r.claimId, distance: r.distance })),
+        );
+
+        // Build result map from FTS5 results
+        const fts5Map = new Map(fts5Items.map(r => [r.belief.claimId, r]));
+
+        const results: import('./convenience/convenience_types.js').SearchResult[] = [];
+        const limit = options?.limit ?? 20;
+        for (const hs of hybridScores.slice(0, limit)) {
+          const existing = fts5Map.get(hs.claimId as ClaimId);
+          if (existing) {
+            results.push({ ...existing, score: hs.combinedScore });
+          } else {
+            // Claim only in vector results -- hydrate it
+            const claimRow = conn.get<Record<string, unknown>>(
+              `SELECT * FROM claim_assertions WHERE id = ? AND purged_at IS NULL`,
+              [hs.claimId],
+            );
+            if (!claimRow) continue;
+            results.push({
+              belief: {
+                claimId: claimRow['id'] as ClaimId,
+                subject: claimRow['subject'] as string,
+                predicate: claimRow['predicate'] as string,
+                value: claimRow['object_value'] ? JSON.parse(claimRow['object_value'] as string) : '',
+                confidence: claimRow['confidence'] as number,
+                validAt: claimRow['valid_at'] as string,
+                createdAt: claimRow['created_at'] as string,
+                superseded: false,
+                disputed: false,
+                effectiveConfidence: claimRow['confidence'] as number,
+                freshness: 'fresh' as const,
+                stability: (claimRow['stability'] ?? 90) as number,
+                lastAccessedAt: (claimRow['last_accessed_at'] ?? null) as string | null,
+                accessCount: (claimRow['access_count'] ?? 0) as number,
+                reasoning: (claimRow['reasoning'] ?? null) as string | null,
+              },
+              relevance: 0,
+              score: hs.combinedScore,
+            });
+          }
+        }
+        return { ok: true as const, value: results };
+      }
+
+      // Default fulltext mode
       return convenienceLayer.search(query, options);
+    },
+
+    // Phase 11: Vector search methods
+    async embedPending() {
+      if (!vectorConfig?.provider || !embeddingQueue || !vectorStore) {
+        return { ok: true as const, value: { processed: 0, failed: 0 } };
+      }
+      if (!vectorStore.isAvailable()) {
+        return { ok: true as const, value: { processed: 0, failed: 0 } };
+      }
+      const conn = getConnection();
+      return embeddingQueue.process(conn, vectorConfig.provider, vectorStore, {
+        batchSize: vectorBatchSize,
+        dimensions: vectorDimensions,
+        modelId: vectorModelId,
+      });
+    },
+
+    async checkDuplicate(subject: string, predicate: string, value: string) {
+      if (!vectorConfig?.provider || !vectorStore) {
+        return { ok: true as const, value: { isDuplicate: false, candidates: [] as readonly import('../vector/vector_types.js').DuplicateCandidate[], threshold: 0 } satisfies DuplicateCheckResult };
+      }
+      const threshold = vectorDuplicateThreshold;
+      if (threshold === 0) {
+        return { ok: true as const, value: { isDuplicate: false, candidates: [] as readonly import('../vector/vector_types.js').DuplicateCandidate[], threshold: 0 } satisfies DuplicateCheckResult };
+      }
+      try {
+        const content = `${subject} ${predicate} ${value}`;
+        const embedding = await vectorConfig.provider(content);
+        const conn = getConnection();
+        const ctx = getContext();
+        return checkDuplicateImpl(conn, vectorStore, embedding, predicate, ctx.tenantId, threshold);
+      } catch (providerErr) {
+        return { ok: false as const, error: { code: 'VECTOR_PROVIDER_FAILED', message: providerErr instanceof Error ? providerErr.message : String(providerErr), spec: 'I-P11-40' } };
+      }
+    },
+
+    async semanticSearch(query: string, options?: Omit<import('./convenience/convenience_types.js').SearchOptions, 'mode'>) {
+      if (!vectorConfig?.provider) {
+        return { ok: false as const, error: { code: 'VECTOR_NOT_AVAILABLE', message: 'No vector provider configured', spec: 'I-P11-02' } };
+      }
+      if (!vectorStore || !vectorStore.isAvailable()) {
+        return { ok: false as const, error: { code: 'VECTOR_NOT_AVAILABLE', message: 'sqlite-vec is not installed', spec: 'I-P11-02' } };
+      }
+
+      // Auto-embed pending if configured
+      const autoEmbed = vectorConfig.autoEmbed ?? DEFAULT_VECTOR_CONFIG.autoEmbed;
+      if (autoEmbed && embeddingQueue) {
+        const conn = getConnection();
+        await embeddingQueue.process(conn, vectorConfig.provider, vectorStore, {
+          batchSize: vectorBatchSize,
+          dimensions: vectorDimensions,
+          modelId: vectorModelId,
+        });
+      }
+
+      try {
+        const queryEmbedding = await vectorConfig.provider(query);
+        // Delegate to sync search with the computed embedding
+        return this.search(query, {
+          ...options,
+          mode: 'semantic' as const,
+          queryEmbedding: queryEmbedding,
+        });
+      } catch (providerErr) {
+        return { ok: false as const, error: { code: 'VECTOR_PROVIDER_FAILED', message: providerErr instanceof Error ? providerErr.message : String(providerErr), spec: 'I-P11-02' } };
+      }
+    },
+
+    embeddingStats(): import('../kernel/interfaces/common.js').Result<EmbeddingStats> {
+      try {
+        const conn = getConnection();
+        const embeddedRow = conn.get<{ cnt: number }>(
+          `SELECT COUNT(*) as cnt FROM embedding_metadata`,
+        );
+        const pendingRow = conn.get<{ cnt: number }>(
+          `SELECT COUNT(*) as cnt FROM embedding_pending`,
+        );
+        return {
+          ok: true as const,
+          value: {
+            embeddedCount: embeddedRow?.cnt ?? 0,
+            pendingCount: pendingRow?.cnt ?? 0,
+            modelId: vectorModelId,
+            dimensions: vectorDimensions,
+            vectorAvailable,
+          },
+        };
+      } catch (e) {
+        return { ok: false as const, error: { code: 'VECTOR_STATS_FAILED', message: e instanceof Error ? e.message : String(e), spec: 'Phase-11' } };
+      }
     },
 
     // Library-mode agent identity setter.
@@ -1486,6 +1795,15 @@ export async function createLimen(
         clearInterval(walCheckpointTimer);
       } catch (err) {
         shutdownErrors.push(err instanceof Error ? err : new Error(String(err)));
+      }
+
+      // Phase 11: Stop embedding timer
+      if (embeddingTimer) {
+        try {
+          clearInterval(embeddingTimer);
+        } catch (err) {
+          shutdownErrors.push(err instanceof Error ? err : new Error(String(err)));
+        }
       }
 
       // 1. Close all active sessions (terminates streams with error chunks)
