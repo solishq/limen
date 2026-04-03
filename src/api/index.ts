@@ -140,7 +140,7 @@ import type { ClassificationRule, ProtectedPredicateRule, ErasureRequest, Compli
 
 // Phase 12: Cognitive Engine migration (v45) + self-healing
 import { getCognitiveEngineMigrations } from './migration/036_cognitive_engine.js';
-import { processSelfHealing } from '../cognitive/self_healing.js';
+import { processSelfHealing, isInActiveCascade } from '../cognitive/self_healing.js';
 import { DEFAULT_SELF_HEALING_CONFIG } from '../cognitive/cognitive_types.js';
 import type { SelfHealingConfig } from '../cognitive/cognitive_types.js';
 
@@ -1128,11 +1128,17 @@ export async function createLimen(
   });
 
   // Phase 12: Register self-healing event listener on claim.retracted
+  // F-P12-003 fix: The listener is the ENTRY POINT only. When processSelfHealing
+  // internally retracts child claims, those retractions emit claim.retracted events
+  // synchronously. Without the isInActiveCascade guard, each re-entry would create
+  // a fresh cascade with depth=0 and visited=new Set(), defeating the depth limit.
+  // The guard ensures the recursive traversal inside processSelfHealing handles
+  // cascading — the event listener does NOT re-enter for claims already in an active cascade.
   if (selfHealingConfig.enabled) {
     kernel.events.subscribe('claim.retracted', (event) => {
       try {
         const payload = event.payload as { claimId?: string };
-        if (payload?.claimId) {
+        if (payload?.claimId && !isInActiveCascade(payload.claimId)) {
           processSelfHealing(payload.claimId, {
             getConnection,
             getContext,

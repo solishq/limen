@@ -41,6 +41,33 @@ export interface SelfHealingDeps {
 }
 
 /**
+ * Module-level Set tracking claim IDs currently being processed by an active
+ * self-healing cascade. Prevents event re-entry from creating parallel cascades
+ * with fresh depth=0 and visited=new Set() — which would defeat the depth limit.
+ *
+ * F-P12-003 fix: When retractClaim.execute() emits 'claim.retracted', the event
+ * listener fires synchronously. Without this guard, each intermediate retraction
+ * starts a NEW cascade with depth=0. This Set lets the event listener detect
+ * that the retracted claim is already part of an active cascade and skip re-entry.
+ *
+ * Lifecycle: populated during processSelfHealing traversal, cleared when the
+ * top-level cascade (depth=0) completes. Thread-safe because SQLite + event bus
+ * are synchronous — no concurrent cascades possible.
+ */
+const activeCascadeClaims = new Set<string>();
+
+/**
+ * Check if a claim is currently being processed by an active self-healing cascade.
+ * Exported for use by the event listener in createLimen().
+ *
+ * @param claimId - The claim ID to check
+ * @returns true if the claim is part of an active cascade
+ */
+export function isInActiveCascade(claimId: string): boolean {
+  return activeCascadeClaims.has(claimId);
+}
+
+/**
  * Process a self-healing cascade for a retracted claim.
  *
  * This is the core function invoked by the event listener.
@@ -65,6 +92,7 @@ export function processSelfHealing(
   visited: Set<string> = new Set(),
   depth: number = 0,
 ): SelfHealingEvent[] {
+  const isTopLevel = depth === 0;
   const { config, time } = deps;
 
   // Guard: disabled
@@ -87,91 +115,110 @@ export function processSelfHealing(
   if (visited.has(retractedClaimId)) return [];
   visited.add(retractedClaimId);
 
-  const conn = deps.getConnection();
-  const ctx = deps.getContext();
-  const nowMs = time.nowMs();
-  const events: SelfHealingEvent[] = [];
+  // F-P12-003: Register this claim in the active cascade set.
+  // This prevents the event listener from re-entering when retractClaim.execute()
+  // emits claim.retracted synchronously. The recursive traversal below handles
+  // cascading — the event listener is the ENTRY POINT only.
+  activeCascadeClaims.add(retractedClaimId);
 
-  // Query derived_from children:
-  // Direction: from_claim_id = child (derives from parent), to_claim_id = parent
-  // So children of retractedClaimId are: from_claim_id WHERE to_claim_id = retractedClaimId
-  const children = conn.query<{ from_claim_id: string }>(
-    `SELECT from_claim_id FROM claim_relationships
-     WHERE to_claim_id = ? AND type = 'derived_from'`,
-    [retractedClaimId],
-  );
+  try {
+    const conn = deps.getConnection();
+    const ctx = deps.getContext();
+    const nowMs = time.nowMs();
+    const events: SelfHealingEvent[] = [];
 
-  for (const child of children) {
-    const childId = child.from_claim_id;
-
-    // Skip already visited (cycle in derived_from graph)
-    if (visited.has(childId)) continue;
-
-    // Get the child claim to compute effective confidence
-    const childClaim = conn.get<{
-      id: string;
-      confidence: number;
-      valid_at: string;
-      predicate: string;
-      status: string;
-    }>(
-      `SELECT id, confidence, valid_at, predicate, status
-       FROM claim_assertions WHERE id = ?`,
-      [childId],
+    // Query derived_from children:
+    // Direction: from_claim_id = child (derives from parent), to_claim_id = parent
+    // So children of retractedClaimId are: from_claim_id WHERE to_claim_id = retractedClaimId
+    const children = conn.query<{ from_claim_id: string }>(
+      `SELECT from_claim_id FROM claim_relationships
+       WHERE to_claim_id = ? AND type = 'derived_from'`,
+      [retractedClaimId],
     );
 
-    // Skip if already retracted or not found
-    if (!childClaim || childClaim.status === 'retracted') continue;
+    for (const child of children) {
+      const childId = child.from_claim_id;
 
-    // Compute effectiveConfidence = confidence * decay * cascadePenalty
-    const stabilityDays = resolveStability(childClaim.predicate, deps.stabilityConfig);
-    const ageMs = computeAgeMs(childClaim.valid_at, nowMs);
-    const decayFactor = computeDecayFactor(ageMs, stabilityDays);
-    const cascadePenalty = computeCascadePenalty(conn, childId);
-    const effectiveConfidence = childClaim.confidence * decayFactor * cascadePenalty;
+      // Skip already visited (cycle in derived_from graph)
+      if (visited.has(childId)) continue;
 
-    if (effectiveConfidence < config.autoRetractThreshold) {
-      // Auto-retract with reason 'incorrect' (I-P12-04: CONSTITUTIONAL)
-      const retractResult = deps.retractClaim.execute(conn, ctx, {
-        claimId: childId as ClaimId,
-        reason: 'incorrect',
-      });
+      // Get the child claim to compute effective confidence
+      const childClaim = conn.get<{
+        id: string;
+        confidence: number;
+        valid_at: string;
+        predicate: string;
+        status: string;
+      }>(
+        `SELECT id, confidence, valid_at, predicate, status
+         FROM claim_assertions WHERE id = ?`,
+        [childId],
+      );
 
-      if (retractResult.ok) {
-        // Log in consolidation_log (I-P12-05)
-        conn.run(
-          `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
-           VALUES (?, ?, 'self_heal', ?, ?, ?, ?)`,
-          [
-            randomUUID(), ctx.tenantId,
-            JSON.stringify([retractedClaimId]),
-            childId,
-            `Auto-retracted: effectiveConfidence ${effectiveConfidence.toFixed(4)} < threshold ${config.autoRetractThreshold}`,
-            time.nowISO(),
-          ],
-        );
+      // Skip if already retracted or not found
+      if (!childClaim || childClaim.status === 'retracted') continue;
 
-        events.push({
-          retractedClaimId,
-          derivedClaimId: childId,
-          effectiveConfidence,
+      // Compute effectiveConfidence = confidence * decay * cascadePenalty
+      const stabilityDays = resolveStability(childClaim.predicate, deps.stabilityConfig);
+      const ageMs = computeAgeMs(childClaim.valid_at, nowMs);
+      const decayFactor = computeDecayFactor(ageMs, stabilityDays);
+      const cascadePenalty = computeCascadePenalty(conn, childId);
+      const effectiveConfidence = childClaim.confidence * decayFactor * cascadePenalty;
+
+      if (effectiveConfidence < config.autoRetractThreshold) {
+        // F-P12-003: Pre-register child in active cascade BEFORE retraction.
+        // retractClaim.execute() emits claim.retracted synchronously, which
+        // fires the event listener. The listener checks isInActiveCascade()
+        // and skips re-entry for this child.
+        activeCascadeClaims.add(childId);
+
+        // Auto-retract with reason 'incorrect' (I-P12-04: CONSTITUTIONAL)
+        const retractResult = deps.retractClaim.execute(conn, ctx, {
+          claimId: childId as ClaimId,
           reason: 'incorrect',
         });
 
-        // Recurse: the retraction of the child may cascade further.
-        // Note: The retractClaim.execute() above emits claim.retracted event,
-        // but since we're already inside the event handler (synchronous SQLite),
-        // the event handler re-entrant call would happen synchronously.
-        // To avoid double-processing, we recurse directly instead.
-        const childEvents = processSelfHealing(
-          childId, deps, visited, depth + 1,
-        );
-        events.push(...childEvents);
-      }
-      // If retraction fails (e.g., already retracted by another path), skip silently
-    }
-    // If above threshold: child survives with reduced confidence (I-P12-01)
-  }
+        if (retractResult.ok) {
+          // Log in consolidation_log (I-P12-05)
+          conn.run(
+            `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
+             VALUES (?, ?, 'self_heal', ?, ?, ?, ?)`,
+            [
+              randomUUID(), ctx.tenantId,
+              JSON.stringify([retractedClaimId]),
+              childId,
+              `Auto-retracted: effectiveConfidence ${effectiveConfidence.toFixed(4)} < threshold ${config.autoRetractThreshold}`,
+              time.nowISO(),
+            ],
+          );
 
-  return events;
+          events.push({
+            retractedClaimId,
+            derivedClaimId: childId,
+            effectiveConfidence,
+            reason: 'incorrect',
+          });
+
+          // Recurse: traverse children of the retracted child.
+          // The event listener will NOT re-enter because childId is in activeCascadeClaims.
+          // This recursive call handles cascading with shared visited Set and incremented depth.
+          const childEvents = processSelfHealing(
+            childId, deps, visited, depth + 1,
+          );
+          events.push(...childEvents);
+        }
+        // If retraction fails (e.g., already retracted by another path), skip silently
+      }
+      // If above threshold: child survives with reduced confidence (I-P12-01)
+    }
+
+    return events;
+  } finally {
+    // F-P12-003: Clean up the active cascade set when the TOP-LEVEL cascade completes.
+    // Only the top-level call clears the set — recursive calls leave entries for the
+    // duration of the cascade so that synchronous event re-entry is suppressed.
+    if (isTopLevel) {
+      activeCascadeClaims.clear();
+    }
+  }
 }
