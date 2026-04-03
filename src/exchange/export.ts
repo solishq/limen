@@ -89,6 +89,11 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Query claims using DatabaseConnection.query<T>()
+    // Detect Phase 9/10 columns for backward compat with pre-v42 databases
+    const cols = conn.query<Record<string, unknown>>('PRAGMA table_info(claim_assertions)', []);
+    const hasPiiCol = cols.some(c => c['name'] === 'pii_detected');
+    const hasClassCol = cols.some(c => c['name'] === 'classification');
+
     interface ClaimRow {
       id: string;
       subject: string;
@@ -102,12 +107,22 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
       grounding_mode: string;
       stability: number | null;
       reasoning: string | null;
+      pii_detected?: number | null;
+      pii_categories?: string | null;
+      classification?: string | null;
     }
 
+    // Build SELECT with optional Phase 9/10 columns
+    const selectCols = [
+      'ca.id', 'ca.subject', 'ca.predicate', 'ca.object_type', 'ca.object_value',
+      'ca.confidence', 'ca.valid_at', 'ca.created_at', 'ca.status', 'ca.grounding_mode',
+      'ca.stability', 'ca.reasoning',
+    ];
+    if (hasPiiCol) selectCols.push('ca.pii_detected', 'ca.pii_categories');
+    if (hasClassCol) selectCols.push('ca.classification');
+
     const claimRows = conn.query<ClaimRow>(
-      `SELECT ca.id, ca.subject, ca.predicate, ca.object_type, ca.object_value,
-              ca.confidence, ca.valid_at, ca.created_at, ca.status, ca.grounding_mode,
-              ca.stability, ca.reasoning
+      `SELECT ${selectCols.join(', ')}
        FROM claim_assertions ca
        ${whereClause}
        ORDER BY ca.created_at ASC`,
@@ -125,7 +140,7 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
         objectValue = row.object_value;
       }
 
-      return {
+      const exported: ExportedClaim = {
         id: row.id,
         subject: row.subject,
         predicate: row.predicate,
@@ -138,7 +153,10 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
         groundingMode: row.grounding_mode as 'evidence_path' | 'runtime_witness',
         stability: row.stability,
         reasoning: row.reasoning,
+        ...(hasPiiCol ? { piiDetected: row.pii_detected ?? null, piiCategories: row.pii_categories ?? null } : {}),
+        ...(hasClassCol ? { classification: row.classification ?? null } : {}),
       };
+      return exported;
     });
 
     // Optionally include evidence refs

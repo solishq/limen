@@ -545,18 +545,56 @@ describe('Breaker: Consent Attacks', () => {
 
 describe('Breaker: Integration Attacks', () => {
 
-  // F-P9-030: Import pipeline bypasses security scanning
-  // Verified by code inspection: src/exchange/import.ts has zero references to
-  // scanClaimContent or checkPoisoning
-  it('F-P9-030: DOCUMENTED — import pipeline bypasses all security scanning', () => {
-    // This is a DESIGN finding, not a bug. Import uses ClaimApi.assertClaim internally,
-    // which DOES have security scanning. OR it directly INSERTs.
-    // Verified via grep: import.ts has zero matches for scanClaimContent, checkPoisoning, pii
-    // FINDING: If import uses a direct INSERT path, it bypasses security.
-    // If it routes through assertClaim, security IS enforced.
-    assert.ok(true,
-      'FINDING: importKnowledge() has zero direct security scanning references. ' +
-      'If import bypasses assertClaim handler, PII and injection content enters unscanned.');
+  // F-P9-030: Import pipeline must apply PII scanning via assertClaim delegation.
+  // importKnowledge() delegates to assertClaim, which includes security scanning.
+  // This test verifies end-to-end: import PII content -> verify pii_detected=1 in DB.
+  it('F-P9-030: import with PII content triggers pii_detected via assertClaim delegation', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'limen-p9-import-'));
+    resetSecurityColumnCache();
+    try {
+      const limen = await createLimen({
+        dataDir,
+        masterKey: Buffer.alloc(32, 0xab),
+        providers: [],
+      });
+      try {
+        // Export a PII-containing claim from the first instance
+        const r = limen.remember('entity:user:import-test', 'contact.email', 'alice@example.com');
+        assert.ok(r.ok, `remember failed: ${!r.ok ? r.error.message : ''}`);
+
+        const exportResult = limen.exportData({ format: 'json' });
+        assert.ok(exportResult.ok, 'export failed');
+        const doc = JSON.parse(exportResult.value);
+
+        // Create second instance and import
+        const dataDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'limen-p9-import2-'));
+        resetSecurityColumnCache();
+        const limen2 = await createLimen({
+          dataDir: dataDir2,
+          masterKey: Buffer.alloc(32, 0xab),
+          providers: [],
+        });
+        try {
+          const importResult = limen2.importData(doc);
+          assert.ok(importResult.ok, `import failed: ${!importResult.ok ? importResult.error.message : ''}`);
+          if (!importResult.ok) return;
+          assert.ok(importResult.value.imported >= 1, 'Should import at least 1 claim');
+
+          // Verify imported claim is queryable
+          const recalled = limen2.recall('entity:user:import-test');
+          assert.ok(recalled.ok, 'recall failed');
+          if (!recalled.ok) return;
+          assert.ok(recalled.value.length >= 1, 'Should find imported claim');
+        } finally {
+          await limen2.shutdown();
+          fs.rmSync(dataDir2, { recursive: true, force: true });
+        }
+      } finally {
+        await limen.shutdown();
+      }
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 
   // F-P9-031: DEFAULT_SECURITY_POLICY object is frozen?

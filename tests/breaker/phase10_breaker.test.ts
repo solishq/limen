@@ -26,6 +26,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { createHash } from 'node:crypto';
 import { createLimen } from '../../src/api/index.js';
+import { resetSecurityColumnCache } from '../../src/claims/store/claim_stores.js';
 import { classify } from '../../src/governance/classification/classification_engine.js';
 import { checkPredicateGuard } from '../../src/governance/classification/predicate_guard.js';
 import { DEFAULT_CLASSIFICATION_RULES } from '../../src/governance/classification/governance_types.js';
@@ -50,6 +51,7 @@ async function withLimen(
   fn: (limen: Awaited<ReturnType<typeof createLimen>>, dataDir: string) => Promise<void> | void,
 ) {
   const dataDir = tmpDir();
+  resetSecurityColumnCache();
   const limen = await createLimen({
     dataDir,
     masterKey: masterKey(),
@@ -276,16 +278,37 @@ describe('F-P10-008: Case-sensitive classification bypass', () => {
 // ============================================================================
 
 describe('F-P10-009: Erasure cascade direction', () => {
-  it('DOCUMENTED: Erasure cascade follows from_claim_id->to_claim_id for derived_from', () => {
-    // This test documents the concern. The actual cascade behavior depends
-    // on how relationships are created by relateClaims.
-    // If relateClaims creates: {from: derivedClaim, to: sourceClaim, type: 'derived_from'}
-    // Then erasure of sourceClaim should query to_claim_id = sourceClaim to find
-    // derived claims. But the code queries from_claim_id = currentId.
-    //
-    // Without an integration test that creates derived_from relationships and
-    // then erases the source, we cannot verify correctness.
-    assert.ok(true, 'Direction concern documented — needs integration verification');
+  it('FIXED: Erasure cascade correctly tombstones derived claims', async () => {
+    await withLimen({}, async (limen) => {
+      // Create source claim (with PII so erasure finds it — use email for reliable PII detection)
+      const source = limen.remember('entity:user:cascade-src', 'contact.email', 'cascade-test@example.com');
+      assert.ok(source.ok, `source remember failed: ${!source.ok ? source.error.message : ''}`);
+      if (!source.ok) return;
+
+      // Create derived claim
+      const derived = limen.remember('entity:user:cascade-src', 'analysis.note', 'derived from phone data');
+      assert.ok(derived.ok, `derived remember failed: ${!derived.ok ? derived.error.message : ''}`);
+      if (!derived.ok) return;
+
+      // Connect: derived is derived_from source
+      // connect(from=derived, to=source, type='derived_from')
+      const connResult = limen.connect(derived.value.claimId, source.value.claimId, 'derived_from');
+      assert.ok(connResult.ok, `connect failed: ${!connResult.ok ? connResult.error.message : ''}`);
+
+      // Erase with includeRelated=true
+      const erasureResult = limen.governance.erasure({
+        dataSubjectId: 'user:cascade-src',
+        reason: 'GDPR request',
+        includeRelated: true,
+      });
+
+      assert.ok(erasureResult.ok, `erasure failed: ${!erasureResult.ok ? erasureResult.error.message : ''}`);
+      if (!erasureResult.ok) return;
+
+      // Verify cascade tombstoned the derived claim
+      assert.ok(erasureResult.value.relationshipsCascaded >= 1,
+        `Expected at least 1 cascaded relationship, got ${erasureResult.value.relationshipsCascaded}`);
+    });
   });
 });
 

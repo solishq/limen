@@ -74,6 +74,12 @@ export interface ExportedClaim {
   readonly stability: number | null;
   /** Phase 5: Reasoning text */
   readonly reasoning: string | null;
+  /** Phase 9: PII detected flag (v1.5.0+, optional for backward compat) */
+  readonly piiDetected?: number | null;
+  /** Phase 9: PII categories JSON (v1.5.0+, optional for backward compat) */
+  readonly piiCategories?: string | null;
+  /** Phase 10: Classification level (v1.5.0+, optional for backward compat) */
+  readonly classification?: string | null;
   /** Evidence references (if includeEvidence) */
   readonly evidenceRefs?: readonly ExportedEvidenceRef[];
 }
