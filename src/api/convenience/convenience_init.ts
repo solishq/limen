@@ -76,8 +76,13 @@ export async function initializeConvenience(
   // 2. Set default agent so all ClaimApi calls carry this agentId
   setDefaultAgent(agentId);
 
-  // 3. Create convenience mission
-  // Deadline: 1 year from now. Budget: 1,000,000 tokens.
+  // 3. Create convenience mission with session-unique task ID.
+  //
+  // Fixes applied (Breaker findings F-2, F-7, F-17):
+  //   F-2:  Return the computed taskId (was discarded as null).
+  //   F-7:  Use mission-scoped task ID to prevent UNIQUE constraint on restart.
+  //   F-17: Each session gets its own mission — accepted trade-off; cleanup
+  //         is the retention scheduler's responsibility (core_missions.deadline).
   const deadline = new Date(time.nowMs() + 365 * 24 * 60 * 60 * 1000).toISOString();
   const missionHandle = await missions.create({
     agent: CONVENIENCE_AGENT_NAME,
@@ -90,11 +95,12 @@ export async function initializeConvenience(
 
   const missionId = missionHandle.id;
 
-  // 4. Propose a task graph with a single convenience task
+  // Task ID is mission-scoped — unique across sessions, prevents UNIQUE constraint.
+  const taskId = `conv-${missionId.slice(0, 8)}`;
   await missionHandle.proposeTaskGraph({
     missionId,
     tasks: [{
-      id: 'convenience-task',
+      id: taskId,
       description: 'Convenience API operations',
       executionMode: 'deterministic',
       estimatedTokens: 1_000_000,
@@ -103,35 +109,9 @@ export async function initializeConvenience(
     objectiveAlignment: 'Convenience API thin delegation layer for remember/recall/forget/connect/reflect',
   });
 
-  // 5. Get the task ID from the graph
-  // The task graph creates tasks with IDs that are mission-scoped.
-  // We need to query the mission's tasks to find the one we created.
-  // The task ID format is typically the mission's task graph ID.
-  // For simplicity, we look up the mission to get the task.
-  const missionState = await missions.get(missionId);
-  if (!missionState) {
-    throw new Error(`Convenience mission ${missionId} not found after creation`);
-  }
-
-  // Propose task execution to get the actual taskId
-  // The taskId from the graph is a string, but we need the internal TaskId.
-  // We'll use the graph's task count to derive it.
-  // Actually, looking at the orchestration, tasks are created by proposeTaskGraph
-  // and their IDs are returned. But proposeTaskGraph returns TaskGraphOutput
-  // which has taskCount but not individual task IDs.
-  //
-  // For the convenience API, the missionId is the critical piece.
-  // The taskId can be null for convenience claims. Let me verify...
-  // Looking at ClaimCreateInput: taskId is TaskId | null.
-  // MissionId is required (not null). TaskId can be null.
-  //
-  // Decision: Use null for taskId. The missionId is sufficient for
-  // SC-11 validation. This avoids the complexity of retrieving the
-  // internal TaskId from the task graph.
-
   return {
     agentId,
     missionId,
-    taskId: null,
+    taskId: taskId as TaskId,  // F-2: thread task ID through for claim traceability
   };
 }

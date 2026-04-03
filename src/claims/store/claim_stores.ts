@@ -64,6 +64,9 @@ import { scanClaimContent } from '../../security/claim_scanner.js';
 import { checkPoisoning } from '../../security/poisoning_defense.js';
 import { DEFAULT_SECURITY_POLICY } from '../../security/security_types.js';
 import type { ContentScanResult } from '../../security/security_types.js';
+import { classify } from '../../governance/classification/classification_engine.js';
+import { checkPredicateGuard } from '../../governance/classification/predicate_guard.js';
+import { DEFAULT_CLASSIFICATION_RULES } from '../../governance/classification/governance_types.js';
 
 // ============================================================================
 // Helpers
@@ -81,9 +84,23 @@ function hasPiiDetectedColumn(conn: DatabaseConnection): boolean {
   }
   return _hasPiiDetectedCol;
 }
+/** Phase 10: Cached detection of v43 governance columns on claim_assertions. */
+let _hasClassificationCol: boolean | null = null;
+function hasClassificationColumn(conn: DatabaseConnection): boolean {
+  if (_hasClassificationCol !== null) return _hasClassificationCol;
+  try {
+    const cols = conn.query<Record<string, unknown>>('PRAGMA table_info(claim_assertions)', []);
+    _hasClassificationCol = cols.some(c => c['name'] === 'classification');
+  } catch {
+    _hasClassificationCol = false;
+  }
+  return _hasClassificationCol;
+}
+
 /** Reset cache (for tests that create fresh databases). */
 export function resetSecurityColumnCache(): void {
   _hasPiiDetectedCol = null;
+  _hasClassificationCol = null;
 }
 
 function ok<T>(value: T): Result<T> {
@@ -1246,6 +1263,27 @@ function createAssertClaimHandlerImpl(
           return err('INVALID_PREDICATE', `Reserved predicate namespace: ${input.predicate}`, 'SC-11');
         }
 
+        // 3b. Phase 10: Protected predicate guard (I-P10-10, I-P10-11)
+        // F-P10-002 fix: Use dynamic getter when available (reads from DB at assertion time)
+        {
+          const protectedRules = deps.getProtectedPredicateRules
+            ? deps.getProtectedPredicateRules()
+            : (deps.protectedPredicateRules ?? []);
+          const rbacActive = deps.getRbacActive
+            ? deps.getRbacActive()
+            : (deps.rbacActive ?? false);
+          if (protectedRules.length > 0) {
+            const guardResult = checkPredicateGuard(
+              input.predicate,
+              'assert',
+              ctx,
+              rbacActive,
+              protectedRules,
+            );
+            if (!guardResult.ok) return guardResult as Result<AssertClaimOutput>;
+          }
+        }
+
         // 4. Validate object type
         if (!isValidObjectType(input.object.type, input.object.value)) {
           return err('INVALID_OBJECT_TYPE', `Object value does not match declared type ${input.object.type}`, 'SC-11');
@@ -1510,6 +1548,25 @@ function createAssertClaimHandlerImpl(
           }
         }
 
+        // 15c. Phase 10: Auto-classification (I-P10-01, I-P10-02, I-P10-03: same transaction)
+        {
+          const hasClassCols = hasClassificationColumn(conn);
+          if (hasClassCols) {
+            // F-P10-001 fix: Use dynamic getter when available (reads from DB at assertion time)
+            const rules = deps.getClassificationRules
+              ? deps.getClassificationRules()
+              : (deps.classificationRules ?? []);
+            const allRules = rules.length > 0 ? rules : DEFAULT_CLASSIFICATION_RULES;
+            const defaultLevel = deps.classificationDefaultLevel ?? 'unrestricted';
+            const classResult = classify(input.predicate, allRules, defaultLevel);
+
+            conn.run(
+              `UPDATE claim_assertions SET classification = ?, classification_rule_id = ? WHERE id = ?`,
+              [classResult.level, classResult.matchedRule, claim.id],
+            );
+          }
+        }
+
         // 16. Create evidence rows
         if (input.evidenceRefs.length > 0) {
           const evResult = stores.evidence.createBatch(conn, claim.id, input.evidenceRefs);
@@ -1675,6 +1732,27 @@ function createRetractClaimHandlerImpl(
           return err('CLAIM_NOT_FOUND', `Claim ${input.claimId} not found`, '§10.4');
         }
         const claim = getResult.value;
+
+        // 2b. Phase 10: Protected predicate guard for retraction (I-P10-10, I-P10-11, I-P10-12)
+        // F-P10-003 fix: Use dynamic getter when available (reads from DB at retract time)
+        {
+          const protectedRules = deps.getProtectedPredicateRules
+            ? deps.getProtectedPredicateRules()
+            : (deps.protectedPredicateRules ?? []);
+          const rbacActive = deps.getRbacActive
+            ? deps.getRbacActive()
+            : (deps.rbacActive ?? false);
+          if (claim.predicate && protectedRules.length > 0) {
+            const guardResult = checkPredicateGuard(
+              claim.predicate,
+              'retract',
+              ctx,
+              rbacActive,
+              protectedRules,
+            );
+            if (!guardResult.ok) return guardResult;
+          }
+        }
 
         // 3. Authorization: source agent or admin
         if (claim.sourceAgentId !== ctx.agentId) {

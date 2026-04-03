@@ -27,14 +27,11 @@
  *   limen_search          — Full-text search across claim content
  *   limen_recall_bulk     — Recall beliefs for multiple subjects in one call
  *
- * High-level knowledge tools (session-managed):
- *   limen_session_open    — Open a knowledge session for a project
- *   limen_session_close   — Close session with optional summary
- *   limen_remember        — Assert a knowledge claim (simplified)
- *   limen_recall          — Query claims, excluding superseded
- *   limen_connect         — Relate claims with governance protection
- *   limen_reflect         — Batch-assert categorized learnings
- *   limen_scratch         — Session-scoped scratch working memory
+ * Learning tools (Amendment 25 — convenience API wrappers):
+ *   limen_remember        — Store a knowledge claim (3-param: subject, predicate, value)
+ *   limen_reflect         — Batch-store categorized learnings (decision/pattern/warning/finding)
+ *   limen_forget          — Retract a claim (governed, audited)
+ *   limen_connect         — Relate two claims (supports/contradicts/supersedes/derived_from)
  *
  * Resources:
  *   limen://health        — Health status JSON
@@ -53,6 +50,7 @@ import { registerWmTools } from './tools/wm.js';
 import { registerContextTools } from './tools/context.js';
 import { registerCognitiveTools } from './tools/cognitive.js';
 import { registerSearchTools } from './tools/search.js';
+import { registerLearningTools } from './tools/learning.js';
 import { registerHealthResource } from './resources/health.js';
 
 async function main(): Promise<void> {
@@ -85,6 +83,9 @@ async function main(): Promise<void> {
   registerContextTools(server, limen);
   registerCognitiveTools(server, limen);
   registerSearchTools(server, limen);
+
+  // Register learning tools (Amendment 25 — F-15: pass adapter for governance)
+  registerLearningTools(server, limen, adapter);
 
   // Register resources
   registerHealthResource(server, limen);
