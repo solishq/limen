@@ -718,6 +718,46 @@ export interface ClaimSystemDeps {
    * I-P9-51: Set at createLimen(), immutable during instance lifecycle.
    */
   readonly securityPolicy?: import('../../security/security_types.js').SecurityPolicy;
+  /**
+   * Phase 10: Classification rules for auto-classification on assertion.
+   * I-P10-01: If a rule matches, classification column MUST equal the rule's level.
+   * I-P10-02: If no rule matches, classification = defaultLevel.
+   */
+  readonly classificationRules?: readonly import('../../governance/classification/governance_types.js').ClassificationRule[];
+  /**
+   * Phase 10: Default classification level when no rule matches.
+   * I-P10-02: Defaults to 'unrestricted'.
+   */
+  readonly classificationDefaultLevel?: import('../../governance/classification/governance_types.js').ClassificationLevel;
+  /**
+   * Phase 10: Protected predicate rules for RBAC enforcement.
+   * I-P10-10: Checked on assertClaim/retractClaim.
+   * I-P10-11: Bypassed when RBAC is dormant.
+   */
+  readonly protectedPredicateRules?: readonly import('../../governance/classification/governance_types.js').ProtectedPredicateRule[];
+  /**
+   * Phase 10: Whether RBAC is active (not dormant).
+   * I-P10-11: When false, protected predicate checks are skipped.
+   */
+  readonly rbacActive?: boolean;
+  /**
+   * Phase 10: Dynamic getter for classification rules (includes DB-stored custom rules).
+   * F-P10-001 fix: When provided, called at assertion time to get ALL rules (default + custom).
+   * Takes precedence over static classificationRules when present.
+   */
+  readonly getClassificationRules?: () => readonly import('../../governance/classification/governance_types.js').ClassificationRule[];
+  /**
+   * Phase 10: Dynamic getter for protected predicate rules (includes DB-stored rules).
+   * F-P10-002/003 fix: When provided, called at assert/retract time.
+   * Takes precedence over static protectedPredicateRules when present.
+   */
+  readonly getProtectedPredicateRules?: () => readonly import('../../governance/classification/governance_types.js').ProtectedPredicateRule[];
+  /**
+   * Phase 10: Dynamic getter for RBAC active state.
+   * F-P10-002/003 fix: When provided, called at assert/retract time.
+   * Takes precedence over static rbacActive when present.
+   */
+  readonly getRbacActive?: () => boolean;
 }
 
 /**
