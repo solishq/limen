@@ -73,9 +73,13 @@ export interface SessionState {
 // CF-014: Maximum concurrent sessions per Limen instance
 const MAX_SESSIONS = 10_000;
 
+/** Default session TTL: 24 hours in milliseconds */
+const DEFAULT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+
 export class SessionManager {
   private readonly sessions: Map<SessionId, SessionState> = new Map();
   private defaultSession: SessionState | null = null;
+  private readonly sessionTtlMs: number = DEFAULT_SESSION_TTL_MS;
 
   constructor(
     private readonly rbac: RbacEngine,
@@ -147,10 +151,16 @@ export class SessionManager {
       }
       sessionState = existing;
     } else {
-      // CF-014: Bound in-memory session count
+      // Evict expired sessions before checking capacity
+      this.evictExpiredSessions();
+
+      // CF-014: Bound in-memory session count. Evict oldest if at capacity.
       if (this.sessions.size >= MAX_SESSIONS) {
-        throw new LimenError('RATE_LIMITED',
-          `Maximum concurrent sessions (${MAX_SESSIONS}) exceeded. Close existing sessions first.`);
+        const evicted = this.evictOldestSession();
+        if (!evicted) {
+          throw new LimenError('RATE_LIMITED',
+            `Maximum concurrent sessions (${MAX_SESSIONS}) exceeded. Close existing sessions first.`);
+        }
       }
 
       // Create new session with fresh conversation via L2 ConversationManager
@@ -247,6 +257,46 @@ export class SessionManager {
   }
 
   // ─── Private Helpers ──
+
+  /**
+   * Evict all sessions whose TTL has expired.
+   * Prevents unbounded growth from abandoned sessions.
+   */
+  private evictExpiredSessions(): void {
+    const nowMs = (this.time ?? { nowMs: () => Date.now() }).nowMs();
+    for (const [id, session] of this.sessions) {
+      if (nowMs - session.createdAt > this.sessionTtlMs) {
+        this.sessions.delete(id);
+        if (this.defaultSession?.sessionId === id) {
+          this.defaultSession = null;
+        }
+      }
+    }
+  }
+
+  /**
+   * Evict the oldest non-default session (LRU) to make room for a new one.
+   * Returns true if a session was evicted, false if none could be evicted.
+   */
+  private evictOldestSession(): boolean {
+    let oldestId: SessionId | null = null;
+    let oldestCreatedAt = Infinity;
+    for (const [id, session] of this.sessions) {
+      // Don't evict the default session
+      if (this.defaultSession?.sessionId === id) continue;
+      // Don't evict sessions with active streams
+      if (session.activeStreams.size > 0) continue;
+      if (session.createdAt < oldestCreatedAt) {
+        oldestCreatedAt = session.createdAt;
+        oldestId = id;
+      }
+    }
+    if (oldestId !== null) {
+      this.sessions.delete(oldestId);
+      return true;
+    }
+    return false;
+  }
 
   /**
    * Build OrchestrationDeps for L2 subsystem calls.

@@ -511,23 +511,25 @@ export function createAuditTrail(sha256Fn: (data: string) => string, time?: Time
 
         archiveDb.close();
 
-        // Record archive segment
-        conn.run(
-          `INSERT INTO core_audit_archive_segments (id, file_path, first_seq_no, last_seq_no, final_hash, entry_count, archived_at)
-           VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
-          [segmentId, outputPath, firstSeqNo, lastSeqNo, finalHash, entries.length]
-        );
+        // Record archive segment and remove archived entries atomically.
+        // I-03: All mutations (segment record + flag + delete + flag cleanup) in single transaction.
+        // Crash between any of these steps would leave inconsistent state without transaction.
+        conn.transaction(() => {
+          conn.run(
+            `INSERT INTO core_audit_archive_segments (id, file_path, first_seq_no, last_seq_no, final_hash, entry_count, archived_at)
+             VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
+            [segmentId, outputPath, firstSeqNo, lastSeqNo, finalHash, entries.length]
+          );
 
-        // Remove archived entries from active table.
-        // SEC-004 fix: Set archival flag to bypass DELETE trigger (I-06 defense-in-depth).
-        // The trigger WHEN clause checks core_audit_archive_active; if a row exists, DELETE is allowed.
-        // Flag is inserted and removed within the same transaction for atomicity.
-        conn.run(`INSERT OR IGNORE INTO core_audit_archive_active (id) VALUES (1)`);
-        conn.run(
-          `DELETE FROM core_audit_log WHERE seq_no >= ? AND seq_no <= ?`,
-          [firstSeqNo, lastSeqNo]
-        );
-        conn.run(`DELETE FROM core_audit_archive_active WHERE id = 1`);
+          // SEC-004 fix: Set archival flag to bypass DELETE trigger (I-06 defense-in-depth).
+          // The trigger WHEN clause checks core_audit_archive_active; if a row exists, DELETE is allowed.
+          conn.run(`INSERT OR IGNORE INTO core_audit_archive_active (id) VALUES (1)`);
+          conn.run(
+            `DELETE FROM core_audit_log WHERE seq_no >= ? AND seq_no <= ?`,
+            [firstSeqNo, lastSeqNo]
+          );
+          conn.run(`DELETE FROM core_audit_archive_active WHERE id = 1`);
+        });
 
         return {
           ok: true,

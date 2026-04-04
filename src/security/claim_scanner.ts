@@ -196,18 +196,29 @@ export function scanClaimContent(
   policy: SecurityPolicy,
   time: TimeProvider,
 ): ContentScanResult {
-  // PII scan
+  // F-P9-013/014: Normalize fields before PII scan to defeat zero-width character
+  // and Unicode bypass. Same normalization applied to injection scan below.
+  const normalizedFields = policy.pii.enabled || policy.injection.enabled
+    ? {
+        subject: normalizeForScan(fields.subject),
+        predicate: normalizeForScan(fields.predicate),
+        objectValue: normalizeForScan(fields.objectValue),
+      }
+    : fields;
+
+  // PII scan (against normalized text to prevent zero-width char evasion)
   const pii = policy.pii.enabled
-    ? scanForPii(fields, policy.pii.categories)
+    ? scanForPii(normalizedFields, policy.pii.categories)
     : { hasPii: false, matches: [] as const, categories: [] as const };
 
   // F-P9-019: Scan each field independently to prevent false injection detection
   // from field concatenation creating double-newlines (e.g., empty predicate + "Human:" objectValue).
+  // Uses pre-normalized fields for consistency with PII scan.
   const injection = policy.injection.enabled
     ? mergeInjectionResults([
-        scanForInjection(fields.subject),
-        scanForInjection(fields.predicate),
-        scanForInjection(fields.objectValue),
+        scanForInjection(normalizedFields.subject),
+        scanForInjection(normalizedFields.predicate),
+        scanForInjection(normalizedFields.objectValue),
       ])
     : { detected: false, patterns: [] as const, severity: 'none' as const };
 

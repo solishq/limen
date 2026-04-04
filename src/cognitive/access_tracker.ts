@@ -158,18 +158,24 @@ export function createAccessTracker(
     destroy(): void {
       if (destroyed) return;
 
-      // F-P3-009: Defensively flush pending events before destroying.
-      // The caller (index.ts) calls flush() before destroy(), but the API should
-      // not rely on external ordering. Flush is idempotent and safe here.
-      doFlush();
-
+      // Set destroyed flag FIRST to prevent the timer from racing with our flush.
+      // A timer callback that fires between here and clearInterval will see
+      // destroyed=true and no-op (line 79: if (destroyed || ...) return).
       destroyed = true;
 
-      // I-P3-13: Explicit clearInterval using stored ID (PA Amendment)
+      // I-P3-13: Explicit clearInterval using stored ID (PA Amendment).
+      // Clear timer BEFORE flush so no concurrent flush can race with ours.
       if (intervalId !== null) {
         clearInterval(intervalId);
         intervalId = null;
       }
+
+      // F-P3-009: Defensively flush pending events after stopping timer.
+      // doFlush checks destroyed flag but skips return since we need this final flush.
+      // Temporarily unset destroyed for the final flush.
+      destroyed = false;
+      doFlush();
+      destroyed = true;
     },
   };
 }

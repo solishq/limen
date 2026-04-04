@@ -155,7 +155,7 @@ export class MissionApiImpl implements MissionApi {
    * I-13: RBAC enforced. SD-14: RBAC before rate limit.
    * Uses the missions subsystem to query. Returns MissionView[].
    */
-  async list(_filter?: MissionFilter): Promise<readonly MissionView[]> {
+  async list(filter?: MissionFilter): Promise<readonly MissionView[]> {
     const conn = this.getConnection();
     const ctx = this.getContext();
 
@@ -164,11 +164,72 @@ export class MissionApiImpl implements MissionApi {
     // §36: Rate limit check (SD-14: after RBAC)
     requireRateLimit(this.rateLimiter, conn, ctx, 'api_calls');
 
-    // List is a convenience — not directly available as a single subsystem method.
-    // For now, return empty array. The consumer can use get() with known IDs.
-    // ASSUMPTION: Full list/filter capability would require a query method on MissionStore.
-    // The current MissionStore interface only provides get() and getChildren().
-    return [];
+    // Build parameterized query from filter
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    // FM-10: Tenant isolation — scope to current tenant
+    if (ctx.tenantId !== null) {
+      conditions.push('m.tenant_id = ?');
+      params.push(ctx.tenantId);
+    } else {
+      conditions.push('m.tenant_id IS NULL');
+    }
+
+    if (filter?.state) {
+      conditions.push('m.state = ?');
+      params.push(filter.state);
+    }
+    if (filter?.agentName) {
+      conditions.push('m.agent_id = ?');
+      params.push(filter.agentName);
+    }
+    if (filter?.parentId) {
+      conditions.push('m.parent_id = ?');
+      params.push(filter.parentId);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const limit = Math.min(filter?.limit ?? 100, 1000);
+    const offset = filter?.offset ?? 0;
+
+    const rows = conn.query<{
+      id: string; state: string; objective: string; parent_id: string | null;
+      agent_id: string; plan_version: number; constraints_json: string;
+      created_at: string; completed_at: string | null;
+    }>(
+      `SELECT m.id, m.state, m.objective, m.parent_id, m.agent_id, m.plan_version,
+              m.constraints_json, m.created_at, m.completed_at
+       FROM core_missions m
+       ${whereClause}
+       ORDER BY m.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+    );
+
+    const deps = this.buildOrchDeps();
+
+    return rows.map((row): MissionView => {
+      const constraints = JSON.parse(row.constraints_json) as { budget: number };
+      const budgetResult = this.orchestration.budget.getRemaining(deps, row.id as MissionId);
+      const remaining = budgetResult.ok ? budgetResult.value : 0;
+
+      return {
+        id: row.id as MissionId,
+        state: row.state as MissionState,
+        objective: row.objective,
+        parentId: (row.parent_id ?? null) as MissionId | null,
+        agentId: row.agent_id as AgentId,
+        planVersion: row.plan_version,
+        budget: {
+          allocated: constraints.budget,
+          consumed: constraints.budget - remaining,
+          remaining,
+        },
+        createdAt: row.created_at,
+        completedAt: row.completed_at,
+      };
+    });
   }
 
   // ─── Private: OrchestrationDeps Builder ──

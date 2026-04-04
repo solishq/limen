@@ -36,17 +36,30 @@ export function createEventPropagator(): EventPropagator {
    * CF-007: Fallback only — when deps.rateLimiter is available, the kernel's
    * SQLite-backed rate limiter is used instead for persistence across restarts.
    *
-   * FO-003: This Map is bounded by distinct agent count (finite per deployment).
-   * Entries auto-reset their window after 60s of inactivity (line 45).
-   * Not cleaned on shutdown because the EventPropagator is GC'd with its parent.
-   * If multi-tenant scale exceeds 10,000 agents, consider explicit cap or WeakRef.
+   * FO-003: Capped at MAX_RATE_LIMIT_ENTRIES to prevent unbounded memory growth.
+   * Entries auto-reset their window after 60s of inactivity.
+   * Periodic eviction of expired entries when at capacity.
    */
   const rateLimitMap = new Map<string, { count: number; windowStart: number }>();
+  const MAX_RATE_LIMIT_ENTRIES = 10_000;
+
+  /** Evict entries whose 60s window has expired. Called when map is at capacity. */
+  function evictExpiredRateLimitEntries(nowMs: number): void {
+    for (const [key, entry] of rateLimitMap) {
+      if (nowMs - entry.windowStart > 60_000) {
+        rateLimitMap.delete(key);
+      }
+    }
+  }
 
   /** FM-13: In-memory fallback rate limit check */
   function isRateLimitedFallback(agentId: string, nowMs: number): boolean {
     const entry = rateLimitMap.get(agentId);
     if (!entry || nowMs - entry.windowStart > 60_000) {
+      // Evict expired entries if at capacity before inserting new one
+      if (rateLimitMap.size >= MAX_RATE_LIMIT_ENTRIES) {
+        evictExpiredRateLimitEntries(nowMs);
+      }
       rateLimitMap.set(agentId, { count: 1, windowStart: nowMs });
       return false;
     }

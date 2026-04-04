@@ -120,8 +120,9 @@ export async function suggestConnections(
     // Skip self
     if (result.claimId === claimId) continue;
 
-    // Convert distance to similarity (cosine distance → similarity)
-    const similarity = 1 - result.distance;
+    // Convert L2 distance to similarity. Maps [0, ∞) → (0, 1].
+    // Previous formula (1 - distance) produced negative values for L2 distance > 1.
+    const similarity = 1 / (1 + result.distance);
     if (similarity < AUTO_CONNECTION_SIMILARITY_THRESHOLD) continue;
 
     // Get candidate claim details

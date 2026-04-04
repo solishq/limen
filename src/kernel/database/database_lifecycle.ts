@@ -42,6 +42,8 @@ function createConnection(
   tenancyMode: DatabaseConfig['tenancy']['mode'],
   onClose?: () => void,
 ): DatabaseConnection {
+  let closed = false;
+
   const conn: DatabaseConnection = {
     dataDir,
     schemaVersion,
@@ -73,11 +75,13 @@ function createConnection(
       return (params ? stmt.get(...params) : stmt.get()) as T | undefined;
     },
 
-    /** I-05: Graceful close with WAL checkpoint. FO-003: Cleanup tracking map. */
+    /** I-05: Graceful close with WAL checkpoint. FO-003: Cleanup tracking map. Idempotent. */
     close(): Result<void> {
+      if (closed) return { ok: true, value: undefined };
       try {
         db.pragma('wal_checkpoint(TRUNCATE)');
         db.close();
+        closed = true;
         onClose?.();
         return { ok: true, value: undefined };
       } catch (err) {
