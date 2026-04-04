@@ -1828,6 +1828,11 @@ export async function createLimen(
             };
           },
           missionId: convenienceMissionId ?? 'mission:convenience' as MissionId,
+          // Phase 3: Provide transaction wrapper for all-or-nothing import semantics
+          withTransaction: <T>(fn: () => T): T => {
+            const conn = getConnection();
+            return conn.transaction(fn);
+          },
         },
         document,
         options,
