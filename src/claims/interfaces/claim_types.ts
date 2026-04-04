@@ -758,6 +758,16 @@ export interface ClaimSystemDeps {
    * Takes precedence over static rbacActive when present.
    */
   readonly getRbacActive?: () => boolean;
+  /**
+   * v2.1.0: Per-instance rate limit counters (C-06 independent instances).
+   * When provided, used instead of module-level Map. When absent, a local Map is created.
+   */
+  readonly rateLimitCounters?: Map<string, import('../../kernel/interfaces/instance_context.js').RateLimitEntry>;
+  /**
+   * v2.1.0: Per-instance schema detection cache (C-06 independent instances).
+   * When provided, used instead of module-level cache. When absent, a local cache is created.
+   */
+  readonly schemaCache?: import('../../kernel/interfaces/instance_context.js').SchemaDetectionCache;
 }
 
 /**

@@ -11,6 +11,9 @@
  *
  * PA Amendment: flushIntervalMs exposed through CognitiveConfig.
  * PA Amendment: setInterval reference strongly held (interval ID stored for explicit clearInterval).
+ *
+ * v2.1.0: recordAccess accepts { id, tenantId } entries for tenant-scoped flush.
+ * Flush SQL includes AND tenant_id IS ? to prevent cross-tenant access updates.
  */
 
 import type { DatabaseConnection } from '../kernel/interfaces/database.js';
@@ -32,15 +35,31 @@ const MAX_PENDING_SIZE = 10_000;
 /** F-P3-010: Maximum consecutive flush failures before clearing pending. */
 const MAX_CONSECUTIVE_FAILURES = 5;
 
+/**
+ * v2.1.0: Claim access entry with tenant context.
+ * Each access event carries the claim ID and the tenant it belongs to.
+ */
+export interface ClaimAccessEntry {
+  readonly id: string;
+  readonly tenantId: string | null;
+}
+
 /** Pending access event for a single claim. */
 interface PendingAccess {
   count: number;
   latestAt: string;
+  tenantId: string | null;
 }
 
 /** Phase 3 section 3.4: Access tracker interface. */
 export interface AccessTracker {
-  /** Record that these claims were accessed. Non-blocking, in-memory only. */
+  /**
+   * Record that these claims were accessed. Non-blocking, in-memory only.
+   *
+   * Overload 1 (v2.1.0): entries with tenant context for scoped flush.
+   * Overload 2 (legacy): bare string IDs with null tenant (backward compat).
+   */
+  recordAccess(entries: readonly ClaimAccessEntry[], accessedAt: string): void;
   recordAccess(claimIds: readonly string[], accessedAt: string): void;
   /** Flush all pending access events to the database. */
   flush(): void;
@@ -88,10 +107,12 @@ export function createAccessTracker(
 
     try {
       conn.run('BEGIN');
-      for (const [claimId, event] of pending) {
+      for (const [_key, event] of pending) {
+        // v2.1.0: Include tenant_id in WHERE clause to prevent cross-tenant updates.
+        // Uses IS operator for null-safe comparison (tenant_id IS NULL when null).
         conn.run(
-          'UPDATE claim_assertions SET last_accessed_at = ?, access_count = access_count + ? WHERE id = ?',
-          [event.latestAt, event.count, claimId],
+          'UPDATE claim_assertions SET last_accessed_at = ?, access_count = access_count + ? WHERE id = ? AND tenant_id IS ?',
+          [event.latestAt, event.count, _key, event.tenantId],
         );
       }
       conn.run('COMMIT');
@@ -121,12 +142,24 @@ export function createAccessTracker(
     }
   }
 
+  /**
+   * Normalize input: accepts either ClaimAccessEntry[] or string[].
+   * String[] is backward-compatible: treated as { id: string, tenantId: null }.
+   */
+  function normalizeEntries(input: readonly (ClaimAccessEntry | string)[]): ClaimAccessEntry[] {
+    return input.map(entry =>
+      typeof entry === 'string' ? { id: entry, tenantId: null } : entry,
+    );
+  }
+
   return {
-    recordAccess(claimIds: readonly string[], accessedAt: string): void {
+    recordAccess(input: readonly (ClaimAccessEntry | string)[], accessedAt: string): void {
       if (destroyed) return; // DC-P3-201: Silently ignore after destroy
 
-      for (const id of claimIds) {
-        const existing = pending.get(id);
+      const entries = normalizeEntries(input);
+
+      for (const entry of entries) {
+        const existing = pending.get(entry.id);
         if (existing) {
           existing.count += 1;
           existing.latestAt = accessedAt;
@@ -137,7 +170,7 @@ export function createAccessTracker(
           if (pending.size >= MAX_PENDING_SIZE) {
             doFlush();
           }
-          pending.set(id, { count: 1, latestAt: accessedAt });
+          pending.set(entry.id, { count: 1, latestAt: accessedAt, tenantId: entry.tenantId });
         }
       }
 

@@ -9,7 +9,7 @@
  * DCs: DC-P12-103, DC-P12-801, DC-P12-802
  */
 
-import type { DatabaseConnection } from '../kernel/interfaces/database.js';
+import type { TenantScopedConnection } from '../kernel/tenant/tenant_scope.js';
 import type { TimeProvider } from '../kernel/interfaces/time.js';
 import type { ImportanceScore, ImportanceWeights } from './cognitive_types.js';
 import { DEFAULT_IMPORTANCE_WEIGHTS } from './cognitive_types.js';
@@ -42,17 +42,16 @@ const GOVERNANCE_WEIGHT_MAP: Record<string, number> = {
  * @returns ImportanceScore or null if claim not found
  */
 export function computeImportance(
-  conn: DatabaseConnection,
+  conn: TenantScopedConnection,
   claimId: string,
-  tenantId: string | null,
+  _tenantId: string | null,
   time: TimeProvider,
   weights: ImportanceWeights = DEFAULT_IMPORTANCE_WEIGHTS,
   stabilityConfig?: StabilityConfig,
 ): ImportanceScore | null {
   // 1. Get the claim
-  const tenantClause = tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL';
-  const tenantParams = tenantId !== null ? [claimId, tenantId] : [claimId];
-
+  // F-R1-003 FIX: conn.get() auto-injects tenant_id via TenantScopedConnection.
+  // Manual tenantClause removed to prevent double filtering with duplicate params.
   const claim = conn.get<{
     id: string;
     confidence: number;
@@ -64,8 +63,8 @@ export function computeImportance(
   }>(
     `SELECT id, confidence, valid_at, access_count, last_accessed_at, predicate, classification
      FROM claim_assertions
-     WHERE id = ? ${tenantClause} AND status = 'active'`,
-    tenantParams,
+     WHERE id = ? AND status = 'active'`,
+    [claimId],
   );
 
   if (!claim) return null;
@@ -73,10 +72,11 @@ export function computeImportance(
   const nowMs = time.nowMs();
 
   // 2. Access frequency: log(1 + count) / log(1 + MAX(count))
+  // F-R1-003 FIX: conn.get() auto-injects tenant_id. Manual clause removed.
   const maxAccessRow = conn.get<{ max_count: number }>(
     `SELECT MAX(access_count) as max_count FROM claim_assertions
-     WHERE status = 'active' ${tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL'}`,
-    tenantId !== null ? [tenantId] : [],
+     WHERE status = 'active'`,
+    [],
   );
   const maxAccessCount = maxAccessRow?.max_count ?? 0;
   const accessFrequency = maxAccessCount > 0
@@ -148,18 +148,16 @@ export function computeImportance(
  * @returns Number of claims scored
  */
 export function computeBatchImportance(
-  conn: DatabaseConnection,
+  conn: TenantScopedConnection,
   tenantId: string | null,
   time: TimeProvider,
   weights: ImportanceWeights = DEFAULT_IMPORTANCE_WEIGHTS,
   stabilityConfig?: StabilityConfig,
 ): number {
-  const tenantClause = tenantId !== null ? 'WHERE tenant_id = ?' : 'WHERE tenant_id IS NULL';
-  const tenantParams = tenantId !== null ? [tenantId] : [];
-
+  // F-R1-003 FIX: conn.query() auto-injects tenant_id. Manual clause removed.
   const claims = conn.query<{ id: string }>(
-    `SELECT id FROM claim_assertions ${tenantClause} AND status = 'active'`,
-    tenantParams,
+    `SELECT id FROM claim_assertions WHERE status = 'active'`,
+    [],
   );
 
   let scored = 0;

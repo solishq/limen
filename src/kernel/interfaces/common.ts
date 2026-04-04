@@ -50,7 +50,13 @@ export type Permission =
   // Phase 10: Governance permissions (I-P10-41: MUST NOT activate dormant RBAC)
   | 'classify_claims' | 'manage_classification_rules'
   | 'manage_protected_predicates'
-  | 'request_erasure' | 'export_compliance';
+  | 'request_erasure' | 'export_compliance'
+  // v2.1.0 Phase 2: Fine-grained permissions (Permission Gateway)
+  | 'assert_claim' | 'retract_claim' | 'query_claims' | 'relate_claims'
+  | 'write_wm' | 'read_wm'
+  | 'manage_consent' | 'view_consent'
+  | 'manage_cognitive'
+  | 'manage_agents';
 
 /**
  * Operation context for identity threading and RBAC enforcement.

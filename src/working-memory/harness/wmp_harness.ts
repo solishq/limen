@@ -17,6 +17,9 @@
  *   - CheckpointCoordinator (src/orchestration/checkpoints/) — Trigger 1 wiring
  *   - CCP ClaimSystem (src/claims/) — Trigger 4 wiring
  *   - CGP ContextGovernor (src/context/) — P2 internal reader wiring
+ *
+ * v2.1.0: InstanceContext threading for C-06 independent instances.
+ * wmpConnectionRef and monotonicClock are threaded through all factories.
  */
 
 import type {
@@ -31,6 +34,7 @@ import { WMP_NULL_EVENT_SINK } from '../interfaces/wmp_types.js';
 // Cross-subsystem adapter types
 import type { WmpInternalReader } from '../../context/interfaces/cgp_types.js';
 import type { WmpPreEmissionCapture } from '../../claims/interfaces/claim_types.js';
+import type { DatabaseConnection } from '../../kernel/interfaces/database.js';
 
 // Store creators — P-010: all business logic lives in stores
 import {
@@ -57,9 +61,12 @@ export { NotImplementedError };
 /**
  * WMP adapter implementing WmpInternalReader (CGP §9.2).
  * Provides P2 candidate entries to the context admission runtime.
+ *
+ * v2.1.0: Accepts optional wmpConnectionRef from InstanceContext.
+ * When not provided, creates a local ref (backward compat for tests).
  */
-export function createWmpInternalReader(): WmpInternalReader {
-  return createInternalReader();
+export function createWmpInternalReader(wmpConnectionRef?: { current: DatabaseConnection | null }): WmpInternalReader {
+  return createInternalReader(wmpConnectionRef);
 }
 
 /**
@@ -81,11 +88,18 @@ export function createWmpPreEmissionCapture(): WmpPreEmissionCapture {
 /**
  * Create a WorkingMemorySystem backed by SQLite stores.
  *
+ * v2.1.0: Accepts optional InstanceContext subsets for C-06 isolation.
+ * When not provided, creates local state (backward compat for tests).
+ *
  * @param deps External dependencies (audit, events, capacity policy)
+ * @param wmpConnectionRef Per-instance connection reference from InstanceContext
+ * @param monotonicClockState Per-instance monotonic clock state from InstanceContext
  * @returns Frozen WorkingMemorySystem — all methods delegate to store implementations
  */
 export function createWorkingMemorySystem(
   deps?: Partial<WmpSystemDeps>,
+  wmpConnectionRef?: { current: DatabaseConnection | null },
+  monotonicClockState?: { lastTimestamp: string },
 ): WorkingMemorySystem {
   const capacityPolicy: WmpCapacityPolicy = deps?.capacityPolicy ?? {
     maxEntries: 100,
@@ -93,18 +107,20 @@ export function createWorkingMemorySystem(
     maxTotalBytes: 262144,
   };
   const eventSink: WmpEventSink = deps?.eventSink ?? WMP_NULL_EVENT_SINK;
+  const connRef = wmpConnectionRef ?? { current: null };
+  const clockState = monotonicClockState ?? { lastTimestamp: '' };
 
   // Create store instances
   const time = deps?.time;
-  const entryStore = createEntryStore(time);
-  const boundaryStore = createBoundaryStore(time);
+  const entryStore = createEntryStore(time, clockState);
+  const boundaryStore = createBoundaryStore(time, clockState);
   const mutationCounter = createMutationCounter();
-  const coordinator = createBoundaryCaptureCoordinator(entryStore, boundaryStore, mutationCounter, eventSink, time);
+  const coordinator = createBoundaryCaptureCoordinator(entryStore, boundaryStore, mutationCounter, eventSink, time, clockState);
 
   return Object.freeze({
-    write: createWriteHandler(entryStore, mutationCounter, capacityPolicy, eventSink),
-    read: createReadHandler(entryStore),
-    discard: createDiscardHandler(entryStore, mutationCounter, eventSink),
+    write: createWriteHandler(entryStore, mutationCounter, capacityPolicy, eventSink, connRef),
+    read: createReadHandler(entryStore, connRef),
+    discard: createDiscardHandler(entryStore, mutationCounter, eventSink, connRef),
     boundary: coordinator,
     entryStore,
     boundaryStore,

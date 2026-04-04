@@ -14,10 +14,13 @@
  *
  * CRITICAL CONSTRAINT: Self-healing MUST use RetractionReason 'incorrect' (I-P12-04).
  * The retraction taxonomy is CONSTITUTIONAL — no new values.
+ *
+ * v2.1.0: activeCascadeClaims moved from module-level to per-instance Set
+ * (InstanceContext.activeCascadeClaims). Eliminates cross-instance interference (C-06).
  */
 
 import { randomUUID } from 'node:crypto';
-import type { DatabaseConnection } from '../kernel/interfaces/database.js';
+import type { TenantScopedConnection } from '../kernel/tenant/tenant_scope.js';
 import type { OperationContext } from '../kernel/interfaces/common.js';
 import type { TimeProvider } from '../kernel/interfaces/time.js';
 import type { RetractClaimHandler } from '../claims/interfaces/claim_types.js';
@@ -32,39 +35,31 @@ import { resolveStability, type StabilityConfig } from './stability.js';
  * Injected from createLimen() at registration time.
  */
 export interface SelfHealingDeps {
-  readonly getConnection: () => DatabaseConnection;
+  readonly getConnection: () => TenantScopedConnection;
   readonly getContext: () => OperationContext;
   readonly retractClaim: RetractClaimHandler;
   readonly time: TimeProvider;
   readonly config: SelfHealingConfig;
   readonly stabilityConfig?: StabilityConfig | undefined;
+  /**
+   * v2.1.0: Per-instance cascade guard Set from InstanceContext.
+   * Replaces module-level activeCascadeClaims for C-06 isolation.
+   */
+  readonly activeCascadeClaims: Set<string>;
 }
-
-/**
- * Module-level Set tracking claim IDs currently being processed by an active
- * self-healing cascade. Prevents event re-entry from creating parallel cascades
- * with fresh depth=0 and visited=new Set() — which would defeat the depth limit.
- *
- * F-P12-003 fix: When retractClaim.execute() emits 'claim.retracted', the event
- * listener fires synchronously. Without this guard, each intermediate retraction
- * starts a NEW cascade with depth=0. This Set lets the event listener detect
- * that the retracted claim is already part of an active cascade and skip re-entry.
- *
- * Lifecycle: populated during processSelfHealing traversal, cleared when the
- * top-level cascade (depth=0) completes. Thread-safe because SQLite + event bus
- * are synchronous — no concurrent cascades possible.
- */
-const activeCascadeClaims = new Set<string>();
 
 /**
  * Check if a claim is currently being processed by an active self-healing cascade.
  * Exported for use by the event listener in createLimen().
  *
+ * v2.1.0: Now accepts the per-instance Set instead of using module-level state.
+ *
+ * @param cascadeSet - The per-instance active cascade claims Set
  * @param claimId - The claim ID to check
  * @returns true if the claim is part of an active cascade
  */
-export function isInActiveCascade(claimId: string): boolean {
-  return activeCascadeClaims.has(claimId);
+export function isInActiveCascade(cascadeSet: Set<string>, claimId: string): boolean {
+  return cascadeSet.has(claimId);
 }
 
 /**
@@ -81,7 +76,7 @@ export function isInActiveCascade(claimId: string): boolean {
  * I-P12-05: Every auto-retraction logged in consolidation_log.
  *
  * @param retractedClaimId - The claim that was just retracted (trigger)
- * @param deps - Self-healing dependencies
+ * @param deps - Self-healing dependencies (includes activeCascadeClaims Set)
  * @param visited - Set of already-visited claim IDs (cycle prevention)
  * @param depth - Current cascade depth
  * @returns Array of self-healing events (for testing/observability)
@@ -93,7 +88,7 @@ export function processSelfHealing(
   depth: number = 0,
 ): SelfHealingEvent[] {
   const isTopLevel = depth === 0;
-  const { config, time } = deps;
+  const { config, time, activeCascadeClaims } = deps;
 
   // Guard: disabled
   if (!config.enabled) return [];

@@ -27,11 +27,14 @@ describe('Phase 4: Conflict detection constants', () => {
 // Structural Conflict Detection (Mock Database)
 // ============================================================================
 
-function createMockConn(conflicts: Array<{ id: string }>) {
-  return {
+import type { TenantScopedConnection } from '../../src/kernel/tenant/tenant_scope.js';
+
+function createMockConn(conflicts: Array<{ id: string }>): TenantScopedConnection {
+  const conn = {
     dataDir: '/tmp/test',
     schemaVersion: 40,
     tenancyMode: 'single' as const,
+    tenantId: null,
     transaction: <T>(fn: () => T): T => fn(),
     run: () => ({ changes: 0, lastInsertRowid: 0 }),
     close: () => ({ ok: true as const, value: undefined }),
@@ -40,6 +43,7 @@ function createMockConn(conflicts: Array<{ id: string }>) {
     },
     get: <T>(): T | undefined => undefined,
   };
+  return { ...conn, raw: conn } as TenantScopedConnection;
 }
 
 describe('Phase 4: detectStructuralConflicts (DC-P4-101, DC-P4-102)', () => {

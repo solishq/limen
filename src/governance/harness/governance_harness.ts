@@ -6,6 +6,9 @@
  * Status: IMPLEMENTED — all methods backed by SQLite stores.
  *
  * Pattern: Follows src/working-memory/harness/wmp_harness.ts.
+ *
+ * v2.1.0: TimeProvider threaded directly to each factory function.
+ * setGovernanceTimeProvider() is now a no-op (module-level _govTime eliminated).
  */
 
 import type { RunStore, AttemptStore } from '../../kernel/interfaces/run_identity.js';
@@ -89,31 +92,37 @@ export interface GovernanceSystem {
 /**
  * Create a GovernanceSystem with all real SQLite-backed implementations.
  *
+ * v2.1.0: TimeProvider is threaded directly to each factory function.
+ * setGovernanceTimeProvider() is retained for backward compat but is now a no-op.
+ *
+ * @param time Optional TimeProvider for deterministic temporal logic (Hard Stop #7)
  * @returns Frozen GovernanceSystem — all stores backed by SQLite
  */
 export function createGovernanceSystem(time?: TimeProvider): GovernanceSystem {
-  // Hard Stop #7: Inject time provider into governance module stores
+  // v2.1.0: setGovernanceTimeProvider is now a no-op.
+  // Retained call for backward compat (tests may import and call it).
   if (time) setGovernanceTimeProvider(time);
+
   // Wire dependency graph: TransitionEnforcer depends on SuspensionStore,
   // TraceEmitter depends on RunSequencer
-  const suspensionStore = createSuspensionStoreImpl();
+  const suspensionStore = createSuspensionStoreImpl(time);
   const sequencer = createRunSequencerImpl();
 
   return Object.freeze({
-    runStore: createRunStoreImpl(),
+    runStore: createRunStoreImpl(time),
     attemptStore: createAttemptStoreImpl(),
-    traceEmitter: createTraceEmitterImpl(sequencer),
+    traceEmitter: createTraceEmitterImpl(sequencer, time),
     traceEventStore: createTraceEventStoreImpl(),
-    contractStore: createMissionContractStoreImpl(),
-    constitutionalModeStore: createConstitutionalModeStoreImpl(),
+    contractStore: createMissionContractStoreImpl(time),
+    constitutionalModeStore: createConstitutionalModeStoreImpl(time),
     supervisorDecisionStore: createSupervisorDecisionStoreImpl(),
     suspensionStore,
-    handoffStore: createHandoffStoreImpl(),
-    transitionEnforcer: createTransitionEnforcerImpl(suspensionStore),
+    handoffStore: createHandoffStoreImpl(time),
+    transitionEnforcer: createTransitionEnforcerImpl(suspensionStore, time),
     evalCaseStore: createEvalCaseStoreImpl(),
     capabilityManifestStore: createCapabilityManifestStoreImpl(),
-    idempotencyStore: createIdempotencyStoreImpl(),
-    resumeTokenStore: createResumeTokenStoreImpl(),
+    idempotencyStore: createIdempotencyStoreImpl(time),
+    resumeTokenStore: createResumeTokenStoreImpl(time),
     payloadCanonicalizer: createPayloadCanonicalizerImpl(),
   });
 }
