@@ -59,142 +59,158 @@ export function createRetentionScheduler(auditTrail?: AuditTrail, time?: TimePro
      * S ref: §35 (automated retention execution)
      */
     executeRetention(conn: DatabaseConnection, _ctx: OperationContext): Result<RetentionRunResult> {
+      const runId = randomUUID();
       try {
-        const runId = randomUUID();
-        let recordsArchived = 0;
-        let recordsDeleted = 0;
-        const policiesApplied: string[] = [];
+        // Phase 3 fix: Wrap entire retention execution in transaction so partial
+        // deletions are rolled back on failure. Also update run status to 'failed'
+        // in catch block (previously stayed 'running' forever on error).
+        const result = conn.transaction(() => {
+          let recordsArchived = 0;
+          let recordsDeleted = 0;
+          const policiesApplied: string[] = [];
 
-        // Get active policies
-        const policies = conn.query<{
-          id: string; data_type: string; retention_days: number;
-          action: string; enabled: number;
-        }>(
-          `SELECT id, data_type, retention_days, action, enabled
-           FROM core_retention_policies WHERE enabled = 1`
-        );
+          // Get active policies
+          const policies = conn.query<{
+            id: string; data_type: string; retention_days: number;
+            action: string; enabled: number;
+          }>(
+            `SELECT id, data_type, retention_days, action, enabled
+             FROM core_retention_policies WHERE enabled = 1`
+          );
 
-        // Record the run start
-        conn.run(
-          `INSERT INTO core_retention_runs (id, started_at, policies_applied, status)
-           VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'running')`,
-          [runId, JSON.stringify(policies.map(p => p.id))]
-        );
+          // Record the run start
+          conn.run(
+            `INSERT INTO core_retention_runs (id, started_at, policies_applied, status)
+             VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'running')`,
+            [runId, JSON.stringify(policies.map(p => p.id))]
+          );
 
-        for (const policy of policies) {
-          if (policy.retention_days === 0) continue; // 0 = indefinite
+          for (const policy of policies) {
+            if (policy.retention_days === 0) continue; // 0 = indefinite
 
-          const cutoffMs = clock.nowMs() - (policy.retention_days * 24 * 60 * 60 * 1000);
-          const cutoff = new Date(cutoffMs).toISOString();
+            const cutoffMs = clock.nowMs() - (policy.retention_days * 24 * 60 * 60 * 1000);
+            const cutoff = new Date(cutoffMs).toISOString();
 
-          // CF-018: Execute retention per data type
-          switch (policy.data_type) {
-            case 'events': {
-              if (policy.action === 'delete') {
-                const result = conn.run(
-                  `DELETE FROM obs_events WHERE created_at < ? AND delivered = 1`,
-                  [cutoff]
+            // CF-018: Execute retention per data type
+            switch (policy.data_type) {
+              case 'events': {
+                if (policy.action === 'delete') {
+                  const result = conn.run(
+                    `DELETE FROM obs_events WHERE created_at < ? AND delivered = 1`,
+                    [cutoff]
+                  );
+                  recordsDeleted += result.changes;
+                }
+                break;
+              }
+
+              case 'sessions': {
+                // Delete conversation turns for old conversations, then conversations, then sessions
+                const oldConvs = conn.query<{ id: string }>(
+                  `SELECT id FROM core_conversations WHERE created_at < ?`, [cutoff]
                 );
-                recordsDeleted += result.changes;
-              }
-              break;
-            }
-
-            case 'sessions': {
-              // Delete conversation turns for old conversations, then conversations, then sessions
-              const oldConvs = conn.query<{ id: string }>(
-                `SELECT id FROM core_conversations WHERE created_at < ?`, [cutoff]
-              );
-              for (const conv of oldConvs) {
+                for (const conv of oldConvs) {
+                  recordsDeleted += conn.run(
+                    `DELETE FROM core_conversation_turns WHERE conversation_id = ?`, [conv.id]
+                  ).changes;
+                }
                 recordsDeleted += conn.run(
-                  `DELETE FROM core_conversation_turns WHERE conversation_id = ?`, [conv.id]
+                  `DELETE FROM core_conversations WHERE created_at < ?`, [cutoff]
                 ).changes;
+                break;
               }
-              recordsDeleted += conn.run(
-                `DELETE FROM core_conversations WHERE created_at < ?`, [cutoff]
-              ).changes;
-              break;
-            }
 
-            case 'artifacts': {
-              // Delete artifact dependencies first, then artifacts
-              const oldArtifacts = conn.query<{ id: string }>(
-                `SELECT id FROM core_artifacts WHERE created_at < ?`, [cutoff]
-              );
-              for (const art of oldArtifacts) {
-                recordsDeleted += conn.run(
-                  `DELETE FROM core_artifact_dependencies WHERE artifact_id = ?`, [art.id]
-                ).changes;
-              }
-              recordsDeleted += conn.run(
-                `DELETE FROM core_artifacts WHERE created_at < ?`, [cutoff]
-              ).changes;
-              break;
-            }
-
-            case 'audit': {
-              // I-06: Audit entries are NEVER deleted. Use tombstone (CF-035) or archive.
-              if (auditTrail && policy.action === 'archive') {
-                // Tombstone audit entries per tenant for entries older than cutoff
-                // Find distinct tenants with old entries
-                const tenants = conn.query<{ tenant_id: string }>(
-                  `SELECT DISTINCT tenant_id FROM core_audit_log WHERE timestamp < ? AND tenant_id IS NOT NULL`,
-                  [cutoff]
+              case 'artifacts': {
+                // Delete artifact dependencies first, then artifacts
+                const oldArtifacts = conn.query<{ id: string }>(
+                  `SELECT id FROM core_artifacts WHERE created_at < ?`, [cutoff]
                 );
-                for (const t of tenants) {
-                  const result = auditTrail.tombstone(conn, t.tenant_id as TenantId);
-                  if (result.ok) {
-                    recordsArchived += result.value.tombstonedEntries;
+                for (const art of oldArtifacts) {
+                  recordsDeleted += conn.run(
+                    `DELETE FROM core_artifact_dependencies WHERE artifact_id = ?`, [art.id]
+                  ).changes;
+                }
+                recordsDeleted += conn.run(
+                  `DELETE FROM core_artifacts WHERE created_at < ?`, [cutoff]
+                ).changes;
+                break;
+              }
+
+              case 'audit': {
+                // I-06: Audit entries are NEVER deleted. Use tombstone (CF-035) or archive.
+                if (auditTrail && policy.action === 'archive') {
+                  // Tombstone audit entries per tenant for entries older than cutoff
+                  // Find distinct tenants with old entries
+                  const tenants = conn.query<{ tenant_id: string }>(
+                    `SELECT DISTINCT tenant_id FROM core_audit_log WHERE timestamp < ? AND tenant_id IS NOT NULL`,
+                    [cutoff]
+                  );
+                  for (const t of tenants) {
+                    const tombResult = auditTrail.tombstone(conn, t.tenant_id as TenantId);
+                    if (tombResult.ok) {
+                      recordsArchived += tombResult.value.tombstonedEntries;
+                    }
                   }
                 }
+                break;
               }
-              break;
+
+              case 'interactions': {
+                // PRR-PE-016: Retain chat interaction records for technique extraction,
+                // then delete after retention period to prevent unbounded table growth.
+                if (policy.action === 'delete') {
+                  const result = conn.run(
+                    `DELETE FROM core_interactions WHERE created_at < ?`,
+                    [cutoff]
+                  );
+                  recordsDeleted += result.changes;
+                }
+                break;
+              }
+
+              case 'memories':
+              case 'techniques': {
+                // CF-002 dependency: core_memories and core_techniques tables don't exist yet.
+                // These will be handled when the learning system (SS29) is implemented.
+                break;
+              }
             }
 
-            case 'interactions': {
-              // PRR-PE-016: Retain chat interaction records for technique extraction,
-              // then delete after retention period to prevent unbounded table growth.
-              if (policy.action === 'delete') {
-                const result = conn.run(
-                  `DELETE FROM core_interactions WHERE created_at < ?`,
-                  [cutoff]
-                );
-                recordsDeleted += result.changes;
-              }
-              break;
-            }
-
-            case 'memories':
-            case 'techniques': {
-              // CF-002 dependency: core_memories and core_techniques tables don't exist yet.
-              // These will be handled when the learning system (SS29) is implemented.
-              break;
-            }
+            policiesApplied.push(policy.id);
           }
 
-          policiesApplied.push(policy.id);
-        }
+          // Update run status
+          conn.run(
+            `UPDATE core_retention_runs SET
+             completed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+             policies_applied = ?, records_archived = ?, records_deleted = ?,
+             status = 'completed'
+             WHERE id = ?`,
+            [JSON.stringify(policiesApplied), recordsArchived, recordsDeleted, runId]
+          );
 
-        // Update run status
-        conn.run(
-          `UPDATE core_retention_runs SET
-           completed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-           policies_applied = ?, records_archived = ?, records_deleted = ?,
-           status = 'completed'
-           WHERE id = ?`,
-          [JSON.stringify(policiesApplied), recordsArchived, recordsDeleted, runId]
-        );
-
-        return {
-          ok: true,
-          value: {
+          return {
             runId,
             recordsArchived,
             recordsDeleted,
             policiesApplied,
-          },
-        };
+          };
+        });
+
+        return { ok: true, value: result };
       } catch (err) {
+        // Phase 3 fix: Update run status to 'failed' on error.
+        // Previously the run stayed 'running' forever after a failure.
+        try {
+          conn.run(
+            `UPDATE core_retention_runs SET
+             completed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+             status = 'failed'
+             WHERE id = ?`,
+            [runId]
+          );
+        } catch { /* best-effort status update — don't mask original error */ }
+
         return {
           ok: false,
           error: {
