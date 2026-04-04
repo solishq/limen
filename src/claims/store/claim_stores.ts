@@ -117,6 +117,14 @@ function newId(): string {
   return randomUUID();
 }
 
+/**
+ * Escape SQL LIKE wildcard characters in user input.
+ * Prevents '%' and '_' in subject/predicate prefixes from being interpreted as wildcards.
+ */
+function escapeLikeWildcards(input: string): string {
+  return input.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
 /** DC-CCP-307: Compute idempotency hash from claim input payload */
 function computeIdempotencyHash(input: ClaimCreateInput): string {
   const payload = JSON.stringify({
@@ -493,22 +501,22 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
       // Exclude tombstoned claims from ALL queries
       conditions.push('c.purged_at IS NULL');
 
-      // Subject filter
+      // Subject filter (escape LIKE metacharacters in prefix to prevent injection)
       if (filters.subject !== undefined && filters.subject !== null) {
         if (filters.subject.endsWith('*')) {
-          conditions.push('c.subject LIKE ?');
-          params.push(filters.subject.slice(0, -1) + '%');
+          conditions.push("c.subject LIKE ? ESCAPE '\\'");
+          params.push(escapeLikeWildcards(filters.subject.slice(0, -1)) + '%');
         } else {
           conditions.push('c.subject = ?');
           params.push(filters.subject);
         }
       }
 
-      // Predicate filter
+      // Predicate filter (escape LIKE metacharacters in prefix to prevent injection)
       if (filters.predicate !== undefined && filters.predicate !== null) {
         if (filters.predicate.endsWith('*')) {
-          conditions.push('c.predicate LIKE ?');
-          params.push(filters.predicate.slice(0, -1) + '%');
+          conditions.push("c.predicate LIKE ? ESCAPE '\\'");
+          params.push(escapeLikeWildcards(filters.predicate.slice(0, -1)) + '%');
         } else {
           conditions.push('c.predicate = ?');
           params.push(filters.predicate);
