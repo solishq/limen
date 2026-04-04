@@ -147,6 +147,9 @@ import { processSelfHealing, isInActiveCascade } from '../cognitive/self_healing
 import { DEFAULT_SELF_HEALING_CONFIG } from '../cognitive/cognitive_types.js';
 import type { SelfHealingConfig } from '../cognitive/cognitive_types.js';
 
+// Phase 5 fix: FTS5 retraction guard migration (v46)
+import { getFts5RetractionGuardMigrations } from './migration/037_fts5_retraction_guard.js';
+
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
 
@@ -464,6 +467,7 @@ function buildOrchestrationAdapter(
       ...getGovernanceSuiteMigrations(),                       // v43: Phase 10 governance suite
       ...getVectorSearchMigrations(),                          // v44: Phase 11 vector search
       ...getCognitiveEngineMigrations(),                         // v45: Phase 12 cognitive engine
+      ...getFts5RetractionGuardMigrations(),                      // v46: Phase 5 fix — FTS5 retraction guard
     ]);
     if (!phase4Governance.ok) {
       conn.close();
@@ -718,6 +722,8 @@ export async function createLimen(
         ...getSecurityHardeningMigrations(),
         ...getGovernanceSuiteMigrations(),
         ...getVectorSearchMigrations(),
+        ...getCognitiveEngineMigrations(),
+        ...getFts5RetractionGuardMigrations(),
       ]);
       if (recoveryMigResult.ok) {
         // P0-A: Pass transition service to recovery for governance-enforced transitions.
@@ -864,6 +870,9 @@ export async function createLimen(
       }));
     },
     getRbacActive: () => kernel.rbac.isActive(),
+    // Phase 11+: Lazy getter for vector store — initialized after createClaimSystem.
+    // I-P11-30: Retraction deletes stale embedding.
+    getVectorStore: () => vectorStore,
   });
 
   // WMP working memory system (closure-local — DC-P4-406, C-SEC-05)
