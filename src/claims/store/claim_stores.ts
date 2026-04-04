@@ -29,6 +29,7 @@ import type {
   TenantId, AgentId, MissionId, TaskId, ArtifactId,
   OperationContext, Result,
 } from '../../kernel/interfaces/index.js';
+import { propagateError } from '../../kernel/interfaces/index.js';
 import type { CorrelationId, RunId } from '../../kernel/interfaces/governance_ids.js';
 import type {
   ClaimStore, ClaimEvidenceStore, ClaimRelationshipStore, ClaimArtifactRefStore,
@@ -1526,7 +1527,7 @@ function createAssertClaimHandlerImpl(
 
         // 15. Create claim
         const createResult = stores.store.create(conn, ctx, input);
-        if (!createResult.ok) return createResult as unknown as Result<AssertClaimOutput>;
+        if (!createResult.ok) return propagateError<AssertClaimOutput>(createResult);
         const claim = createResult.value;
 
         // 15b. Phase 9: Write security scan columns (I-P9-01, I-P9-03: same transaction)
@@ -1582,7 +1583,7 @@ function createAssertClaimHandlerImpl(
         // 16. Create evidence rows
         if (input.evidenceRefs.length > 0) {
           const evResult = stores.evidence.createBatch(conn, claim.id, input.evidenceRefs);
-          if (!evResult.ok) return evResult as unknown as Result<AssertClaimOutput>;
+          if (!evResult.ok) return propagateError<AssertClaimOutput>(evResult);
         }
 
         // 17. Create artifact junction rows for artifact evidence
@@ -1937,7 +1938,7 @@ function createRelateClaimsHandlerImpl(
 
         // 10. Create relationship
         const createResult = stores.relationships.create(conn, ctx, input);
-        if (!createResult.ok) return createResult as unknown as Result<RelateClaimsOutput>;
+        if (!createResult.ok) return propagateError<RelateClaimsOutput>(createResult);
 
         // 11. Audit (I-03)
         deps.audit.append(conn, {

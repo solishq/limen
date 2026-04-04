@@ -726,7 +726,7 @@ export class ChatPipeline {
 
         // Pipeline complete, no more chunks
         if (stallTimer) clearTimeout(stallTimer);
-        return { value: undefined as unknown as StreamChunk, done: true };
+        return { value: undefined!, done: true };
       },
 
       async return(): Promise<IteratorResult<StreamChunk>> {
@@ -734,14 +734,14 @@ export class ChatPipeline {
         if (stallTimer) clearTimeout(stallTimer);
         abortController.abort();
         if (drainResolve) { drainResolve(); drainResolve = null; }
-        return { value: undefined as unknown as StreamChunk, done: true };
+        return { value: undefined!, done: true };
       },
 
       async throw(_error: Error): Promise<IteratorResult<StreamChunk>> {
         if (stallTimer) clearTimeout(stallTimer);
         abortController.abort();
         if (drainResolve) { drainResolve(); drainResolve = null; }
-        return { value: undefined as unknown as StreamChunk, done: true };
+        return { value: undefined!, done: true };
       },
     };
   }
