@@ -1462,6 +1462,9 @@ export interface DataApi {
 
   /** I-02: Selective purge. Permission: 'purge_data' */
   purge(filter: PurgeFilter): Promise<{ purged: number }>;
+
+  /** GDPR: Purge ALL data for a specific tenant across all tenant-scoped tables. Permission: 'purge_data' */
+  purgeByTenant(tenantId: string): Promise<{ purged: number }>;
 }
 
 // ============================================================================

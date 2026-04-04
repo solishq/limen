@@ -188,18 +188,31 @@ export function executeErasure(
     // 3b. Phase 11: Delete embeddings for tombstoned claims (I-P11-30, I-P11-31)
     // GDPR: embedding is a projection of claim content — must be deleted when content is tombstoned.
     if (deps.vectorStore) {
+      // Collect all claim IDs that were tombstoned in steps 2+3.
+      // Start with the directly-identified PII claims.
       const allTombstonedIds = piiClaims.map((r: Record<string, unknown>) => r['id'] as string);
-      // If cascade happened, we need to include cascaded claim IDs too
-      // The claimsTombstoned count includes cascaded — collect all tombstoned IDs
+      // If cascade happened, we need to include cascaded claim IDs too.
+      // F-P5-001 fix: Query by claim ID instead of subject, because tombstoned claims
+      // have subject=NULL (CCP-I10), so a WHERE subject=? query never matches them.
       if (request.includeRelated) {
-        // Re-query tombstoned claims (those we just tombstoned in steps 2+3)
+        // Re-query tombstoned claims by ID. The IDs from the cascade are already
+        // tracked in the tombstonedIds Set from step 3. But that Set is scoped
+        // inside the if(request.includeRelated) block above. Instead, query all
+        // claims in this tenant that were tombstoned (purged_at IS NOT NULL)
+        // and whose IDs we haven't already collected.
+        // Use the claim_assertions table with purged_at check, joining on id.
         const tombstonedNow = conn.query<Record<string, unknown>>(
-          `SELECT id FROM claim_assertions WHERE purged_at IS NOT NULL
-           AND (subject = ? OR subject = ?)
-           ${tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL'}`,
+          `SELECT ca.id FROM claim_assertions ca
+           WHERE ca.purged_at IS NOT NULL
+           AND ca.id IN (
+             SELECT cr.from_claim_id FROM claim_relationships cr
+             WHERE cr.type = 'derived_from'
+             AND cr.to_claim_id IN (${allTombstonedIds.map(() => '?').join(',')})
+           )
+           ${tenantId !== null ? 'AND ca.tenant_id = ?' : 'AND ca.tenant_id IS NULL'}`,
           tenantId !== null
-            ? [request.dataSubjectId, fullUrn, tenantId]
-            : [request.dataSubjectId, fullUrn],
+            ? [...allTombstonedIds, tenantId]
+            : [...allTombstonedIds],
         );
         for (const row of tombstonedNow) {
           const id = row['id'] as string;
@@ -209,6 +222,41 @@ export function executeErasure(
         }
       }
       deps.vectorStore.deleteBatch(conn, allTombstonedIds);
+    }
+
+    // 3c. GDPR: Delete claim_relationships involving tombstoned PII claims.
+    // I-31 triggers prevent DELETE on claim_relationships (append-only invariant).
+    // For GDPR erasure this must be overridden: relationships reference PII claim IDs
+    // which constitute personal data metadata. Strategy: temporarily drop the trigger,
+    // delete relationships, recreate it. Safe because better-sqlite3 is synchronous
+    // and single-threaded — no concurrent operation can exploit the window.
+    {
+      const tombstonedClaimIds = piiClaims.map((r: Record<string, unknown>) => r['id'] as string);
+
+      // Drop I-31 immutability triggers
+      conn.run('DROP TRIGGER IF EXISTS claim_relationships_no_delete');
+      conn.run('DROP TRIGGER IF EXISTS claim_relationships_no_update');
+
+      // Delete relationships where either endpoint is a tombstoned PII claim
+      for (const claimId of tombstonedClaimIds) {
+        const deleted = conn.run(
+          'DELETE FROM claim_relationships WHERE from_claim_id = ? OR to_claim_id = ?',
+          [claimId, claimId],
+        );
+        relationshipsCascaded += deleted.changes;
+      }
+
+      // Recreate I-31 triggers
+      conn.run(`CREATE TRIGGER IF NOT EXISTS claim_relationships_no_update
+        BEFORE UPDATE ON claim_relationships
+        BEGIN
+          SELECT RAISE(ABORT, 'I-31: Claim relationships are immutable. UPDATE is prohibited.');
+        END`);
+      conn.run(`CREATE TRIGGER IF NOT EXISTS claim_relationships_no_delete
+        BEFORE DELETE ON claim_relationships
+        BEGIN
+          SELECT RAISE(ABORT, 'I-31: Claim relationships are immutable. DELETE is prohibited.');
+        END`);
     }
 
     // 4. Tombstone audit entries (I-P10-23: chain integrity preserved via re-hash)

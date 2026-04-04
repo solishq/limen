@@ -768,6 +768,13 @@ export interface ClaimSystemDeps {
    * When provided, used instead of module-level cache. When absent, a local cache is created.
    */
   readonly schemaCache?: import('../../kernel/interfaces/instance_context.js').SchemaDetectionCache;
+  /**
+   * Phase 11+: Lazy getter for vector store (embedding cleanup on retraction).
+   * Getter pattern because vectorStore is initialized after ClaimSystem.
+   * When a claim is retracted, its vector embedding is stale and must be deleted.
+   * I-P11-30: Tombstone/retraction deletes embedding.
+   */
+  readonly getVectorStore?: () => import('../../vector/vector_store.js').VectorStore | null;
 }
 
 /**

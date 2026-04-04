@@ -932,13 +932,14 @@ describe('Phase 8: Dependency Boundary', () => {
     // Phase 10 added 034_governance_suite.ts (v43).
     // Phase 11 added 035_vector_search.ts (v44).
     // Phase 12 added 036_cognitive_engine.ts (v45).
-    // Verify that only 032, 033, 034, 035, or 036 are the latest.
+    // Phase 5 fix added 037_fts5_retraction_guard.ts (v46).
+    // Verify that only known migrations are the latest.
     const migrationDir = path.join(process.cwd(), 'src', 'api', 'migration');
     const files = fs.readdirSync(migrationDir).filter(f => f.endsWith('.ts')).sort();
     const lastMig = files[files.length - 1]!;
     assert.ok(
-      lastMig.includes('036') || lastMig.includes('035') || lastMig.includes('034') || lastMig.includes('033') || lastMig.includes('032'),
-      `Last migration should be 032 (Phase 5), 033 (Phase 9), 034 (Phase 10), 035 (Phase 11), or 036 (Phase 12). Got: ${lastMig}`,
+      lastMig.includes('037') || lastMig.includes('036') || lastMig.includes('035') || lastMig.includes('034') || lastMig.includes('033') || lastMig.includes('032'),
+      `Last migration should be 032-037 (Phase 5 through Phase 12 + fixes). Got: ${lastMig}`,
     );
   });
 });
