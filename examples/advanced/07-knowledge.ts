@@ -1,5 +1,5 @@
-import { createLimen } from '../src/api/index.js';
-import type { TenantId, AgentId, MissionId, TaskId } from '../src/api/index.js';
+import { createLimen } from 'limen-ai';
+import type { TenantId, AgentId, MissionId, TaskId } from 'limen-ai';
 
 const limen = await createLimen();
 

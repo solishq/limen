@@ -1,5 +1,5 @@
-import { createLimen, resolveDefaults } from '../src/api/index.js';
-import type { LimenLogEvent } from '../src/api/index.js';
+import { createLimen, resolveDefaults } from 'limen-ai';
+import type { LimenLogEvent } from 'limen-ai';
 
 // ─── Making Governance Visible ───
 //
