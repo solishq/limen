@@ -31,10 +31,9 @@ import type {
   SearchClaimInput, SearchClaimResult,
 } from '../../claims/interfaces/claim_types.js';
 
-// v2.1.0 Phase 2: RBAC + rate limiting removed from facade.
-// The Permission Gateway (src/api/gateway/permission_gateway.ts) now enforces
-// RBAC and rate limiting structurally at the API surface. Facade delegates directly.
-// requirePermission and requireRateLimit previously imported here are no longer needed.
+// DC-P4-404: RBAC enforcement at facade level (I-13 authorization completeness).
+// Defense-in-depth: facade enforces RBAC even when called directly by orchestration.
+import { requirePermission } from '../enforcement/rbac_guard.js';
 
 // ============================================================================
 // RawClaimFacade — internal facade interface (conn, ctx, input)
@@ -73,7 +72,7 @@ export interface RawClaimFacade {
  */
 export function createRawClaimFacade(
   claimSystem: ClaimSystem,
-  _rbac: RbacEngine,
+  rbac: RbacEngine,
   _rateLimiter: RateLimiter,
 ): RawClaimFacade {
   return Object.freeze({
@@ -86,7 +85,7 @@ export function createRawClaimFacade(
       ctx: OperationContext,
       input: ClaimCreateInput,
     ): Result<AssertClaimOutput> {
-      // v2.1.0: RBAC + rate limiting enforced by Permission Gateway (assert_claim)
+      requirePermission(rbac, ctx, 'assert_claim');
       return claimSystem.assertClaim.execute(conn, ctx, input);
     },
 
@@ -99,7 +98,7 @@ export function createRawClaimFacade(
       ctx: OperationContext,
       input: RelationshipCreateInput,
     ): Result<RelateClaimsOutput> {
-      // v2.1.0: RBAC + rate limiting enforced by Permission Gateway (relate_claims)
+      requirePermission(rbac, ctx, 'relate_claims');
       return claimSystem.relateClaims.execute(conn, ctx, input);
     },
 
@@ -112,7 +111,7 @@ export function createRawClaimFacade(
       ctx: OperationContext,
       input: ClaimQueryInput,
     ): Result<ClaimQueryResult> {
-      // v2.1.0: RBAC + rate limiting enforced by Permission Gateway (query_claims)
+      requirePermission(rbac, ctx, 'query_claims');
       return claimSystem.queryClaims.execute(conn, ctx, input);
     },
 
@@ -126,7 +125,7 @@ export function createRawClaimFacade(
       ctx: OperationContext,
       input: RetractClaimInput,
     ): Result<void> {
-      // v2.1.0: RBAC + rate limiting enforced by Permission Gateway (retract_claim)
+      requirePermission(rbac, ctx, 'retract_claim');
       return claimSystem.retractClaim.execute(conn, ctx, input);
     },
 
@@ -139,7 +138,7 @@ export function createRawClaimFacade(
       ctx: OperationContext,
       input: SearchClaimInput,
     ): Result<SearchClaimResult> {
-      // v2.1.0: RBAC + rate limiting enforced by Permission Gateway (query_claims)
+      requirePermission(rbac, ctx, 'query_claims');
       return claimSystem.store.search(conn, ctx.tenantId, input);
     },
   });

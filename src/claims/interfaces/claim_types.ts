@@ -796,7 +796,7 @@ export interface WmpPreEmissionCapture {
  */
 export interface WmpCaptureResult {
   /** Boundary event ID referencing the WMP snapshot */
-  readonly captureId: string;
+  readonly captureId: string | null;
   /**
    * WMP sourcing status per WMP §10.2:
    * 'not_verified': v1 default for tasks with initialized WMP

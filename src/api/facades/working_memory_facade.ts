@@ -29,9 +29,9 @@ import type {
   DiscardWorkingMemoryInput, DiscardWorkingMemoryOutput,
 } from '../../working-memory/interfaces/wmp_types.js';
 
-// v2.1.0 Phase 2: RBAC + rate limiting removed from facade.
-// The Permission Gateway (src/api/gateway/permission_gateway.ts) now enforces
-// RBAC and rate limiting structurally at the API surface. Facade delegates directly.
+// DC-P4-405: RBAC enforcement at facade level (I-13 authorization completeness).
+// Defense-in-depth: facade enforces RBAC even when called directly by orchestration.
+import { requirePermission } from '../enforcement/rbac_guard.js';
 
 // ============================================================================
 // RawWorkingMemoryFacade — internal facade interface (conn, ctx, input)
@@ -66,7 +66,7 @@ export interface RawWorkingMemoryFacade {
  */
 export function createRawWorkingMemoryFacade(
   wmpSystem: WorkingMemorySystem,
-  _rbac: RbacEngine,
+  rbac: RbacEngine,
   _rateLimiter: RateLimiter,
 ): RawWorkingMemoryFacade {
   return Object.freeze({
@@ -79,7 +79,7 @@ export function createRawWorkingMemoryFacade(
       ctx: OperationContext,
       input: WriteWorkingMemoryInput,
     ): Result<WriteWorkingMemoryOutput> {
-      // v2.1.0: RBAC + rate limiting enforced by Permission Gateway (write_wm)
+      requirePermission(rbac, ctx, 'write_wm');
       const callerTaskId = input.taskId;
       const callerAgentId = (ctx.agentId ?? 'system') as AgentId;
       return wmpSystem.write.execute(conn, callerTaskId, callerAgentId, input);
@@ -94,7 +94,7 @@ export function createRawWorkingMemoryFacade(
       ctx: OperationContext,
       input: ReadWorkingMemoryInput,
     ): Result<ReadWorkingMemoryOutput> {
-      // v2.1.0: RBAC + rate limiting enforced by Permission Gateway (read_wm)
+      requirePermission(rbac, ctx, 'read_wm');
       const callerTaskId = input.taskId;
       const callerAgentId = (ctx.agentId ?? 'system') as AgentId;
       return wmpSystem.read.execute(conn, callerTaskId, callerAgentId, input);
@@ -109,7 +109,7 @@ export function createRawWorkingMemoryFacade(
       ctx: OperationContext,
       input: DiscardWorkingMemoryInput,
     ): Result<DiscardWorkingMemoryOutput> {
-      // v2.1.0: RBAC + rate limiting enforced by Permission Gateway (write_wm)
+      requirePermission(rbac, ctx, 'write_wm');
       const callerTaskId = input.taskId;
       const callerAgentId = (ctx.agentId ?? 'system') as AgentId;
       return wmpSystem.discard.execute(conn, callerTaskId, callerAgentId, input);
