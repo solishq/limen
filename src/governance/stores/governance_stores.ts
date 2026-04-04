@@ -173,9 +173,18 @@ export function createRunStoreImpl(): RunStore {
 
       // P0-A Critical #6: No phantom creation. If entity doesn't exist, return error.
       // Previous code auto-created skeleton runs which masked data integrity issues.
-      const existing = conn.get<Record<string, unknown>>('SELECT run_id FROM gov_runs WHERE run_id = ?', [runId]);
+      const existing = conn.get<Record<string, unknown>>('SELECT run_id, state FROM gov_runs WHERE run_id = ?', [runId]);
       if (!existing) {
         return err('RUN_NOT_FOUND', `Run ${runId} not found — cannot update state of non-existent run`, 'BC-010');
+      }
+
+      // BC-070: Terminal state guard — reject transitions from terminal states.
+      // Aligns RunStore.updateState with enforceRunTransition (line ~1149) which
+      // already checks RUN_TERMINAL. Without this guard, direct updateState calls
+      // bypass the enforcer's terminal check, creating cross-layer disagreement.
+      const currentState = existing['state'] as string;
+      if (RUN_TERMINAL.has(currentState)) {
+        return err('RUN_TERMINAL', `Run ${runId} is in terminal state '${currentState}' — no transitions allowed`, 'BC-070');
       }
 
       try {
@@ -943,7 +952,7 @@ function rowToHandoff(row: Record<string, unknown>): Handoff {
 // ============================================================================
 
 const MISSION_TERMINAL: Set<string> = new Set(['completed', 'failed', 'revoked']);
-const TASK_TERMINAL: Set<string> = new Set(['completed', 'failed', 'skipped', 'revoked']);
+const TASK_TERMINAL: Set<string> = new Set(['completed', 'cancelled', 'skipped', 'revoked']);
 const HANDOFF_TERMINAL: Set<string> = new Set(['rejected', 'returned', 'revoked', 'expired']);
 const RUN_TERMINAL: Set<string> = new Set(['completed', 'failed', 'abandoned']);
 
