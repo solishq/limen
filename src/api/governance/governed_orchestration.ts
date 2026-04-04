@@ -36,6 +36,7 @@ import type { DatabaseConnection } from '../../kernel/interfaces/database.js';
 import type {
   OperationContext, Result, KernelError, MissionId,
 } from '../../kernel/interfaces/index.js';
+import { propagateError } from '../../kernel/interfaces/index.js';
 import type { TimeProvider } from '../../kernel/interfaces/time.js';
 import type { OrchestrationEngine } from '../../orchestration/interfaces/orchestration.js';
 import type {
@@ -341,7 +342,7 @@ export function createGovernedOrchestration(
       // Pre-hook: resolve task's mission for suspension check (BC-049 cascade)
       const missionResult = getMissionIdForTask(conn, input.taskId);
       if (!missionResult.ok) {
-        return missionResult as unknown as Result<ProposeTaskExecutionOutput>;
+        return propagateError<ProposeTaskExecutionOutput>(missionResult);
       }
       const missionId = missionResult.value;
 
@@ -387,7 +388,7 @@ export function createGovernedOrchestration(
       const missionResult = getMissionIdForArtifact(conn, input.artifactId);
       if (!missionResult.ok) {
         // C-SEC-01: Fail-closed — unknown artifact can't be governance-cleared
-        return missionResult as unknown as Result<ReadArtifactOutput>;
+        return propagateError<ReadArtifactOutput>(missionResult);
       }
 
       const suspCheck = checkSuspension(conn, 'mission', missionResult.value);
@@ -497,7 +498,7 @@ export function createGovernedOrchestration(
       // A checkpoint not found in the DB cannot be governance-cleared.
       const missionResult = getMissionIdForCheckpoint(conn, input.checkpointId);
       if (!missionResult.ok) {
-        return missionResult as unknown as Result<RespondCheckpointOutput>;
+        return propagateError<RespondCheckpointOutput>(missionResult);
       }
       const suspCheck = checkSuspension(conn, 'mission', missionResult.value);
       if (suspCheck !== null) return suspCheck as Result<RespondCheckpointOutput>;

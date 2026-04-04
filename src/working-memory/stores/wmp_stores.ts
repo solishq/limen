@@ -11,6 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseConnection } from '../../kernel/interfaces/database.js';
 import type { AgentId, KernelError, MissionId, Result, TaskId, TimeProvider } from '../../kernel/interfaces/index.js';
+import { propagateError } from '../../kernel/interfaces/index.js';
 
 import type {
   WmpEntryStore,
@@ -77,8 +78,10 @@ function err<T>(code: string, message: string, spec: string): Result<T> {
 }
 
 function errWithExtras<T>(code: string, message: string, spec: string, extras: Record<string, unknown>): Result<T> {
-  const error = { code, message, spec, ...extras };
-  return { ok: false, error: error as unknown as KernelError };
+  // KernelError requires code, message, spec — extras are additional diagnostic context.
+  // The spread satisfies all required fields; cast is safe because KernelError is a superset.
+  const base: { code: string; message: string; spec: string } = { code, message, spec };
+  return { ok: false, error: { ...base, ...extras } as KernelError };
 }
 
 function newId(): string {
@@ -430,11 +433,11 @@ export function createBoundaryCaptureCoordinator(
 
   function captureSnapshot(conn: DatabaseConnection, taskId: TaskId): Result<SnapshotContent> {
     const nsResult = entryStore.getNamespaceState(conn, taskId);
-    if (!nsResult.ok) return nsResult as unknown as Result<SnapshotContent>;
+    if (!nsResult.ok) return propagateError<SnapshotContent>(nsResult);
     const namespaceState = nsResult.value;
 
     const counterResult = mutationCounter.current(conn, taskId);
-    if (!counterResult.ok) return counterResult as unknown as Result<SnapshotContent>;
+    if (!counterResult.ok) return propagateError<SnapshotContent>(counterResult);
     const highestMutationPosition = counterResult.value;
 
     // Attempt deduplication
@@ -453,7 +456,7 @@ export function createBoundaryCaptureCoordinator(
       entries = [];
     } else {
       const listResult = entryStore.listAll(conn, taskId);
-      if (!listResult.ok) return listResult as unknown as Result<SnapshotContent>;
+      if (!listResult.ok) return propagateError<SnapshotContent>(listResult);
       entries = listResult.value.map(e => ({
         key: e.key,
         value: e.value,
@@ -496,7 +499,7 @@ export function createBoundaryCaptureCoordinator(
           code: snapshotResult.error.code,
         });
       } catch { /* event emission failure is non-fatal per I-48 */ }
-      return snapshotResult as unknown as Result<BoundaryEvent>;
+      return propagateError<BoundaryEvent>(snapshotResult);
     }
     const snapshot = snapshotResult.value;
 
@@ -668,7 +671,7 @@ export function createWriteHandler(
 
       // 7. Capacity check (entry count and total bytes)
       const usageResult = entryStore.getUsage(conn, input.taskId);
-      if (!usageResult.ok) return usageResult as unknown as Result<WriteWorkingMemoryOutput>;
+      if (!usageResult.ok) return propagateError<WriteWorkingMemoryOutput>(usageResult);
       const usage = usageResult.value;
 
       // Check if this is a replacement (existing key)
@@ -703,7 +706,7 @@ export function createWriteHandler(
 
       // 8. Upsert the entry (includes mutation counter increment)
       const upsertResult = entryStore.upsert(conn, input.taskId, input.key, input.value, sizeBytes);
-      if (!upsertResult.ok) return upsertResult as unknown as Result<WriteWorkingMemoryOutput>;
+      if (!upsertResult.ok) return propagateError<WriteWorkingMemoryOutput>(upsertResult);
       const entry = upsertResult.value;
 
       // 9. Emit event (DC-WMP-X15, Binding 14 — transaction-coupled)
@@ -787,7 +790,7 @@ export function createReadHandler(
       if (input.key !== null) {
         // Specific key read
         const entryResult = entryStore.get(conn, input.taskId, input.key);
-        if (!entryResult.ok) return entryResult as unknown as Result<ReadWorkingMemoryOutput>;
+        if (!entryResult.ok) return propagateError<ReadWorkingMemoryOutput>(entryResult);
         const e = entryResult.value;
         return ok({
           key: e.key,
@@ -800,7 +803,7 @@ export function createReadHandler(
 
       // List all entries
       const listResult = entryStore.listAll(conn, input.taskId);
-      if (!listResult.ok) return listResult as unknown as Result<ReadWorkingMemoryOutput>;
+      if (!listResult.ok) return propagateError<ReadWorkingMemoryOutput>(listResult);
       const entries = listResult.value;
       const totalSizeBytes = entries.reduce((sum, e) => sum + e.sizeBytes, 0);
       return ok({
@@ -867,11 +870,11 @@ export function createDiscardHandler(
       if (input.key !== null) {
         // Specific key discard — advance counter AFTER success (WMP-I5: failed ops get no position, BPB-001)
         const discardResult = entryStore.discard(conn, input.taskId, input.key);
-        if (!discardResult.ok) return discardResult as unknown as Result<DiscardWorkingMemoryOutput>;
+        if (!discardResult.ok) return propagateError<DiscardWorkingMemoryOutput>(discardResult);
 
         // 4a. Advance mutation counter only after single-key discard succeeds
         const counterResult = mutationCounter.next(conn, input.taskId);
-        if (!counterResult.ok) return counterResult as unknown as Result<DiscardWorkingMemoryOutput>;
+        if (!counterResult.ok) return propagateError<DiscardWorkingMemoryOutput>(counterResult);
         const mutationPosition = counterResult.value;
 
         // 6. Emit event (DC-WMP-X15, Binding 14 — transaction-coupled)
@@ -892,11 +895,11 @@ export function createDiscardHandler(
 
       // Discard all — advance counter BEFORE discard (AMB-WMP-06: always a visible mutation)
       const counterResult = mutationCounter.next(conn, input.taskId);
-      if (!counterResult.ok) return counterResult as unknown as Result<DiscardWorkingMemoryOutput>;
+      if (!counterResult.ok) return propagateError<DiscardWorkingMemoryOutput>(counterResult);
       const mutationPosition = counterResult.value;
 
       const discardAllResult = entryStore.discardAll(conn, input.taskId);
-      if (!discardAllResult.ok) return discardAllResult as unknown as Result<DiscardWorkingMemoryOutput>;
+      if (!discardAllResult.ok) return propagateError<DiscardWorkingMemoryOutput>(discardAllResult);
 
       // Emit event for discard-all (DC-WMP-X15)
       try {
@@ -952,7 +955,7 @@ export function createTaskLifecycleHandler(
       // Entries survive suspension because writes/discards are rejected during suspension.
       // Verify by confirming entries are readable.
       const listResult = entryStore.listAll(conn, taskId);
-      if (!listResult.ok) return listResult as unknown as Result<void>;
+      if (!listResult.ok) return propagateError<void>(listResult);
 
       return ok(undefined);
     },
@@ -998,11 +1001,12 @@ export function createPreEmissionCaptureImpl(
     capture(conn: DatabaseConnection, taskId: TaskId): Result<WmpCaptureResult> {
       // Check if WMP is initialized for this task
       const initResult = entryStore.isInitialized(conn, taskId);
-      if (!initResult.ok) return initResult as unknown as Result<WmpCaptureResult>;
+      if (!initResult.ok) return propagateError<WmpCaptureResult>(initResult);
 
       if (!initResult.value) {
         // Never-initialized — not_applicable (no snapshot needed)
-        return ok({ captureId: null, sourcingStatus: 'not_applicable' } as unknown as WmpCaptureResult);
+        // captureId is '' for not_applicable (never-initialized WMP has no boundary event)
+        return ok<WmpCaptureResult>({ captureId: '', sourcingStatus: 'not_applicable' });
       }
 
       // Initialized — capture pre-emission snapshot
@@ -1016,7 +1020,7 @@ export function createPreEmissionCaptureImpl(
 
       const emissionId = newId() as SystemCallId;
       const captureResult = coordinator.capturePreEmission(conn, taskId, actualMissionId, emissionId);
-      if (!captureResult.ok) return captureResult as unknown as Result<WmpCaptureResult>;
+      if (!captureResult.ok) return propagateError<WmpCaptureResult>(captureResult);
 
       return ok({
         captureId: captureResult.value.eventId as string,

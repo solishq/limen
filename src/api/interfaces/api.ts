@@ -65,6 +65,13 @@ import type {
   ConsentRecord, ConsentCreateInput,
 } from '../../security/security_types.js';
 
+// Phase 10: Governance classification types for consumer-facing GovernanceApi
+import type {
+  ErasureRequest, ErasureCertificate,
+  ComplianceExportOptions, Soc2AuditPackage,
+  ClassificationRule, ProtectedPredicateRule,
+} from '../../governance/classification/governance_types.js';
+
 // Phase 4: WMP input/output types for consumer-facing WorkingMemoryApi
 import type {
   WriteWorkingMemoryInput, WriteWorkingMemoryOutput,
@@ -174,19 +181,19 @@ export interface WorkingMemoryApi {
 // Phase 10: Consumer-facing GovernanceApi — no conn/ctx required
 export interface GovernanceApi {
   /** Phase 10 §10.4: Execute GDPR erasure with certificate generation. I-P10-20. */
-  erasure(request: import('../../governance/classification/governance_types.js').ErasureRequest): import('../../kernel/interfaces/common.js').Result<import('../../governance/classification/governance_types.js').ErasureCertificate>;
+  erasure(request: ErasureRequest): Result<ErasureCertificate>;
   /** Phase 10 §10.5: Generate SOC 2 audit export. I-P10-30. */
-  exportAudit(options: import('../../governance/classification/governance_types.js').ComplianceExportOptions): import('../../kernel/interfaces/common.js').Result<import('../../governance/classification/governance_types.js').Soc2AuditPackage>;
+  exportAudit(options: ComplianceExportOptions): Result<Soc2AuditPackage>;
   /** Phase 10 §10.2: Add classification rule. */
-  addRule(rule: Omit<import('../../governance/classification/governance_types.js').ClassificationRule, 'id' | 'createdAt'>): import('../../kernel/interfaces/common.js').Result<import('../../governance/classification/governance_types.js').ClassificationRule>;
+  addRule(rule: Omit<ClassificationRule, 'id' | 'createdAt'>): Result<ClassificationRule>;
   /** Phase 10 §10.2: Remove classification rule. */
-  removeRule(ruleId: string): import('../../kernel/interfaces/common.js').Result<void>;
+  removeRule(ruleId: string): Result<void>;
   /** Phase 10 §10.2: List all classification rules. */
-  listRules(): import('../../kernel/interfaces/common.js').Result<readonly import('../../governance/classification/governance_types.js').ClassificationRule[]>;
+  listRules(): Result<readonly ClassificationRule[]>;
   /** Phase 10 §10.3: Add protected predicate rule. */
-  protectPredicate(rule: Omit<import('../../governance/classification/governance_types.js').ProtectedPredicateRule, 'id' | 'createdAt'>): import('../../kernel/interfaces/common.js').Result<import('../../governance/classification/governance_types.js').ProtectedPredicateRule>;
+  protectPredicate(rule: Omit<ProtectedPredicateRule, 'id' | 'createdAt'>): Result<ProtectedPredicateRule>;
   /** Phase 10 §10.3: List protected predicate rules. */
-  listProtectedPredicates(): import('../../kernel/interfaces/common.js').Result<readonly import('../../governance/classification/governance_types.js').ProtectedPredicateRule[]>;
+  listProtectedPredicates(): Result<readonly ProtectedPredicateRule[]>;
 }
 
 // Phase 9: Consumer-facing ConsentApi — no conn/ctx required

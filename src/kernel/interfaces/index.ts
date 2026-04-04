@@ -141,3 +141,6 @@ export type {
 export type {
   TimeProvider,
 } from './time.js';
+
+// Result utilities
+export { propagateError } from './result_utils.js';
