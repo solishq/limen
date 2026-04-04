@@ -18,7 +18,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { DatabaseConnection } from '../kernel/interfaces/database.js';
+import type { TenantScopedConnection } from '../kernel/tenant/tenant_scope.js';
 import type { OperationContext } from '../kernel/interfaces/common.js';
 import type { MissionId } from '../kernel/interfaces/index.js';
 import type { TimeProvider } from '../kernel/interfaces/time.js';
@@ -40,7 +40,7 @@ import { resolveStability, type StabilityConfig } from './stability.js';
  * Dependencies for the consolidation engine.
  */
 export interface ConsolidationDeps {
-  readonly getConnection: () => DatabaseConnection;
+  readonly getConnection: () => TenantScopedConnection;
   readonly getContext: () => OperationContext;
   readonly retractClaim: RetractClaimHandler;
   readonly relateClaims: RelateClaimsHandler;
@@ -55,7 +55,7 @@ export interface ConsolidationDeps {
  * Shared between merge winner selection and conflict resolution.
  */
 function computeEffectiveConfidence(
-  conn: DatabaseConnection,
+  conn: TenantScopedConnection,
   claimId: string,
   confidence: number,
   validAt: string,
@@ -117,7 +117,7 @@ export function consolidate(
  * I-P12-13: Every merge logged in consolidation_log.
  */
 function runMerge(
-  conn: DatabaseConnection,
+  conn: TenantScopedConnection,
   ctx: OperationContext,
   deps: ConsolidationDeps,
   opts: Required<ConsolidationOptions>,
@@ -132,7 +132,8 @@ function runMerge(
   const tenantClause = tenantId !== null ? 'AND ca.tenant_id = ?' : 'AND ca.tenant_id IS NULL';
   const tenantParams = tenantId !== null ? [tenantId] : [];
 
-  const embeddedClaims = conn.query<{
+  // SYSTEM_SCOPE: Complex SQL (INNER JOIN) — use .raw with manual tenant scoping.
+  const embeddedClaims = conn.raw.query<{
     id: string;
     subject: string;
     predicate: string;
@@ -178,7 +179,13 @@ function runMerge(
     const candidates = knnResult.value
       .filter(r => r.claimId !== claim.id && !processed.has(r.claimId))
       .filter(r => {
-        const similarity = 1 - r.distance; // cosine distance → similarity
+        // F-R1-004 FIX: Guard against NaN distance which would bypass threshold.
+        // NaN comparisons always return false, so NaN >= threshold = false = filtered out.
+        // But explicit guard is defense-in-depth and makes intent clear.
+        if (!Number.isFinite(r.distance)) return false;
+        // Convert L2 distance to cosine similarity for normalized vectors.
+        // For unit vectors: cos_sim = 1 - (d^2 / 2) where d = L2 distance.
+        const similarity = 1 - (r.distance * r.distance) / 2;
         return similarity >= opts.mergeSimilarityThreshold;
       });
 
@@ -280,7 +287,7 @@ function runMerge(
  * I-P12-15: Sets archived=1, never deletes.
  */
 function runArchive(
-  conn: DatabaseConnection,
+  conn: TenantScopedConnection,
   deps: ConsolidationDeps,
   opts: Required<ConsolidationOptions>,
   nowMs: number,
@@ -290,10 +297,8 @@ function runArchive(
 ): number {
   let archived = 0;
 
-  const tenantClause = tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL';
-  const tenantParams = tenantId !== null ? [tenantId] : [];
-
-  // Get all active, non-archived claims with low access count
+  // F-R1-003 FIX: conn.query() auto-injects tenant_id via TenantScopedConnection.
+  // Manual tenantClause removed to prevent double filtering with duplicate params.
   const candidates = conn.query<{
     id: string;
     confidence: number;
@@ -305,8 +310,8 @@ function runArchive(
     `SELECT id, confidence, valid_at, predicate, access_count, last_accessed_at
      FROM claim_assertions
      WHERE status = 'active' AND archived = 0
-     AND access_count <= ? ${tenantClause}`,
-    [opts.archiveMaxAccessCount, ...tenantParams],
+     AND access_count <= ?`,
+    [opts.archiveMaxAccessCount],
   );
 
   for (const claim of candidates) {
@@ -358,7 +363,7 @@ function runArchive(
  * Stored in connection_suggestions as pending.
  */
 function runSuggestResolution(
-  conn: DatabaseConnection,
+  conn: TenantScopedConnection,
   deps: ConsolidationDeps,
   _opts: Required<ConsolidationOptions>,
   nowMs: number,
@@ -373,7 +378,8 @@ function runSuggestResolution(
     : 'AND ca1.tenant_id IS NULL AND ca2.tenant_id IS NULL';
   const tenantParams = tenantId !== null ? [tenantId, tenantId] : [];
 
-  const pairs = conn.query<{
+  // SYSTEM_SCOPE: Complex SQL (INNER JOIN) — use .raw with manual tenant scoping.
+  const pairs = conn.raw.query<{
     rel_id: string;
     from_id: string;
     to_id: string;

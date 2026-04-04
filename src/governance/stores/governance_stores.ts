@@ -86,18 +86,24 @@ function lifecycleError<T>(message: string, spec: string): Result<T> {
   }]);
 }
 
-// Module-level fallback time provider for governance stores.
-// Hard Stop #7: Production callers should inject TimeProvider. This default exists for
-// backward compatibility where factories are constructed without explicit time injection.
-let _govTime: TimeProvider = { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
+// v2.1.0: _govTime eliminated. TimeProvider is now threaded through each factory function.
+// setGovernanceTimeProvider() is retained as a no-op for backward compatibility but does nothing.
+// The internal nowISO(time) helper now requires an explicit TimeProvider parameter.
 
-/** Set the governance module TimeProvider. Called once by governance harness on initialization. */
-export function setGovernanceTimeProvider(time: TimeProvider): void {
-  _govTime = time;
+/** Default TimeProvider for backward compatibility when factories are called without time injection. */
+const _defaultGovTime: TimeProvider = { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
+
+/**
+ * @deprecated v2.1.0: No-op retained for backward compatibility.
+ * TimeProvider is now threaded directly through factory functions.
+ */
+export function setGovernanceTimeProvider(_time: TimeProvider): void {
+  // No-op: module-level _govTime eliminated for C-06 independent instances.
+  // TimeProvider is now passed to each factory function directly.
 }
 
-function nowISO(): string {
-  return _govTime.nowISO();
+function nowISO(time: TimeProvider): string {
+  return time.nowISO();
 }
 
 // ============================================================================
@@ -127,7 +133,8 @@ function handoffStateFromDDL(state: string): HandoffLifecycleState {
 // RunStore Implementation (Deliverable 2)
 // ============================================================================
 
-export function createRunStoreImpl(): RunStore {
+export function createRunStoreImpl(time?: TimeProvider): RunStore {
+  const t = time ?? _defaultGovTime;
   return {
     create(conn: DatabaseConnection, run: Run): Result<Run> {
       try {
@@ -168,7 +175,7 @@ export function createRunStoreImpl(): RunStore {
         return err('INVALID_RUN_STATE', `Invalid run state: ${state}`, 'BC-010');
       }
 
-      const now = nowISO();
+      const now = nowISO(t);
       const completedAt = state !== 'active' ? now : null;
 
       // P0-A Critical #6: No phantom creation. If entity doesn't exist, return error.
@@ -357,13 +364,14 @@ export function createRunSequencerImpl(): RunSequencer {
   };
 }
 
-export function createTraceEmitterImpl(sequencer: RunSequencer): TraceEmitter {
+export function createTraceEmitterImpl(sequencer: RunSequencer, time?: TimeProvider): TraceEmitter {
+  const t = time ?? _defaultGovTime;
   return {
     emit(conn: DatabaseConnection, ctx: OperationContext, event: TraceEventInput): Result<TraceEventId> {
       const traceEventId = randomUUID() as TraceEventId;
       const runSeq = sequencer.nextRunSeq(event.runId);
       const spanSeq = sequencer.nextSpanSeq(event.runId, 0);
-      const timestamp = nowISO();
+      const timestamp = nowISO(t);
 
       const fullEvent: TraceEvent = {
         traceEventId,
@@ -477,7 +485,8 @@ function rowToTraceEvent(row: Record<string, unknown>): TraceEvent {
  * Strategy: Serialize {objective, constraints, criteria} into the `criteria` TEXT column.
  * Use 'unbound' for mission_id since interface doesn't have it.
  */
-export function createMissionContractStoreImpl(): MissionContractStore {
+export function createMissionContractStoreImpl(time?: TimeProvider): MissionContractStore {
+  const t = time ?? _defaultGovTime;
   return {
     create(conn: DatabaseConnection, contract: MissionContract): Result<MissionContract> {
       const criteriaJson = JSON.stringify({
@@ -539,7 +548,7 @@ export function createMissionContractStoreImpl(): MissionContractStore {
             met: true,
             reason: null,
           }],
-          evaluatedAt: nowISO(),
+          evaluatedAt: nowISO(t),
         });
       }
       const contract = rowToMissionContract(row);
@@ -553,7 +562,7 @@ export function createMissionContractStoreImpl(): MissionContractStore {
       return ok({
         satisfied,
         criterionResults,
-        evaluatedAt: nowISO(),
+        evaluatedAt: nowISO(t),
       });
     },
   };
@@ -580,7 +589,8 @@ function rowToMissionContract(row: Record<string, unknown>): MissionContract {
  * BC-038: constitutionalMode stored in core_config table.
  * Key encoding: "constitutional_mode:{tenantId}"
  */
-export function createConstitutionalModeStoreImpl(): ConstitutionalModeStore {
+export function createConstitutionalModeStoreImpl(time?: TimeProvider): ConstitutionalModeStore {
+  const t = time ?? _defaultGovTime;
   return {
     get(conn: DatabaseConnection, tenantId: TenantId): Result<boolean> {
       const key = `constitutional_mode:${tenantId}`;
@@ -591,7 +601,7 @@ export function createConstitutionalModeStoreImpl(): ConstitutionalModeStore {
 
     enable(conn: DatabaseConnection, tenantId: TenantId): Result<void> {
       const key = `constitutional_mode:${tenantId}`;
-      const now = nowISO();
+      const now = nowISO(t);
       try {
         // Upsert: if already enabled, this is idempotent
         const existing = conn.get<{ value: string }>('SELECT value FROM core_config WHERE key = ?', [key]);
@@ -717,7 +727,8 @@ function rowToSupervisorDecision(row: Record<string, unknown>): SupervisorDecisi
 /**
  * Schema mismatch: DDL `reason` TEXT NOT NULL stores {creatingDecisionId, origin} as JSON.
  */
-export function createSuspensionStoreImpl(): SuspensionStore {
+export function createSuspensionStoreImpl(time?: TimeProvider): SuspensionStore {
+  const t = time ?? _defaultGovTime;
   return {
     create(conn: DatabaseConnection, suspension: SuspensionRecord): Result<SuspensionRecord> {
       const reasonJson = JSON.stringify({
@@ -773,7 +784,7 @@ export function createSuspensionStoreImpl(): SuspensionStore {
       );
       if (!existing) {
         // Create skeleton active suspension to support contract test pattern
-        const now = nowISO();
+        const now = nowISO(t);
         const reasonJson = JSON.stringify({ creatingDecisionId: 'system', origin: 'runtime' });
         try {
           conn.run(
@@ -805,12 +816,12 @@ export function createSuspensionStoreImpl(): SuspensionStore {
           conn.run(
             `INSERT INTO gov_supervisor_decisions (decision_id, tenant_id, correlation_id, supervisor_type, outcome, rationale, conditions, schema_version, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [resolutionDecisionId, 'system', `gov-resolve-${resolutionDecisionId}`, 'human-supervisor', 'approve', 'Resolution decision', conditionsJson, '0.1.0', nowISO()],
+            [resolutionDecisionId, 'system', `gov-resolve-${resolutionDecisionId}`, 'human-supervisor', 'approve', 'Resolution decision', conditionsJson, '0.1.0', nowISO(t)],
           );
         } catch { /* ignore if exists */ }
       }
 
-      const now = nowISO();
+      const now = nowISO(t);
       conn.run(
         'UPDATE gov_suspension_records SET state = ?, resolved_at = ?, resolution_decision_id = ? WHERE suspension_record_id = ?',
         ['resolved', now, resolutionDecisionId, suspensionId],
@@ -851,10 +862,11 @@ function rowToSuspensionRecord(row: Record<string, unknown>): SuspensionRecord {
  * - DDL `mission_id` → 'unbound' (not in interface)
  * - State mapping: 'revoked'↔'failed', 'expired'↔'completed'
  */
-export function createHandoffStoreImpl(): HandoffStore {
+export function createHandoffStoreImpl(time?: TimeProvider): HandoffStore {
+  const t = time ?? _defaultGovTime;
   return {
     create(conn: DatabaseConnection, handoff: Handoff): Result<Handoff> {
-      const now = nowISO();
+      const now = nowISO(t);
       const ddlState = handoffStateToDDL(handoff.state);
       try {
         conn.run(
@@ -893,7 +905,7 @@ export function createHandoffStoreImpl(): HandoffStore {
       state: HandoffLifecycleState,
     ): Result<Handoff> {
       const ddlState = handoffStateToDDL(state);
-      const now = nowISO();
+      const now = nowISO(t);
 
       // Ensure handoff exists — create skeleton if needed (supports contract test pattern)
       const existing = conn.get<Record<string, unknown>>(
@@ -956,7 +968,9 @@ const RUN_TERMINAL: Set<string> = new Set(['completed', 'failed', 'abandoned']);
  */
 export function createTransitionEnforcerImpl(
   suspensionStore: SuspensionStore,
+  time?: TimeProvider,
 ): TransitionEnforcer {
+  const t = time ?? _defaultGovTime;
   // In-memory state tracking for entities managed by the transition enforcer
   const missionStates = new Map<string, MissionLifecycleState>();
   const taskStates = new Map<string, TaskLifecycleState>();
@@ -1025,7 +1039,7 @@ export function createTransitionEnforcerImpl(
         );
       }
 
-      const now = nowISO();
+      const now = nowISO(t);
       missionStates.set(missionId, toState);
       return ok({ fromState: currentState, toState, timestamp: now });
     },
@@ -1074,7 +1088,7 @@ export function createTransitionEnforcerImpl(
         );
       }
 
-      const now = nowISO();
+      const now = nowISO(t);
       taskStates.set(taskId, toState);
       return ok({ fromState: currentState, toState, timestamp: now });
     },
@@ -1111,7 +1125,7 @@ export function createTransitionEnforcerImpl(
         );
       }
 
-      const now = nowISO();
+      const now = nowISO(t);
       handoffStates.set(handoffId, toState);
 
       // Also update gov_handoffs if it exists
@@ -1153,7 +1167,7 @@ export function createTransitionEnforcerImpl(
         );
       }
 
-      const now = nowISO();
+      const now = nowISO(t);
       runStates.set(runId, toState);
       conn.run(
         'UPDATE gov_runs SET state = ?, completed_at = ? WHERE run_id = ?',
@@ -1299,7 +1313,8 @@ function rowToCapabilityManifest(row: Record<string, unknown>): CapabilityManife
 // IdempotencyStore + ResumeTokenStore + PayloadCanonicalizer (Deliverable 12)
 // ============================================================================
 
-export function createIdempotencyStoreImpl(): IdempotencyStore {
+export function createIdempotencyStoreImpl(time?: TimeProvider): IdempotencyStore {
+  const t = time ?? _defaultGovTime;
   return {
     check(conn: DatabaseConnection, key: IdempotencyKey): Result<IdempotencyCheckResult> {
       const row = conn.get<Record<string, unknown>>(
@@ -1314,7 +1329,7 @@ export function createIdempotencyStoreImpl(): IdempotencyStore {
 
       // INV-131: TTL enforcement — expired keys treated as 'new'
       const expiresAt = row['expires_at'] as string;
-      if (new Date(expiresAt).getTime() < _govTime.nowMs()) {
+      if (new Date(expiresAt).getTime() < t.nowMs()) {
         return ok({ outcome: 'new' as const });
       }
 
@@ -1359,7 +1374,8 @@ export function createIdempotencyStoreImpl(): IdempotencyStore {
   };
 }
 
-export function createResumeTokenStoreImpl(): ResumeTokenStore {
+export function createResumeTokenStoreImpl(time?: TimeProvider): ResumeTokenStore {
+  const t = time ?? _defaultGovTime;
   return {
     create(conn: DatabaseConnection, token: Omit<ResumeToken, 'consumed' | 'consumedAt'>): Result<{ readonly plaintextToken: string }> {
       // BC-136: Generate plaintext token, store only the hash
@@ -1372,8 +1388,8 @@ export function createResumeTokenStoreImpl(): ResumeTokenStore {
       const tokenAny = token as Record<string, unknown>;
       const suspensionRecordId = (token.suspensionRecordId ?? tokenAny['suspensionId'] ?? 'unknown') as string;
       const decisionId = (token.decisionId ?? 'system') as string;
-      const expiresAt = token.expiresAt ?? new Date(_govTime.nowMs() + 3600000).toISOString(); // Default: 1 hour
-      const createdAt = token.createdAt ?? nowISO();
+      const expiresAt = token.expiresAt ?? new Date(t.nowMs() + 3600000).toISOString(); // Default: 1 hour
+      const createdAt = token.createdAt ?? nowISO(t);
 
       try {
         conn.run(
@@ -1394,7 +1410,7 @@ export function createResumeTokenStoreImpl(): ResumeTokenStore {
     consume(conn: DatabaseConnection, tokenHash: string): Result<ResumeToken> {
       // BRK-026: Atomic consume — single UPDATE with consumed=0 guard eliminates TOCTOU.
       // If two concurrent callers race, exactly one gets changes=1.
-      const now = nowISO();
+      const now = nowISO(t);
       const result = conn.run(
         `UPDATE gov_resume_tokens SET consumed = 1, consumed_at = ?
          WHERE token_hash = ? AND consumed = 0 AND expires_at >= ?`,

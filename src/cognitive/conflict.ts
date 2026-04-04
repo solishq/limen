@@ -11,7 +11,7 @@
  * Invariants: I-P4-06 (synchronous), I-P4-07 (structural match), I-P4-08 (threshold 0.8)
  */
 
-import type { DatabaseConnection } from '../kernel/interfaces/database.js';
+import type { TenantScopedConnection } from '../kernel/tenant/tenant_scope.js';
 
 /**
  * Phase 4 §4.2: Default auto-conflict threshold.
@@ -54,7 +54,7 @@ export interface ConflictDetectionResult {
  * @returns IDs of conflicting claims (empty array if no conflicts)
  */
 export function detectStructuralConflicts(
-  conn: DatabaseConnection,
+  conn: TenantScopedConnection,
   newClaimId: string,
   subject: string,
   predicate: string,

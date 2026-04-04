@@ -17,7 +17,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { DatabaseConnection } from '../kernel/interfaces/database.js';
+import type { TenantScopedConnection } from '../kernel/tenant/tenant_scope.js';
 import type { TimeProvider } from '../kernel/interfaces/time.js';
 import type { VectorStore } from '../vector/vector_store.js';
 import type { EmbeddingProvider } from '../vector/vector_types.js';
@@ -48,7 +48,7 @@ const AUTO_CONNECTION_K = 10;
  * @returns Array of connection suggestions (empty if vectors unavailable)
  */
 export async function suggestConnections(
-  conn: DatabaseConnection,
+  conn: TenantScopedConnection,
   claimId: string,
   tenantId: string | null,
   time: TimeProvider,
@@ -120,8 +120,13 @@ export async function suggestConnections(
     // Skip self
     if (result.claimId === claimId) continue;
 
-    // Convert distance to similarity (cosine distance → similarity)
-    const similarity = 1 - result.distance;
+    // F-R1-004 FIX: Guard against NaN distance which would bypass threshold comparison.
+    // NaN < threshold evaluates to false, so NaN would silently pass the filter.
+    if (!Number.isFinite(result.distance)) continue;
+
+    // Convert L2 distance to cosine similarity for normalized vectors.
+    // For unit vectors: cos_sim = 1 - (d^2 / 2) where d = L2 distance.
+    const similarity = 1 - (result.distance * result.distance) / 2;
     if (similarity < AUTO_CONNECTION_SIMILARITY_THRESHOLD) continue;
 
     // Get candidate claim details

@@ -11,7 +11,7 @@
  */
 
 import type { Result } from '../kernel/interfaces/index.js';
-import type { DatabaseConnection } from '../kernel/interfaces/database.js';
+import type { TenantScopedConnection } from '../kernel/tenant/tenant_scope.js';
 import type { TimeProvider } from '../kernel/interfaces/time.js';
 import type {
   ExportOptions,
@@ -35,7 +35,7 @@ function err<T>(code: string, message: string): Result<T> {
 // ── Export Dependencies ──
 
 export interface ExportDeps {
-  readonly getConnection: () => DatabaseConnection;
+  readonly getConnection: () => TenantScopedConnection;
   readonly time: TimeProvider;
   readonly limenVersion: string;
 }
@@ -90,7 +90,8 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
 
     // Query claims using DatabaseConnection.query<T>()
     // Detect Phase 9/10 columns for backward compat with pre-v42 databases
-    const cols = conn.query<Record<string, unknown>>('PRAGMA table_info(claim_assertions)', []);
+    // SYSTEM_SCOPE: PRAGMA is schema metadata — not tenant-scoped data.
+    const cols = conn.raw.query<Record<string, unknown>>('PRAGMA table_info(claim_assertions)', []);
     const hasPiiCol = cols.some(c => c['name'] === 'pii_detected');
     const hasClassCol = cols.some(c => c['name'] === 'classification');
 
@@ -172,7 +173,9 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
         source_state: string;
       }
 
-      const evidenceRows = conn.query<EvidenceRow>(
+      // SYSTEM_SCOPE: claim_evidence has no tenant_id column.
+      // Tenant isolation achieved via claim_id join (claims already tenant-filtered).
+      const evidenceRows = conn.raw.query<EvidenceRow>(
         `SELECT ce.claim_id, ce.evidence_type, ce.evidence_id, ce.source_state
          FROM claim_evidence ce
          WHERE ce.claim_id IN (${placeholders})
@@ -216,10 +219,12 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
         created_at: string;
       }
 
-      const relRows = conn.query<RelRow>(
+      // SYSTEM_SCOPE: OR clause makes auto-injection unsafe (binds to last condition only).
+      // Use .raw with manual tenant scoping via IN clause (claims already tenant-filtered).
+      const relRows = conn.raw.query<RelRow>(
         `SELECT cr.from_claim_id, cr.to_claim_id, cr.type, cr.created_at
          FROM claim_relationships cr
-         WHERE cr.from_claim_id IN (${placeholders}) OR cr.to_claim_id IN (${placeholders})
+         WHERE (cr.from_claim_id IN (${placeholders}) OR cr.to_claim_id IN (${placeholders}))
          ORDER BY cr.created_at ASC`,
         [...claimIds, ...claimIds],
       );

@@ -141,3 +141,9 @@ export type {
 export type {
   TimeProvider,
 } from './time.js';
+
+// Instance context (v2.1.0 — per-instance mutable state container)
+export type {
+  SchemaDetectionCache, RateLimitEntry, InstanceContext,
+} from './instance_context.js';
+export { createInstanceContext } from './instance_context.js';

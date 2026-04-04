@@ -48,6 +48,9 @@ import type {
 } from './interfaces/api.js';
 
 import { randomUUID } from 'node:crypto';
+import { applyPermissionGateway, getAllGatewayPermissions } from './gateway/permission_gateway.js';
+export type { MethodPermission } from './gateway/permission_gateway.js';
+export { PERMISSION_MAP, getAllGatewayPermissions } from './gateway/permission_gateway.js';
 import { LimenError, ensureLimenError } from './errors/limen_error.js';
 import { resolveDefaults } from './defaults.js';
 import { buildOperationContext } from './enforcement/rbac_guard.js';
@@ -906,6 +909,8 @@ export async function createLimen(
     'classify_claims', 'manage_classification_rules',
     'manage_protected_predicates',
     'request_erasure', 'export_compliance',
+    // v2.1.0: Include all gateway permissions so single-user mode has full access
+    ...getAllGatewayPermissions(),
   ]);
 
   // Library-mode agent identity: set via setDefaultAgent() after agent registration.
@@ -1768,6 +1773,9 @@ export async function createLimen(
     // Modifies closure-captured defaultAgentId — safe after deep freeze
     // because the function reference is frozen, not the captured variable.
     setDefaultAgent(agentId: import('../kernel/interfaces/index.js').AgentId) {
+      if (!agentId || typeof agentId !== 'string' || agentId.trim().length === 0) {
+        throw new LimenError('INVALID_INPUT', 'setDefaultAgent requires a non-empty agentId string');
+      }
       defaultAgentId = agentId;
     },
 
@@ -1961,6 +1969,18 @@ export async function createLimen(
     connect: (a, b, t) => engine.connect(a, b, t as 'supports' | 'contradicts' | 'supersedes' | 'derived_from'),
   };
   pluginRegistry.enableApi();
+
+  // ── Step 5.6: Permission Gateway (v2.1.0 Phase 2) ──
+  // Structural RBAC enforcement: wraps every public method with permission checks.
+  // MUST run before deepFreeze — gateway mutates method references on the engine.
+  // I-13 (authorization completeness), FPD-5 (RBAC before rate limit)
+  applyPermissionGateway(
+    engine as unknown as Record<string, unknown>,
+    kernel.rbac,
+    kernel.rateLimiter,
+    getContext,
+    getConnection,
+  );
 
   // ── Step 6: Deep freeze (C-07, FPD-4) ──
 

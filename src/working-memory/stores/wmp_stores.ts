@@ -88,15 +88,15 @@ function newId(): string {
 // Monotonic timestamp: guarantees strictly increasing values even within same millisecond.
 // Required for P2 eviction ordering (DC-WMP-801) — updatedAt must differ on rapid writes.
 // Hard Stop #7: uses injectable TimeProvider as the clock source.
-let _lastTimestamp = '';
-function monotonicNowISO(time: import('../../kernel/interfaces/time.js').TimeProvider): string {
+// v2.1.0: _lastTimestamp eliminated. Clock state now lives in InstanceContext.monotonicClock.
+function monotonicNowISO(time: import('../../kernel/interfaces/time.js').TimeProvider, clock: { lastTimestamp: string }): string {
   let ts = time.nowISO();
-  if (ts <= _lastTimestamp) {
-    const d = new Date(_lastTimestamp);
+  if (ts <= clock.lastTimestamp) {
+    const d = new Date(clock.lastTimestamp);
     d.setTime(d.getTime() + 1);
     ts = d.toISOString();
   }
-  _lastTimestamp = ts;
+  clock.lastTimestamp = ts;
   return ts;
 }
 
@@ -128,19 +128,19 @@ function lookupTask(conn: DatabaseConnection, taskId: TaskId): TaskRow | undefin
   );
 }
 
-// Module-level connection reference for WmpInternalReader (no conn param in interface).
-// Set by every SC handler call. WmpInternalReader uses this to read entries.
-let _connRef: DatabaseConnection | null = null;
+// v2.1.0: _connRef eliminated. Connection reference now lives in InstanceContext.wmpConnectionRef.
+// The wmpConnectionRef is threaded through factory functions below.
 
 // ============================================================================
 // Entry Store Implementation
 // ============================================================================
 
-export function createEntryStore(time?: TimeProvider): WmpEntryStore {
+export function createEntryStore(time?: TimeProvider, monotonicClockState?: { lastTimestamp: string }): WmpEntryStore {
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
+  const clockState = monotonicClockState ?? { lastTimestamp: '' };
   return Object.freeze({
     upsert(conn: DatabaseConnection, taskId: TaskId, key: string, value: string, sizeBytes: number): Result<WmpEntry> {
-      const now = monotonicNowISO(clock);
+      const now = monotonicNowISO(clock, clockState);
       const existing = conn.get<{ key: string; value: string; size_bytes: number; mutation_position: number; created_at: string; updated_at: string }>(
         'SELECT key, value, size_bytes, mutation_position, created_at, updated_at FROM working_memory_entries WHERE task_id = ? AND key = ?',
         [taskId, key],
@@ -280,12 +280,13 @@ export function createEntryStore(time?: TimeProvider): WmpEntryStore {
 // Boundary Store Implementation
 // ============================================================================
 
-export function createBoundaryStore(time?: TimeProvider): WmpBoundaryStore {
+export function createBoundaryStore(time?: TimeProvider, monotonicClockState?: { lastTimestamp: string }): WmpBoundaryStore {
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
+  const clockState = monotonicClockState ?? { lastTimestamp: '' };
   return Object.freeze({
     createBoundaryEvent(conn: DatabaseConnection, event: Omit<BoundaryEvent, 'eventId'>): Result<BoundaryEvent> {
       const eventId = newId() as BoundaryEventId;
-      const timestamp = event.timestamp || monotonicNowISO(clock);
+      const timestamp = event.timestamp || monotonicNowISO(clock, clockState);
       conn.run(
         'INSERT INTO wmp_boundary_events (event_id, task_id, mission_id, trigger, snapshot_content_id, linked_emission_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [eventId, event.taskId, event.missionId, event.trigger, event.snapshotContentId, event.linkedEmissionId ?? null, timestamp],
@@ -425,8 +426,10 @@ export function createBoundaryCaptureCoordinator(
   mutationCounter: WmpMutationCounter,
   eventSink: WmpEventSink = WMP_NULL_EVENT_SINK,
   time?: TimeProvider,
+  monotonicClockState?: { lastTimestamp: string },
 ): WmpBoundaryCaptureCoordinator {
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
+  const clockState = monotonicClockState ?? { lastTimestamp: '' };
 
   function captureSnapshot(conn: DatabaseConnection, taskId: TaskId): Result<SnapshotContent> {
     const nsResult = entryStore.getNamespaceState(conn, taskId);
@@ -506,7 +509,7 @@ export function createBoundaryCaptureCoordinator(
       trigger,
       snapshotContentId: snapshot.contentId,
       linkedEmissionId,
-      timestamp: monotonicNowISO(clock),
+      timestamp: monotonicNowISO(clock, clockState),
     });
 
     if (eventResult.ok) {
@@ -567,7 +570,7 @@ export function createBoundaryCaptureCoordinator(
         // Calling UP from L1.5→L2 would violate layer boundaries.
         // CAS (WHERE id = ? AND state NOT IN terminal) is the L1-level defense.
         // This prevents TOCTOU races where another transaction already terminated the task.
-        const now = monotonicNowISO(clock);
+        const now = monotonicNowISO(clock, clockState);
         const terminalStates = ['COMPLETED', 'FAILED', 'CANCELLED'];
         const currentTask = conn.get<{ state: string }>(
           'SELECT state FROM core_tasks WHERE id = ?',
@@ -610,7 +613,9 @@ export function createWriteHandler(
   _mutationCounter: WmpMutationCounter,
   capacityPolicy: WmpCapacityPolicy,
   eventSink: WmpEventSink = WMP_NULL_EVENT_SINK,
+  wmpConnectionRef?: { current: DatabaseConnection | null },
 ): WriteWorkingMemoryHandler {
+  const connRef = wmpConnectionRef ?? { current: null };
   return Object.freeze({
     execute(
       conn: DatabaseConnection,
@@ -618,7 +623,7 @@ export function createWriteHandler(
       callerAgentId: AgentId,
       input: WriteWorkingMemoryInput,
     ): Result<WriteWorkingMemoryOutput> {
-      _connRef = conn;
+      connRef.current = conn;
 
       // 1. Scope check: callerTaskId must match input.taskId
       if (callerTaskId !== input.taskId) {
@@ -754,7 +759,9 @@ export function createWriteHandler(
 
 export function createReadHandler(
   entryStore: WmpEntryStore,
+  wmpConnectionRef?: { current: DatabaseConnection | null },
 ): ReadWorkingMemoryHandler {
+  const connRef = wmpConnectionRef ?? { current: null };
   return Object.freeze({
     execute(
       conn: DatabaseConnection,
@@ -762,7 +769,7 @@ export function createReadHandler(
       callerAgentId: AgentId,
       input: ReadWorkingMemoryInput,
     ): Result<ReadWorkingMemoryOutput> {
-      _connRef = conn;
+      connRef.current = conn;
 
       // 1. Scope check
       if (callerTaskId !== input.taskId) {
@@ -826,7 +833,9 @@ export function createDiscardHandler(
   entryStore: WmpEntryStore,
   mutationCounter: WmpMutationCounter,
   eventSink: WmpEventSink = WMP_NULL_EVENT_SINK,
+  wmpConnectionRef?: { current: DatabaseConnection | null },
 ): DiscardWorkingMemoryHandler {
+  const connRef = wmpConnectionRef ?? { current: null };
   return Object.freeze({
     execute(
       conn: DatabaseConnection,
@@ -834,7 +843,7 @@ export function createDiscardHandler(
       callerAgentId: AgentId,
       input: DiscardWorkingMemoryInput,
     ): Result<DiscardWorkingMemoryOutput> {
-      _connRef = conn;
+      connRef.current = conn;
 
       // 1. Scope check
       if (callerTaskId !== input.taskId) {
@@ -963,10 +972,11 @@ export function createTaskLifecycleHandler(
 // Internal Reader Implementation (for CGP P2 — WmpInternalReader)
 // ============================================================================
 
-export function createInternalReader(): WmpInternalReader {
+export function createInternalReader(wmpConnectionRef?: { current: DatabaseConnection | null }): WmpInternalReader {
+  const connRef = wmpConnectionRef ?? { current: null };
   return Object.freeze({
     readLiveEntries(taskId: TaskId): Result<readonly WmpInternalEntry[]> {
-      const conn = _connRef;
+      const conn = connRef.current;
       if (!conn) return err('NO_CONNECTION', 'No database connection available', '§9.2');
 
       const rows = conn.query<{ key: string; value: string; size_bytes: number; created_at: string; updated_at: string; mutation_position: number }>(
