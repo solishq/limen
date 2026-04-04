@@ -1186,7 +1186,7 @@ export async function createLimen(
   }
 
   // Phase 8: Read package version for export metadata
-  const limenVersion = '1.4.0'; // Matches package.json
+  const limenVersion = '2.0.0'; // Matches package.json
 
   // Build the Limen object
   const engine: Limen = {
