@@ -50,7 +50,7 @@ import type {
   ResultSubmitInput, ResultSubmitOutput,
   CheckpointResponseInput, CheckpointResponseOutput,
 } from '../interfaces/api.js';
-import { unwrapResult } from '../errors/limen_error.js';
+import { unwrapResult, LimenError } from '../errors/limen_error.js';
 import { requirePermission } from '../enforcement/rbac_guard.js';
 import { requireRateLimit } from '../enforcement/rate_guard.js';
 
@@ -164,11 +164,11 @@ export class MissionApiImpl implements MissionApi {
     // §36: Rate limit check (SD-14: after RBAC)
     requireRateLimit(this.rateLimiter, conn, ctx, 'api_calls');
 
-    // List is a convenience — not directly available as a single subsystem method.
-    // For now, return empty array. The consumer can use get() with known IDs.
-    // ASSUMPTION: Full list/filter capability would require a query method on MissionStore.
-    // The current MissionStore interface only provides get() and getChildren().
-    return [];
+    // List is not yet implemented — the current MissionStore interface only provides get() and getChildren().
+    // Throwing NOT_IMPLEMENTED is honest; returning [] silently hides the absence of functionality.
+    throw new LimenError('NOT_IMPLEMENTED', 'missions.list() is not yet implemented. Use missions.get() with a known mission ID.', {
+      suggestion: 'Track mission IDs from missions.create() return values.',
+    });
   }
 
   // ─── Private: OrchestrationDeps Builder ──

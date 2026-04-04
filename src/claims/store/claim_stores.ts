@@ -1254,10 +1254,16 @@ function createAssertClaimHandlerImpl(
         if (!input.subject || !isValidSubjectURN(input.subject)) {
           return err('INVALID_SUBJECT', `Invalid subject URN: ${input.subject}`, 'SC-11');
         }
+        if (input.subject.length > 256) {
+          return err('INVALID_INPUT', `Subject exceeds maximum length of 256 characters (got ${input.subject.length}).`, 'SC-11');
+        }
 
         // 3. Validate predicate
         if (!input.predicate || !isValidPredicate(input.predicate)) {
           return err('INVALID_PREDICATE', `Invalid predicate format: ${input.predicate}`, 'SC-11');
+        }
+        if (input.predicate.length > 128) {
+          return err('INVALID_INPUT', `Predicate exceeds maximum length of 128 characters (got ${input.predicate.length}).`, 'SC-11');
         }
         if (isReservedPredicate(input.predicate)) {
           return err('INVALID_PREDICATE', `Reserved predicate namespace: ${input.predicate}`, 'SC-11');
@@ -1287,6 +1293,11 @@ function createAssertClaimHandlerImpl(
         // 4. Validate object type
         if (!isValidObjectType(input.object.type, input.object.value)) {
           return err('INVALID_OBJECT_TYPE', `Object value does not match declared type ${input.object.type}`, 'SC-11');
+        }
+
+        // 4b. String value length limit (64KB max)
+        if (input.object.type === 'string' && typeof input.object.value === 'string' && input.object.value.length > 65536) {
+          return err('INVALID_INPUT', `String object value exceeds maximum length of 65536 characters (got ${input.object.value.length}).`, 'SC-11');
         }
 
         // 5. Validate confidence
