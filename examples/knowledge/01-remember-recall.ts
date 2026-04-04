@@ -4,10 +4,10 @@
  * Demonstrates the core loop: store beliefs, recall them, see confidence and decay.
  * No LLM provider needed — knowledge operations are local.
  *
- * Run: npx tsx examples/01-remember-recall.ts
+ * Run: npx tsx examples/knowledge/01-remember-recall.ts
  */
 
-import { createLimen, resolveMasterKey } from '../src/api/index.js';
+import { createLimen, resolveMasterKey } from 'limen-ai';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';

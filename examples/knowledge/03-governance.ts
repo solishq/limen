@@ -5,10 +5,10 @@
  * and the cognitive health report.
  * No LLM provider needed — knowledge operations are local.
  *
- * Run: npx tsx examples/03-governance.ts
+ * Run: npx tsx examples/knowledge/03-governance.ts
  */
 
-import { createLimen, resolveMasterKey } from '../src/api/index.js';
+import { createLimen, resolveMasterKey } from 'limen-ai';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';

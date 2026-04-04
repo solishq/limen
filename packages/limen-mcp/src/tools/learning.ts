@@ -144,7 +144,7 @@ export function registerLearningTools(
     'Retract a claim by ID. The claim remains in the database with status="retracted" for audit continuity. Relationships are preserved.',
     {
       claimId: z.string().min(1).describe('The ID of the claim to retract'),
-      reason: z.enum(['manual', 'conflicted', 'stale', 'evidence_failed', 'override', 'correction']).optional()
+      reason: z.enum(['incorrect', 'superseded', 'expired', 'manual']).optional()
         .describe('Retraction reason (default: "manual")'),
     },
     async (args) => {
