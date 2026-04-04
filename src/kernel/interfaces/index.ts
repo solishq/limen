@@ -147,3 +147,6 @@ export type {
   SchemaDetectionCache, RateLimitEntry, InstanceContext,
 } from './instance_context.js';
 export { createInstanceContext } from './instance_context.js';
+
+// Result utilities
+export { propagateError } from './result_utils.js';

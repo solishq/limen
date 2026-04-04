@@ -132,6 +132,9 @@ import { getVectorSearchMigrations, createVec0Table } from './migration/035_vect
 import { createVectorStore } from '../vector/vector_store.js';
 import { createEmbeddingQueue } from '../vector/embedding_queue.js';
 import { hybridRank } from '../vector/hybrid_ranker.js';
+import { computeAgeMs, computeEffectiveConfidence } from '../cognitive/decay.js';
+import { classifyFreshness } from '../cognitive/freshness.js';
+import type { FreshnessLabel } from '../cognitive/freshness.js';
 import { checkDuplicate as checkDuplicateImpl } from '../vector/duplicate_detector.js';
 import { DEFAULT_VECTOR_CONFIG } from '../vector/vector_types.js';
 import type { EmbeddingStats, DuplicateCheckResult } from '../vector/vector_types.js';
@@ -189,6 +192,44 @@ import { exportKnowledge } from '../exchange/export.js';
 import { importKnowledge } from '../exchange/import.js';
 import type { LimenEventName, LimenEventHandler } from '../plugins/plugin_types.js';
 import type { ExportOptions, LimenExportDocument, ImportOptions } from '../exchange/exchange_types.js';
+
+// ============================================================================
+// Vector Search Hydration Helpers (Task 4: compute real values instead of hardcoding)
+// ============================================================================
+
+/** Check if a claim is superseded by querying the relationship graph. */
+function vectorHydrateSuperseded(conn: DatabaseConnection, claimId: string): boolean {
+  const row = conn.get<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM claim_relationships WHERE to_claim_id = ? AND type = 'supersedes'`,
+    [claimId],
+  );
+  return (row?.cnt ?? 0) > 0;
+}
+
+/** Check if a claim is disputed (bidirectional 'contradicts' check, per I-P4-09). */
+function vectorHydrateDisputed(conn: DatabaseConnection, claimId: string): boolean {
+  const row = conn.get<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM claim_relationships WHERE (to_claim_id = ? OR from_claim_id = ?) AND type = 'contradicts'`,
+    [claimId, claimId],
+  );
+  return (row?.cnt ?? 0) > 0;
+}
+
+/** Compute effective confidence with time-decay for a hydrated claim row. */
+function vectorHydrateEffConf(claimRow: Record<string, unknown>): number {
+  const confidence = claimRow['confidence'] as number;
+  const validAt = claimRow['valid_at'] as string;
+  const stability = (claimRow['stability'] ?? 90) as number;
+  const ageMs = computeAgeMs(validAt, Date.now());
+  return computeEffectiveConfidence(confidence, ageMs, stability);
+}
+
+/** Classify freshness based on last access time for a hydrated claim row. */
+function vectorHydrateFreshness(claimRow: Record<string, unknown>): FreshnessLabel {
+  const lastAccessedAt = claimRow['last_accessed_at'] as string | null;
+  const lastAccessMs = lastAccessedAt ? Date.parse(lastAccessedAt) : null;
+  return classifyFreshness(lastAccessMs, Date.now());
+}
 
 // ============================================================================
 // Re-export public types (convenience for consumers)
@@ -1256,13 +1297,13 @@ export async function createLimen(
                 if (innerIterator?.return) {
                   return innerIterator.return();
                 }
-                return { value: undefined as unknown as StreamChunk, done: true };
+                return { value: undefined!, done: true };
               },
               async throw(err: Error): Promise<IteratorResult<StreamChunk>> {
                 if (innerIterator?.throw) {
                   return innerIterator.throw(err);
                 }
-                return { value: undefined as unknown as StreamChunk, done: true };
+                return { value: undefined!, done: true };
               },
             };
           },
@@ -1599,14 +1640,14 @@ export async function createLimen(
               claimId: claimRow['id'] as ClaimId,
               subject: claimRow['subject'] as string,
               predicate: claimRow['predicate'] as string,
-              value: claimRow['object_value'] ? JSON.parse(claimRow['object_value'] as string) : '',
+              value: String(claimRow['object_value'] ?? ''),
               confidence: claimRow['confidence'] as number,
               validAt: claimRow['valid_at'] as string,
               createdAt: claimRow['created_at'] as string,
-              superseded: false,
-              disputed: false,
-              effectiveConfidence: claimRow['confidence'] as number,
-              freshness: 'fresh' as const,
+              superseded: vectorHydrateSuperseded(conn, claimRow['id'] as string),
+              disputed: vectorHydrateDisputed(conn, claimRow['id'] as string),
+              effectiveConfidence: vectorHydrateEffConf(claimRow),
+              freshness: vectorHydrateFreshness(claimRow),
               stability: (claimRow['stability'] ?? 90) as number,
               lastAccessedAt: (claimRow['last_accessed_at'] ?? null) as string | null,
               accessCount: (claimRow['access_count'] ?? 0) as number,
@@ -1666,14 +1707,14 @@ export async function createLimen(
                 claimId: claimRow['id'] as ClaimId,
                 subject: claimRow['subject'] as string,
                 predicate: claimRow['predicate'] as string,
-                value: claimRow['object_value'] ? JSON.parse(claimRow['object_value'] as string) : '',
+                value: String(claimRow['object_value'] ?? ''),
                 confidence: claimRow['confidence'] as number,
                 validAt: claimRow['valid_at'] as string,
                 createdAt: claimRow['created_at'] as string,
-                superseded: false,
-                disputed: false,
-                effectiveConfidence: claimRow['confidence'] as number,
-                freshness: 'fresh' as const,
+                superseded: vectorHydrateSuperseded(conn, claimRow['id'] as string),
+                disputed: vectorHydrateDisputed(conn, claimRow['id'] as string),
+                effectiveConfidence: vectorHydrateEffConf(claimRow),
+                freshness: vectorHydrateFreshness(claimRow),
                 stability: (claimRow['stability'] ?? 90) as number,
                 lastAccessedAt: (claimRow['last_accessed_at'] ?? null) as string | null,
                 accessCount: (claimRow['access_count'] ?? 0) as number,
