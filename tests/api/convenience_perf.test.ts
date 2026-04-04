@@ -66,6 +66,7 @@ async function createPerfLimen(): Promise<Limen> {
       dataDir: dir,
       masterKey: makeKey(),
       providers: [],
+      rateLimiting: { apiCallsPerMinute: 10000 }, // Disable rate limiting for perf tests
     }),
   );
 }

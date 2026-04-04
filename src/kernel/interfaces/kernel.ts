@@ -41,6 +41,11 @@ export interface KernelConfig {
    * I-P4-10, I-P4-11.
    */
   readonly requireRbac?: boolean;
+  /** Rate limiting configuration overrides (P1-PERF-001). */
+  readonly rateLimiting?: {
+    readonly apiCallsPerMinute?: number;
+    readonly emitEventPerMinute?: number;
+  };
 }
 
 // ─── Kernel Health ───

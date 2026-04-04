@@ -51,7 +51,7 @@ if (results.ok) {
 await limen.shutdown();
 ```
 
-`createLimen()` with no arguments auto-detects LLM providers, generates a dev encryption key, and provisions a local SQLite database. Copy, paste, run.
+`createLimen()` with no arguments auto-detects LLM providers, generates a dev encryption key, and provisions a local SQLite database. Copy, paste, run. If no LLM provider is configured, core CRUD (remember, recall, search, forget) works in degraded mode — only cognitive features (chat, infer, verify, narrative) require a provider.
 
 ## What Makes Limen Different
 
@@ -71,7 +71,7 @@ Most AI memory systems store data — key-value pairs, vector embeddings, chat h
 | `remember(text, options?)` | Store a free-text observation (auto-generates subject) |
 | `recall(subject?, predicate?, options?)` | Retrieve beliefs, filtered by subject/predicate, with decay applied |
 | `search(query, options?)` | Full-text search across all beliefs (FTS5 + BM25) |
-| `forget(claimId, reason?)` | Retract a belief (governed, audited, never deleted) |
+| `forget(claimId, reason?)` | Retract a belief (governed, audited, never deleted). Reason: `'incorrect'` \| `'superseded'` \| `'expired'` \| `'manual'` (default) |
 | `connect(claimId1, claimId2, type)` | Relate beliefs: `supports`, `contradicts`, `supersedes`, `derived_from` |
 | `reflect(entries)` | Batch-store categorized learnings (decisions, patterns, warnings, findings) |
 
@@ -321,7 +321,7 @@ Kernel            SQLite (WAL), audit trail, RBAC, crypto, events
 
 Layers depend downward only. The kernel knows nothing about AI. The API composes everything into a single frozen `Limen` object via `Object.freeze`.
 
-5,000+ tests. 134+ invariants across 3 tiers. 16 system calls. 1 production dependency (`better-sqlite3`). Every state mutation is audited in a hash-chained, append-only trail. RBAC on every operation. AES-256-GCM encryption at rest.
+4,000+ tests. 134+ invariants across 3 tiers. 16 system calls. 1 production dependency (`better-sqlite3`). Every state mutation is audited in a hash-chained, append-only trail. RBAC on every operation. AES-256-GCM encryption at rest.
 
 ## Trust Surface
 

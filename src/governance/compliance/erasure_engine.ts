@@ -110,15 +110,25 @@ export function executeErasure(
     const fullUrn = request.dataSubjectId.startsWith('entity:')
       ? request.dataSubjectId
       : `entity:${request.dataSubjectId}`;
+    // F-E2E-002b: Exact match + child match (colon-delimited hierarchy).
+    // Matches 'entity:user:alice' and 'entity:user:alice:session:123'
+    // but NOT 'entity:user:aliceberg'.
+    // F-E2E-008b: Escape % and _ wildcards in user-provided subject before LIKE.
+    const escapedId = escapeLikeWildcards(request.dataSubjectId);
+    const escapedUrn = escapeLikeWildcards(fullUrn);
     const piiClaims = conn.query<Record<string, unknown>>(
       `SELECT id, subject FROM claim_assertions
        WHERE pii_detected = 1
-       AND (subject = ? OR subject = ?)
+       AND (subject = ? OR subject = ?
+            OR subject LIKE ? ESCAPE '\\' OR subject LIKE ? ESCAPE '\\')
        AND purged_at IS NULL
        ${tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL'}`,
       tenantId !== null
-        ? [request.dataSubjectId, fullUrn, tenantId]
-        : [request.dataSubjectId, fullUrn],
+        ? [request.dataSubjectId, fullUrn,
+           `${escapedId}:%`, `${escapedUrn}:%`,
+           tenantId]
+        : [request.dataSubjectId, fullUrn,
+           `${escapedId}:%`, `${escapedUrn}:%`],
     );
 
     if (piiClaims.length === 0) {

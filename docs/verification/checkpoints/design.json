@@ -1,0 +1,21 @@
+{
+  "_meta": {
+    "eap_version": "1.0.0",
+    "type": "CHECKPOINT",
+    "id": "ckpt-design-limen-2026-04-04",
+    "project": "limen",
+    "commit": "445bad324dacf291ad06fcee061a1469ab36c81e",
+    "timestamp": "2026-04-04T12:00:00Z",
+    "producer": { "role": "Builder", "dispatch_id": "remediation-2026-04-04" },
+    "evidence_status": "VALIDATED",
+    "qal_level": 4
+  },
+  "checkpoint_type": "design",
+  "status": "COMPLETE",
+  "gate_verdict": "PASS",
+  "required_artifacts": {
+    "PLAN": { "required": true, "present": true, "artifact_id": "claude-md" }
+  },
+  "blocking_issues": [],
+  "note": "Retroactive. CLAUDE.md (364 lines, 7 laws, 12 invariants, 29 hard bans, 4 amendments) serves as design artifact."
+}

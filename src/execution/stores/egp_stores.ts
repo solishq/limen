@@ -725,8 +725,8 @@ export function createExecutionGovernorImpl(
 
       // Check for invalid estimates
       for (const task of input.eligibleTasks) {
-        if (task.estimatedTokens < 0 || isNaN(task.estimatedTokens) ||
-            task.estimatedDeliberationTokens < 0 || isNaN(task.estimatedDeliberationTokens)) {
+        if (task.estimatedTokens < 0 || Number.isNaN(task.estimatedTokens) ||
+            task.estimatedDeliberationTokens < 0 || Number.isNaN(task.estimatedDeliberationTokens)) {
           return err(WAVE_ERROR_CODES.INVALID_TASK_ESTIMATE,
             `Invalid estimate for task ${task.taskId}`, 'DC-EGP-068');
         }

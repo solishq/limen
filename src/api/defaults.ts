@@ -189,24 +189,13 @@ export function resolveDataDir(): string {
  * Build a complete LimenConfig from environment auto-detection.
  * Called when createLimen() receives no arguments.
  *
- * @throws LimenError with INVALID_CONFIG if no providers detected
+ * Zero-config is supported: when no LLM providers are detected, the engine
+ * starts in degraded mode. Core CRUD (remember, recall, search, forget) works
+ * without LLM. Only cognitive features (chat, infer, verify, narrative) require
+ * a provider. This matches the README promise: "createLimen() with no arguments."
  */
 export function resolveDefaults(): LimenConfig {
   const providers = detectProviders();
-
-  if (providers.length === 0) {
-    throw new LimenError(
-      'INVALID_CONFIG',
-      'No LLM provider detected. Set one of these environment variables:\n' +
-      '  ANTHROPIC_API_KEY    → Anthropic (Claude)\n' +
-      '  OPENAI_API_KEY       → OpenAI (GPT)\n' +
-      '  GEMINI_API_KEY       → Google Gemini\n' +
-      '  GROQ_API_KEY         → Groq\n' +
-      '  MISTRAL_API_KEY      → Mistral\n' +
-      '  OLLAMA_HOST          → Ollama (local)\n' +
-      '\nExample: export ANTHROPIC_API_KEY=sk-ant-...',
-    );
-  }
 
   return {
     dataDir: resolveDataDir(),

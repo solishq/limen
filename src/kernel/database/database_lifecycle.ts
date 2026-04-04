@@ -15,7 +15,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { mkdirSync, existsSync, copyFileSync, statSync } from 'node:fs';
+import { mkdirSync, copyFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import type {
@@ -149,9 +149,8 @@ export function createDatabaseLifecycle(): DatabaseLifecycle {
         const { dataDir, tenancy, busyTimeoutMs = DEFAULT_BUSY_TIMEOUT_MS } = config;
 
         // §3.6: Create dataDir if it doesn't exist
-        if (!existsSync(dataDir)) {
-          mkdirSync(dataDir, { recursive: true });
-        }
+        // P2-TOCTOU: Use atomic mkdirSync({recursive: true}) — idempotent, no TOCTOU race
+        mkdirSync(dataDir, { recursive: true });
 
         const dbPath = join(dataDir, 'limen.db');
         const db = new Database(dbPath);

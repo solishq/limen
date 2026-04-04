@@ -4,7 +4,7 @@
 > Stale references fail the build.
 >
 > Generated: 2026-03-24
-> Limen version: 3.3.0
+> Limen version: 3.3.0 (internal spec version; npm package: v2.0.0)
 
 ## Evidence Classes
 

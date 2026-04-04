@@ -190,7 +190,7 @@ export async function* parseSSEStream(
             break;
           case 'retry': {
             const parsed = parseInt(value_str, 10);
-            if (!isNaN(parsed) && parsed >= 0) {
+            if (!Number.isNaN(parsed) && parsed >= 0) {
               currentRetry = parsed;
             }
             break;

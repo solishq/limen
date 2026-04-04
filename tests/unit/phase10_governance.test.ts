@@ -98,6 +98,7 @@ async function withLimen(
     dataDir,
     masterKey: masterKey(),
     providers: [],
+    rateLimiting: { apiCallsPerMinute: 10000 }, // High limit for test throughput
     ...(opts.requireRbac !== undefined ? { requireRbac: opts.requireRbac } : {}),
   });
   try {
@@ -1112,4 +1113,51 @@ describe('Phase 10: SOC 2 Export Tombstone Safety (RR-05)', () => {
         'SOC 2 export must NOT contain raw PII email after erasure');
     });
   });
+});
+
+// ============================================================================
+// GDPR Erasure Boundary Regression: aliceberg survives alice erasure
+// Finding: P0-SEC-001 — LIKE over-broad matching prevented
+// ============================================================================
+
+describe('Phase 10: GDPR Erasure Boundary (P0-SEC-001 regression)', () => {
+  it('GDPR erasure does not delete subjects that are superstrings', async () => {
+    await withLimen({}, async (limen) => {
+      // Store PII claims for both alice and aliceberg
+      const r1 = limen.remember('entity:user:alice', 'contact.email', 'alice@example.com');
+      assert.equal(r1.ok, true, `alice claim should succeed: ${!r1.ok ? r1.error.message : ''}`);
+
+      const r2 = limen.remember('entity:user:aliceberg', 'contact.email', 'aliceberg@example.com');
+      assert.equal(r2.ok, true, `aliceberg claim should succeed: ${!r2.ok ? r2.error.message : ''}`);
+
+      // Erase alice only
+      const erasureResult = limen.governance.erasure({
+        dataSubjectId: 'entity:user:alice',
+        reason: 'GDPR Article 17 request',
+        includeRelated: false,
+      });
+      assert.equal(erasureResult.ok, true, `Erasure should succeed: ${!erasureResult.ok ? erasureResult.error.message : ''}`);
+
+      // alice's data should be gone
+      const aliceRecall = limen.recall('entity:user:alice');
+      assert.equal(aliceRecall.ok, true);
+      if (aliceRecall.ok) {
+        assert.equal(aliceRecall.value.length, 0, 'alice claims should be erased');
+      }
+
+      // aliceberg's data MUST survive
+      const alicebergRecall = limen.recall('entity:user:aliceberg');
+      assert.equal(alicebergRecall.ok, true);
+      if (alicebergRecall.ok) {
+        assert.equal(alicebergRecall.value.length, 1, 'aliceberg claims must survive alice erasure');
+        assert.equal(alicebergRecall.value[0]?.value, 'aliceberg@example.com');
+      }
+    });
+  });
+
+  // Note: GDPR child match (entity:user:alice:session:123) cannot be tested through
+  // the convenience API because subject URN validation enforces entity:<type>:<id> format
+  // (exactly 3 colon-delimited segments). The LIKE '?:%' pattern in the erasure SQL is
+  // defensive — it protects against claims inserted via direct SQL or future API changes
+  // that may allow deeper subject hierarchies.
 });

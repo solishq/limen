@@ -32,12 +32,26 @@ const DEFAULT_LIMITS: Record<BucketType, { maxTokens: number; refillRate: number
   propose_rejections: { maxTokens: 10, refillRate: 10 / 60 },  // 10/period
 };
 
+/** Optional rate limit configuration overrides. */
+export interface RateLimiterConfig {
+  readonly apiCallsPerMinute?: number;
+  readonly emitEventPerMinute?: number;
+}
+
 /**
  * Create a RateLimiter implementation.
  * S ref: §36 (token-bucket rate limiting)
  */
-export function createRateLimiter(time?: TimeProvider): RateLimiter {
+export function createRateLimiter(time?: TimeProvider, config?: RateLimiterConfig): RateLimiter {
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
+  // Apply config overrides to defaults
+  const apiMax = config?.apiCallsPerMinute ?? DEFAULT_LIMITS.api_calls.maxTokens;
+  const emitMax = config?.emitEventPerMinute ?? DEFAULT_LIMITS.emit_event.maxTokens;
+  const effectiveLimits: Record<BucketType, { maxTokens: number; refillRate: number }> = {
+    api_calls: { maxTokens: apiMax, refillRate: apiMax / 60 },
+    emit_event: { maxTokens: emitMax, refillRate: emitMax / 60 },
+    propose_rejections: DEFAULT_LIMITS.propose_rejections,
+  };
   return {
     /**
      * Check if operation is allowed under rate limit. Consumes a token if allowed.
@@ -63,8 +77,8 @@ export function createRateLimiter(time?: TimeProvider): RateLimiter {
         );
 
         if (!bucket) {
-          // Create bucket with defaults
-          const defaults = DEFAULT_LIMITS[bucketType];
+          // Create bucket with effective limits (default + config overrides)
+          const defaults = effectiveLimits[bucketType];
           const id = randomUUID();
           conn.run(
             `INSERT INTO meter_rate_limits (id, tenant_id, agent_id, bucket_type, max_tokens, refill_rate, current_tokens, last_refill_at)
