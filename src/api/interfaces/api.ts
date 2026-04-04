@@ -341,6 +341,14 @@ export interface LimenConfig {
    * I-P12-50: verify() returns result; caller decides what to do.
    */
   readonly verificationProvider?: import('../../cognitive/cognitive_types.js').VerificationProvider | null;
+
+  /**
+   * Phase 8: Debug mode.
+   * When true, preserves original JS stack traces and error messages in LimenError
+   * instead of redacting them. MUST be false in production — exposes internal details.
+   * Default: false.
+   */
+  readonly debug?: boolean;
 }
 
 /**

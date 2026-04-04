@@ -185,10 +185,11 @@ export class LimenError extends Error {
       readonly cooldownMs?: number;
       readonly suggestion?: string;
       readonly violations?: readonly LimenViolation[];
+      readonly debug?: boolean;
     },
   ) {
-    // S39 IP-4: Sanitize message to remove any internal details
-    const safeMessage = sanitizeMessage(code, message);
+    // S39 IP-4: Sanitize message to remove any internal details (unless debug mode)
+    const safeMessage = options?.debug ? message : sanitizeMessage(code, message);
     super(safeMessage);
 
     this.name = 'LimenError';
@@ -209,8 +210,10 @@ export class LimenError extends Error {
     }
 
     // S39 IP-4: Redact the stack trace. Internal file paths must never leak.
-    // Replace with a minimal, non-revealing stack.
-    this.stack = `LimenError [${code}]: ${safeMessage}`;
+    // In debug mode, preserve the original JS stack trace for diagnostics.
+    if (!options?.debug) {
+      this.stack = `LimenError [${code}]: ${safeMessage}`;
+    }
   }
 }
 
@@ -306,11 +309,32 @@ const KERNEL_CODE_MAP: Readonly<Record<string, LimenErrorCode>> = {
  * @param error - The internal KernelError from L1/L1.5/L2
  * @returns LimenError ready to throw to consumers
  */
-export function mapKernelError(error: KernelError): LimenError {
-  const code: LimenErrorCode = KERNEL_CODE_MAP[error.code] ?? 'ENGINE_UNHEALTHY';
-  const message = sanitizeMessage(code, error.message);
+/**
+ * Helpful suggestion messages for common error codes.
+ * Populated in LimenError.suggestion to guide consumers toward resolution.
+ */
+const SUGGESTION_MAP: Partial<Record<LimenErrorCode, string>> = {
+  INVALID_INPUT: 'Check the input parameters match the expected types and formats.',
+  BUDGET_EXCEEDED: 'Increase budget limits or wait for the current window to reset.',
+  UNAUTHORIZED: 'The agent does not have the required permission. Check RBAC configuration.',
+  RATE_LIMITED: 'Too many requests. Wait for the rate limit window to reset.',
+  ENGINE_UNHEALTHY: 'Check that dataDir is writable and the database is not corrupted.',
+};
 
-  return new LimenError(code, message);
+export function mapKernelError(error: KernelError, debug?: boolean): LimenError {
+  const code: LimenErrorCode = KERNEL_CODE_MAP[error.code] ?? 'ENGINE_UNHEALTHY';
+  const message = debug ? error.message : sanitizeMessage(code, error.message);
+  const suggestion = SUGGESTION_MAP[code];
+
+  const opts: {
+    readonly suggestion?: string;
+    readonly debug?: boolean;
+  } = {
+    ...(suggestion !== undefined ? { suggestion } : {}),
+    ...(debug !== undefined ? { debug } : {}),
+  };
+
+  return new LimenError(code, message, opts);
 }
 
 /**
@@ -327,11 +351,11 @@ export function mapKernelError(error: KernelError): LimenError {
  * @returns The unwrapped value of type T
  * @throws LimenError if result.ok is false
  */
-export function unwrapResult<T>(result: Result<T>): T {
+export function unwrapResult<T>(result: Result<T>, debug?: boolean): T {
   if (result.ok) {
     return result.value;
   }
-  throw mapKernelError(result.error);
+  throw mapKernelError(result.error, debug);
 }
 
 /**
@@ -346,9 +370,16 @@ export function unwrapResult<T>(result: Result<T>): T {
  *
  * This guarantees SD-02: all public methods throw LimenError, never raw errors.
  */
-export function ensureLimenError(error: unknown): LimenError {
+export function ensureLimenError(error: unknown, debug?: boolean): LimenError {
   if (error instanceof LimenError) {
     return error;
+  }
+
+  if (debug && error instanceof Error) {
+    // Debug mode: preserve original message and cause chain for diagnostics.
+    const le = new LimenError('ENGINE_UNHEALTHY', error.message, { debug });
+    le.cause = error;
+    return le;
   }
 
   if (error instanceof Error) {
