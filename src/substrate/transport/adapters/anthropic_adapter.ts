@@ -227,6 +227,7 @@ export function createAnthropicAdapter(
     const responseBlocks: LlmContentBlock[] = [];
     const toolCalls: LlmToolCall[] = [];
     let hasThinking = false;
+    let thinkingCharCount = 0;
 
     for (const block of content) {
       if (typeof block !== 'object' || block === null) continue;
@@ -251,6 +252,10 @@ export function createAnthropicAdapter(
         // CR-5: Thinking blocks → deliberation metrics
         // NOT included in LlmResponse.content
         hasThinking = true;
+        // Accumulate thinking text length for token estimation
+        if (typeof b.thinking === 'string') {
+          thinkingCharCount += b.thinking.length;
+        }
       }
     }
 
@@ -267,19 +272,38 @@ export function createAnthropicAdapter(
     const finishReason = mapFinishReason(stopReason);
 
     // Deliberation metrics
-    // CR-5: When thinking blocks present → provider_authoritative with the output token count
-    // When no thinking → estimated with 0 tokens, providerReportedThinkingTokens = null
-    const deliberation: DeliberationMetrics = hasThinking
-      ? {
-          deliberationTokens: outputTokens,
-          accountingMode: 'provider_authoritative',
-          providerReportedThinkingTokens: outputTokens,
+    // CR-5: When thinking blocks present, estimate deliberation tokens.
+    // Anthropic's output_tokens includes BOTH thinking + completion tokens.
+    // The API does not provide a separate thinking token count in non-streaming responses.
+    // We estimate using character ratio: (thinking chars / total output chars) * outputTokens.
+    // When no thinking → estimated with 0 tokens, providerReportedThinkingTokens = null.
+    let deliberation: DeliberationMetrics;
+    if (hasThinking) {
+      // Compute total non-thinking character count from response blocks
+      let completionCharCount = 0;
+      for (const rb of responseBlocks) {
+        if (rb.type === 'text') {
+          completionCharCount += rb.text.length;
         }
-      : {
-          deliberationTokens: 0,
-          accountingMode: 'estimated',
-          providerReportedThinkingTokens: null,
-        };
+      }
+      const totalChars = thinkingCharCount + completionCharCount;
+      // Estimate deliberation tokens proportionally; if no text at all, attribute all to thinking
+      const estimatedDeliberationTokens = totalChars > 0
+        ? Math.round((thinkingCharCount / totalChars) * outputTokens)
+        : outputTokens;
+
+      deliberation = {
+        deliberationTokens: estimatedDeliberationTokens,
+        accountingMode: 'estimated',
+        providerReportedThinkingTokens: null,
+      };
+    } else {
+      deliberation = {
+        deliberationTokens: 0,
+        accountingMode: 'estimated',
+        providerReportedThinkingTokens: null,
+      };
+    }
 
     const response: LlmResponse = {
       content: responseBlocks.length === 1 && responseBlocks[0]?.type === 'text'

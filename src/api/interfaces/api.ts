@@ -1544,7 +1544,8 @@ export type LimenErrorCode =
   | 'MANIFEST_TRUST_VIOLATION'          // BC-100: Capability manifest trust tier violation
   | 'RESUME_TOKEN_INVALID'              // BC-138: Resume token invalid or consumed
   | 'RESUME_TOKEN_EXPIRED'              // BC-136: Resume token expired
-  | 'IDEMPOTENCY_CONFLICT';             // BC-133: Same idempotency key, different payload
+  | 'IDEMPOTENCY_CONFLICT'              // BC-133: Same idempotency key, different payload
+  | 'NOT_IMPLEMENTED';                   // Method stub not yet implemented
 
 // ============================================================================
 // §6.14: Backpressure Types (S36)

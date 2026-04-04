@@ -65,7 +65,18 @@ export function detectStructuralConflicts(
     [subject, predicate, objectValue, newClaimId],
   );
 
-  return {
-    conflictingClaimIds: conflicts.map(r => r.id),
-  };
+  const CONFLICT_CAP = 100;
+  const allIds = conflicts.map(r => r.id);
+
+  if (allIds.length > CONFLICT_CAP) {
+    // Log warning — this indicates a data quality issue (too many contradicting claims for one subject+predicate).
+    // Returning all would cause unbounded relationship creation and performance degradation.
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[conflict] Subject="${subject}" predicate="${predicate}" has ${allIds.length} structural conflicts (cap: ${CONFLICT_CAP}). Returning first ${CONFLICT_CAP} only.`,
+    );
+    return { conflictingClaimIds: allIds.slice(0, CONFLICT_CAP) };
+  }
+
+  return { conflictingClaimIds: allIds };
 }
