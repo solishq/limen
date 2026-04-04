@@ -1846,6 +1846,17 @@ function createRetractClaimHandlerImpl(
           });
         }
 
+        // 10. Phase 11+: Delete vector embedding for retracted claim (I-P11-30)
+        // Retracted claims must not appear in KNN results. Deleting the embedding
+        // is defense-in-depth — KNN post-filter already excludes status='retracted',
+        // but stale embeddings waste storage and slow vec0 scans.
+        if (deps.getVectorStore) {
+          const vs = deps.getVectorStore();
+          if (vs) {
+            vs.delete(conn, input.claimId as string);
+          }
+        }
+
         return ok(undefined);
       });
     },
