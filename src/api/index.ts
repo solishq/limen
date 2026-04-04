@@ -156,6 +156,9 @@ import { classifyFreshness } from '../cognitive/freshness.js';
 // Phase 5 fix: FTS5 retraction guard migration (v46)
 import { getFts5RetractionGuardMigrations } from './migration/037_fts5_retraction_guard.js';
 
+// Phase 13A: Sync Foundation migration (v47)
+import { getSyncFoundationMigrations } from './migration/037_sync_foundation.js';
+
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
 
@@ -497,6 +500,7 @@ function buildOrchestrationAdapter(
       ...getVectorSearchMigrations(),                          // v44: Phase 11 vector search
       ...getCognitiveEngineMigrations(),                         // v45: Phase 12 cognitive engine
       ...getFts5RetractionGuardMigrations(),                      // v46: Phase 5 fix — FTS5 retraction guard
+      ...getSyncFoundationMigrations(),                            // v47: Phase 13A sync foundation
     ]);
     if (!phase4Governance.ok) {
       conn.close();
@@ -767,6 +771,7 @@ export async function createLimen(
         ...getVectorSearchMigrations(),
         ...getCognitiveEngineMigrations(),
         ...getFts5RetractionGuardMigrations(),
+        ...getSyncFoundationMigrations(),
       ]);
       if (recoveryMigResult.ok) {
         // P0-A: Pass transition service to recovery for governance-enforced transitions.
