@@ -94,16 +94,51 @@ export function createEventBus(encryption?: EventBusEncryption, time?: TimeProvi
         const eventId = randomUUID() as EventId;
         const timestamp = clock.nowMs();
 
-        // Persist event to obs_events
-        conn.run(
-          `INSERT INTO obs_events (id, tenant_id, type, scope, mission_id, payload, timestamp, propagation, delivered, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
-          [eventId, ctx.tenantId, event.type, event.scope,
-           event.missionId ?? null, JSON.stringify(event.payload),
-           timestamp, event.propagation]
-        );
+        // Phase 3 fix: Wrap all DB operations (persist + webhook records) in a single
+        // transaction. In-memory handler dispatch happens AFTER the transaction commits
+        // because handlers can't be rolled back.
+        conn.transaction(() => {
+          // Persist event to obs_events
+          conn.run(
+            `INSERT INTO obs_events (id, tenant_id, type, scope, mission_id, payload, timestamp, propagation, delivered, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
+            [eventId, ctx.tenantId, event.type, event.scope,
+             event.missionId ?? null, JSON.stringify(event.payload),
+             timestamp, event.propagation]
+          );
 
-        // Synchronous in-process dispatch to matching subscribers
+          // Check for webhook subscriptions and create delivery records
+          const webhookSubs = conn.query<{ id: string; handler_config: string }>(
+            `SELECT id, handler_config FROM obs_event_subscriptions
+             WHERE active = 1 AND subscriber_type = 'webhook'
+             AND (tenant_id = ? OR tenant_id IS NULL)`,
+            [ctx.tenantId]
+          );
+
+          for (const webhookSub of webhookSubs) {
+            // Check if this webhook's pattern matches
+            const subPattern = conn.get<{ event_pattern: string }>(
+              `SELECT event_pattern FROM obs_event_subscriptions WHERE id = ?`,
+              [webhookSub.id]
+            );
+
+            if (subPattern && matchesPattern(event.type, subPattern.event_pattern)) {
+              const deliveryId = randomUUID();
+              const idempotencyKey = `${eventId}:${webhookSub.id}`;
+
+              conn.run(
+                `INSERT INTO obs_webhook_deliveries
+                 (id, subscription_id, event_id, idempotency_key, status, attempts, max_attempts, created_at)
+                 VALUES (?, ?, ?, ?, 'pending', 0, 3, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
+                [deliveryId, webhookSub.id, eventId, idempotencyKey]
+              );
+            }
+          }
+        });
+
+        // Synchronous in-process dispatch to matching subscribers.
+        // Dispatched AFTER transaction commits — handlers can't be rolled back,
+        // so they must only see committed state.
         for (const sub of subscriptions.values()) {
           if (matchesPattern(event.type, sub.pattern)) {
             try {
@@ -112,34 +147,6 @@ export function createEventBus(encryption?: EventBusEncryption, time?: TimeProvi
               // Handler errors do not propagate to emitter per RDD-4.
               // Handlers are responsible for their own error handling.
             }
-          }
-        }
-
-        // Check for webhook subscriptions and create delivery records
-        const webhookSubs = conn.query<{ id: string; handler_config: string }>(
-          `SELECT id, handler_config FROM obs_event_subscriptions
-           WHERE active = 1 AND subscriber_type = 'webhook'
-           AND (tenant_id = ? OR tenant_id IS NULL)`,
-          [ctx.tenantId]
-        );
-
-        for (const webhookSub of webhookSubs) {
-          // Check if this webhook's pattern matches
-          const subPattern = conn.get<{ event_pattern: string }>(
-            `SELECT event_pattern FROM obs_event_subscriptions WHERE id = ?`,
-            [webhookSub.id]
-          );
-
-          if (subPattern && matchesPattern(event.type, subPattern.event_pattern)) {
-            const deliveryId = randomUUID();
-            const idempotencyKey = `${eventId}:${webhookSub.id}`;
-
-            conn.run(
-              `INSERT INTO obs_webhook_deliveries
-               (id, subscription_id, event_id, idempotency_key, status, attempts, max_attempts, created_at)
-               VALUES (?, ?, ?, ?, 'pending', 0, 3, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
-              [deliveryId, webhookSub.id, eventId, idempotencyKey]
-            );
           }
         }
 

@@ -46,6 +46,13 @@ export interface ImportDeps {
    */
   readonly queryClaims: (input: { subject?: string; predicate?: string; status?: string; limit?: number }) => Result<{ claims: readonly { claim: { subject: string; predicate: string; object: { value: string }; status: string } }[] }>;
   readonly missionId: MissionId;
+  /**
+   * Phase 3: Optional transaction wrapper for all-or-nothing import semantics.
+   * When provided, all claim assertions and relationship bindings execute within
+   * a single transaction. On any throw, everything rolls back.
+   * When absent (backward compat), import executes without transaction wrapping.
+   */
+  readonly withTransaction?: <T>(fn: () => T) => T;
 }
 
 // ── Import Function ──
@@ -93,136 +100,152 @@ export function importKnowledge(deps: ImportDeps, document: LimenExportDocument,
     );
   }
 
-  // Process claims
-  const idMap = new Map<string, string>();
-  const errors: ImportError[] = [];
-  let imported = 0;
-  let skipped = 0;
-  let failed = 0;
+  // Process claims and relationships
+  // Phase 3 fix: Wrap all mutations in a transaction for all-or-nothing semantics.
+  // When deps.withTransaction is provided, a failure mid-import rolls back all claims.
+  // When absent (backward compat for tests), executes without transaction wrapping.
+  const executeImport = (): ImportResult => {
+    const idMap = new Map<string, string>();
+    const errors: ImportError[] = [];
+    let imported = 0;
+    let skipped = 0;
+    let failed = 0;
 
-  // Valid objectType values
-  const VALID_OBJECT_TYPES = new Set(['string', 'number', 'boolean', 'date', 'json']);
+    // Valid objectType values
+    const VALID_OBJECT_TYPES = new Set(['string', 'number', 'boolean', 'date', 'json']);
 
-  for (let i = 0; i < document.claims.length; i++) {
-    const claim = document.claims[i]!;
+    for (let i = 0; i < document.claims.length; i++) {
+      const claim = document.claims[i]!;
 
-    // F-004: Boundary validation before delegation to assertClaim()
-    // Import is a trust boundary — external JSON must be validated here.
-    const validationError = validateImportClaim(claim, i, VALID_OBJECT_TYPES);
-    if (validationError) {
-      errors.push({ claimIndex: i, claimId: claim.id ?? `unknown-${i}`, reason: validationError });
-      failed++;
-      continue;
-    }
-
-    // Dedup check (I-P8-22)
-    if (dedup === 'by_content') {
-      const key = contentKey(claim.subject, claim.predicate, claim.objectValue, claim.status);
-
-      // Check within-batch dedup
-      if (seenContentKeys.has(key)) {
-        if (onConflict === 'error') {
-          return err('IMPORT_DEDUP_CONFLICT', `Duplicate claim at index ${i}: subject='${claim.subject}', predicate='${claim.predicate}'.`);
-        }
-        skipped++;
+      // F-004: Boundary validation before delegation to assertClaim()
+      // Import is a trust boundary — external JSON must be validated here.
+      const validationError = validateImportClaim(claim, i, VALID_OBJECT_TYPES);
+      if (validationError) {
+        errors.push({ claimIndex: i, claimId: claim.id ?? `unknown-${i}`, reason: validationError });
+        failed++;
         continue;
       }
 
-      // Check existing database
-      if (existsInDatabase(claim.subject, claim.predicate, claim.objectValue, claim.status)) {
-        if (onConflict === 'error') {
-          return err('IMPORT_DEDUP_CONFLICT', `Duplicate claim at index ${i}: subject='${claim.subject}', predicate='${claim.predicate}'.`);
-        }
-        skipped++;
-        continue;
-      }
-    }
-
-    if (dryRun) {
-      imported++;
-      idMap.set(claim.id, `dry-run-${i}`);
+      // Dedup check (I-P8-22)
       if (dedup === 'by_content') {
-        seenContentKeys.add(contentKey(claim.subject, claim.predicate, claim.objectValue, claim.status));
+        const key = contentKey(claim.subject, claim.predicate, claim.objectValue, claim.status);
+
+        // Check within-batch dedup
+        if (seenContentKeys.has(key)) {
+          if (onConflict === 'error') {
+            // Must throw to trigger transaction rollback instead of returning
+            throw Object.assign(new Error(`Duplicate claim at index ${i}: subject='${claim.subject}', predicate='${claim.predicate}'.`), { code: 'IMPORT_DEDUP_CONFLICT' });
+          }
+          skipped++;
+          continue;
+        }
+
+        // Check existing database
+        if (existsInDatabase(claim.subject, claim.predicate, claim.objectValue, claim.status)) {
+          if (onConflict === 'error') {
+            throw Object.assign(new Error(`Duplicate claim at index ${i}: subject='${claim.subject}', predicate='${claim.predicate}'.`), { code: 'IMPORT_DEDUP_CONFLICT' });
+          }
+          skipped++;
+          continue;
+        }
       }
-      continue;
-    }
 
-    // Import via ClaimApi (I-P8-21: new ID assigned by the system)
-    const input: ClaimCreateInput = {
-      subject: claim.subject,
-      predicate: claim.predicate,
-      object: { type: claim.objectType as 'string' | 'number' | 'boolean' | 'date' | 'json', value: claim.objectValue },
-      confidence: claim.confidence,
-      validAt: claim.validAt,
-      missionId: deps.missionId,
-      taskId: null,
-      evidenceRefs: [],
-      groundingMode: claim.groundingMode,
-      ...(claim.groundingMode === 'runtime_witness' ? {
-        runtimeWitness: {
-          witnessType: 'convenience' as const,
-          witnessedValues: { source: 'import' },
-          witnessTimestamp: claim.validAt,
-        },
-      } : {}),
-      ...(claim.reasoning !== null && claim.reasoning !== undefined ? { reasoning: claim.reasoning } : {}),
-    };
-
-    const result = deps.assertClaim(input);
-    if (result.ok) {
-      idMap.set(claim.id, result.value.claim.id);
-      imported++;
-
-      // Track for within-batch dedup
-      if (dedup === 'by_content') {
-        seenContentKeys.add(contentKey(claim.subject, claim.predicate, claim.objectValue, claim.status));
-      }
-    } else {
-      errors.push({ claimIndex: i, claimId: claim.id, reason: result.error.message });
-      failed++;
-    }
-  }
-
-  // Process relationships (I-P8-23: rebind via idMap)
-  let relationshipsImported = 0;
-  let relationshipsSkipped = 0;
-
-  if (!dryRun && document.relationships && document.relationships.length > 0) {
-    for (const rel of document.relationships) {
-      const newFromId = idMap.get(rel.fromClaimId);
-      const newToId = idMap.get(rel.toClaimId);
-
-      if (!newFromId || !newToId) {
-        // I-P8-23: Missing reference — skip
-        relationshipsSkipped++;
+      if (dryRun) {
+        imported++;
+        idMap.set(claim.id, `dry-run-${i}`);
+        if (dedup === 'by_content') {
+          seenContentKeys.add(contentKey(claim.subject, claim.predicate, claim.objectValue, claim.status));
+        }
         continue;
       }
 
-      const relInput: RelationshipCreateInput = {
-        fromClaimId: newFromId as ClaimId,
-        toClaimId: newToId as ClaimId,
-        type: rel.type as RelationshipType,
+      // Import via ClaimApi (I-P8-21: new ID assigned by the system)
+      const input: ClaimCreateInput = {
+        subject: claim.subject,
+        predicate: claim.predicate,
+        object: { type: claim.objectType as 'string' | 'number' | 'boolean' | 'date' | 'json', value: claim.objectValue },
+        confidence: claim.confidence,
+        validAt: claim.validAt,
         missionId: deps.missionId,
+        taskId: null,
+        evidenceRefs: [],
+        groundingMode: claim.groundingMode,
+        ...(claim.groundingMode === 'runtime_witness' ? {
+          runtimeWitness: {
+            witnessType: 'convenience' as const,
+            witnessedValues: { source: 'import' },
+            witnessTimestamp: claim.validAt,
+          },
+        } : {}),
+        ...(claim.reasoning !== null && claim.reasoning !== undefined ? { reasoning: claim.reasoning } : {}),
       };
 
-      const relResult = deps.relateClaims(relInput);
-      if (relResult.ok) {
-        relationshipsImported++;
+      const result = deps.assertClaim(input);
+      if (result.ok) {
+        idMap.set(claim.id, result.value.claim.id);
+        imported++;
+
+        // Track for within-batch dedup
+        if (dedup === 'by_content') {
+          seenContentKeys.add(contentKey(claim.subject, claim.predicate, claim.objectValue, claim.status));
+        }
       } else {
-        relationshipsSkipped++;
+        errors.push({ claimIndex: i, claimId: claim.id, reason: result.error.message });
+        failed++;
       }
     }
-  }
 
-  return ok({
-    imported,
-    skipped,
-    failed,
-    relationshipsImported,
-    relationshipsSkipped,
-    errors,
-    idMap,
-  });
+    // Process relationships (I-P8-23: rebind via idMap)
+    let relationshipsImported = 0;
+    let relationshipsSkipped = 0;
+
+    if (!dryRun && document.relationships && document.relationships.length > 0) {
+      for (const rel of document.relationships) {
+        const newFromId = idMap.get(rel.fromClaimId);
+        const newToId = idMap.get(rel.toClaimId);
+
+        if (!newFromId || !newToId) {
+          // I-P8-23: Missing reference — skip
+          relationshipsSkipped++;
+          continue;
+        }
+
+        const relInput: RelationshipCreateInput = {
+          fromClaimId: newFromId as ClaimId,
+          toClaimId: newToId as ClaimId,
+          type: rel.type as RelationshipType,
+          missionId: deps.missionId,
+        };
+
+        const relResult = deps.relateClaims(relInput);
+        if (relResult.ok) {
+          relationshipsImported++;
+        } else {
+          relationshipsSkipped++;
+        }
+      }
+    }
+
+    return {
+      imported,
+      skipped,
+      failed,
+      relationshipsImported,
+      relationshipsSkipped,
+      errors,
+      idMap,
+    };
+  };
+
+  try {
+    const result = deps.withTransaction
+      ? deps.withTransaction(executeImport)
+      : executeImport();
+    return ok(result);
+  } catch (importErr) {
+    const error = importErr as Error & { code?: string };
+    return err(error.code ?? 'IMPORT_FAILED', error.message);
+  }
 }
 
 /**
