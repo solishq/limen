@@ -1558,7 +1558,7 @@ function createAssertClaimHandlerImpl(
         if (deps.wmpCapture && input.taskId) {
           const captureResult = deps.wmpCapture.capture(conn, input.taskId);
           if (!captureResult.ok) return captureResult as Result<AssertClaimOutput>;
-          wmpCaptureId = captureResult.value.captureId;
+          wmpCaptureId = captureResult.value.captureId ?? undefined;
           wmpSourcingStatus = captureResult.value.sourcingStatus;
         }
 

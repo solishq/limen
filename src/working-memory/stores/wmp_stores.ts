@@ -1048,8 +1048,8 @@ export function createPreEmissionCaptureImpl(
 
       if (!initResult.value) {
         // Never-initialized — not_applicable (no snapshot needed)
-        // captureId is '' for not_applicable (never-initialized WMP has no boundary event)
-        return ok<WmpCaptureResult>({ captureId: '', sourcingStatus: 'not_applicable' });
+        // captureId is null for not_applicable (never-initialized WMP has no boundary event)
+        return ok<WmpCaptureResult>({ captureId: null, sourcingStatus: 'not_applicable' });
       }
 
       // Initialized — capture pre-emission snapshot

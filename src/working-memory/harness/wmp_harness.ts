@@ -55,22 +55,39 @@ import {
 export { NotImplementedError };
 
 // ============================================================================
+// Module-Level Shared Connection Reference
+// ============================================================================
+//
+// When createWorkingMemorySystem() and createWmpInternalReader() are both called
+// without an explicit wmpConnectionRef (the test pattern), they must share the
+// same connection reference so that write.execute(conn, ...) — which sets
+// connRef.current = conn — makes the connection visible to the internal reader.
+//
+// In production, InstanceContext provides an explicit wmpConnectionRef to both,
+// so this module-level ref is only used as a fallback for the no-args path.
+// ============================================================================
+
+const _sharedDefaultConnRef: { current: DatabaseConnection | null } = { current: null };
+
+// ============================================================================
 // Cross-Subsystem Adapters — CGP + CCP wiring
 // ============================================================================
 
 /**
- * WMP adapter implementing WmpInternalReader (CGP §9.2).
+ * WMP adapter implementing WmpInternalReader (CGP S9.2).
  * Provides P2 candidate entries to the context admission runtime.
  *
  * v2.1.0: Accepts optional wmpConnectionRef from InstanceContext.
- * When not provided, creates a local ref (backward compat for tests).
+ * When not provided, uses module-level shared ref (synchronized with
+ * createWorkingMemorySystem default ref so write.execute sets the connection
+ * visible to the reader).
  */
 export function createWmpInternalReader(wmpConnectionRef?: { current: DatabaseConnection | null }): WmpInternalReader {
-  return createInternalReader(wmpConnectionRef);
+  return createInternalReader(wmpConnectionRef ?? _sharedDefaultConnRef);
 }
 
 /**
- * WMP adapter implementing WmpPreEmissionCapture (CCP §6.4 Trigger 4).
+ * WMP adapter implementing WmpPreEmissionCapture (CCP S6.4 Trigger 4).
  * Provides pre-emission boundary capture for SC-11/SC-4/SC-9.
  */
 export function createWmpPreEmissionCapture(): WmpPreEmissionCapture {
@@ -107,7 +124,7 @@ export function createWorkingMemorySystem(
     maxTotalBytes: 262144,
   };
   const eventSink: WmpEventSink = deps?.eventSink ?? WMP_NULL_EVENT_SINK;
-  const connRef = wmpConnectionRef ?? { current: null };
+  const connRef = wmpConnectionRef ?? _sharedDefaultConnRef;
   const clockState = monotonicClockState ?? { lastTimestamp: '' };
 
   // Create store instances
