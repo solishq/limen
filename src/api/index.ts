@@ -545,6 +545,10 @@ export async function createLimen(
   // Throws INVALID_CONFIG with helpful message if no providers detected.
   const resolvedConfig: LimenConfig = config ?? resolveDefaults();
 
+  // Phase 8: Extract debug flag for error construction throughout the factory.
+  // When true, LimenError preserves original stack traces and messages.
+  const debug = resolvedConfig.debug === true;
+
   // CF-004: Default to production wiring when deps not provided.
   // S3.3: Consumers call createLimen(config) — no internal imports needed.
   // R4C-004: Track orchestration connection for shutdown cleanup.
@@ -642,7 +646,7 @@ export async function createLimen(
   } catch (err) {
     // R4C-005: Cleanup kernel on substrate construction failure
     try { destroyKernel(kernel); } catch { /* ignore cleanup errors */ }
-    throw ensureLimenError(err);
+    throw ensureLimenError(err, debug);
   }
 
   // ── Step 3.5: Create GovernanceSystem early for TransitionEnforcer (P0-A) ──
@@ -670,7 +674,7 @@ export async function createLimen(
   } catch (err) {
     // R4C-005: Cleanup kernel on orchestration construction failure
     try { destroyKernel(kernel); } catch { /* ignore cleanup errors */ }
-    throw ensureLimenError(err);
+    throw ensureLimenError(err, debug);
   }
 
   // ── Step 4.5a: Mission Recovery (Sprint 4, I-18) ──
@@ -1270,7 +1274,7 @@ export async function createLimen(
           metadata: metadataPromise,
         };
       } catch (error) {
-        const limeError = ensureLimenError(error);
+        const limeError = ensureLimenError(error, debug);
         return {
           text: Promise.reject(limeError),
           stream: (async function* (): AsyncGenerator<StreamChunk> {
@@ -1966,7 +1970,7 @@ export async function createLimen(
       // but all steps have completed their cleanup attempt.
       if (shutdownErrors.length > 0) {
         log({ level: 'error', category: 'shutdown', message: 'Shutdown completed with errors', context: { errorCount: shutdownErrors.length, firstError: shutdownErrors[0]!.message } });
-        throw ensureLimenError(shutdownErrors[0]!);
+        throw ensureLimenError(shutdownErrors[0]!, debug);
       }
       log({ level: 'info', category: 'shutdown', message: 'Limen shutdown complete' });
     },

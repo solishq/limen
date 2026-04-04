@@ -1278,12 +1278,12 @@ function createAssertClaimHandlerImpl(
 
         // 2. Validate subject URN
         if (!input.subject || !isValidSubjectURN(input.subject)) {
-          return err('INVALID_SUBJECT', `Invalid subject URN: ${input.subject}`, 'SC-11');
+          return err('INVALID_SUBJECT', `Invalid subject URN: "${input.subject}". Expected format: entity:<type>:<id> (e.g., entity:user:alice)`, 'SC-11');
         }
 
         // 3. Validate predicate
         if (!input.predicate || !isValidPredicate(input.predicate)) {
-          return err('INVALID_PREDICATE', `Invalid predicate format: ${input.predicate}`, 'SC-11');
+          return err('INVALID_PREDICATE', `Invalid predicate format: "${input.predicate}". Expected: domain.property (e.g., preference.food)`, 'SC-11');
         }
         if (isReservedPredicate(input.predicate)) {
           return err('INVALID_PREDICATE', `Reserved predicate namespace: ${input.predicate}`, 'SC-11');
