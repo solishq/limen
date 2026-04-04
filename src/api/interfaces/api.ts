@@ -1510,6 +1510,7 @@ export type LimenErrorCode =
   | 'PROVIDER_UNAVAILABLE'              // FM-06, I-16
   | 'SCHEMA_VALIDATION_FAILED'          // S28
   | 'ENGINE_UNHEALTHY'                  // S32.4
+  | 'ENGINE_SHUTDOWN'                    // Post-shutdown connection access
   | 'SESSION_NOT_FOUND'                 // S26
   | 'INVALID_CONFIG'                    // S3.3
   | 'INVALID_INPUT'                     // CF-019, CF-028 (input validation at API boundary)
