@@ -44,7 +44,7 @@ function unwrapForChainQuery(conn: DatabaseConnection): DatabaseConnection {
  * Uses a deterministic field ordering for consistent hashing.
  * S ref: §3.5 (SHA-256 hash chaining)
  */
-function computeEntryHash(sha256Fn: (data: string) => string, previousHash: string, input: AuditCreateInput, timestamp: string, seqNo: number): string {
+export function computeEntryHash(sha256Fn: (data: string) => string, previousHash: string, input: AuditCreateInput, timestamp: string, seqNo: number): string {
   // Deterministic serialization: fixed field order, canonical JSON
   const data = [
     previousHash,

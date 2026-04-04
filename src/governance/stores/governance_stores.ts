@@ -13,6 +13,7 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto';
+import { timingSafeHexEqual } from '../../kernel/crypto/crypto_engine.js';
 import type { DatabaseConnection } from '../../kernel/interfaces/database.js';
 import type {
   TenantId, MissionId, TaskId, OperationContext, Result, KernelError,
@@ -1348,9 +1349,9 @@ export function createIdempotencyStoreImpl(time?: TimeProvider): IdempotencyStor
         return ok({ outcome: 'new' as const });
       }
 
-      // BC-132: Same hash → deduplicated
+      // BC-132: Same hash → deduplicated (timing-safe to prevent side-channel leaks)
       const storedHash = row['payload_hash'] as string;
-      if (storedHash === key.payloadHash) {
+      if (timingSafeHexEqual(storedHash, key.payloadHash)) {
         return ok({
           outcome: 'deduplicated' as const,
           originalCorrelationId: row['correlation_id'] as CorrelationId,
