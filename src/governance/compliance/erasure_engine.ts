@@ -19,9 +19,10 @@
  */
 
 import { randomUUID, createHash } from 'node:crypto';
-import type { OperationContext, Result } from '../../kernel/interfaces/common.js';
+import type { OperationContext, Result, TenantId } from '../../kernel/interfaces/common.js';
 import type { DatabaseConnection } from '../../kernel/interfaces/database.js';
-import type { AuditTrail } from '../../kernel/interfaces/audit.js';
+import type { AuditTrail, AuditCreateInput } from '../../kernel/interfaces/audit.js';
+import { computeEntryHash } from '../../kernel/audit/audit_trail.js';
 import type { TimeProvider } from '../../kernel/interfaces/time.js';
 import type { ClaimStore } from '../../claims/interfaces/claim_types.js';
 import type { ConsentRegistry } from '../../security/security_types.js';
@@ -276,20 +277,19 @@ export function executeErasure(
           prevHash = predecessor?.current_hash ?? 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
         }
 
-        // Re-hash each entry to maintain chain integrity
+        // Re-hash each entry to maintain chain integrity using canonical computeEntryHash
+        const sha256Fn = (data: string): string => createHash('sha256').update(data).digest('hex');
         for (const entry of allSubsequent) {
-          const data = [
-            prevHash,
-            String(entry.seq_no),
-            entry.timestamp,
-            entry.actor_type,
-            entry.actor_id,
-            entry.operation,
-            entry.resource_type,
-            entry.resource_id,
-            entry.detail ? JSON.stringify(JSON.parse(entry.detail), entry.detail !== '{}' ? Object.keys(JSON.parse(entry.detail)).sort() : undefined) : '',
-          ].join('|');
-          const newHash = createHash('sha256').update(data).digest('hex');
+          const input: AuditCreateInput = {
+            tenantId: entry.tenant_id as TenantId | null,
+            actorType: entry.actor_type as AuditCreateInput['actorType'],
+            actorId: entry.actor_id,
+            operation: entry.operation,
+            resourceType: entry.resource_type,
+            resourceId: entry.resource_id,
+            ...(entry.detail ? { detail: JSON.parse(entry.detail) as Record<string, unknown> } : {}),
+          };
+          const newHash = computeEntryHash(sha256Fn, prevHash, input, entry.timestamp, entry.seq_no);
           conn.run(
             `UPDATE core_audit_log SET previous_hash = ?, current_hash = ? WHERE seq_no = ?`,
             [prevHash, newHash, entry.seq_no],
@@ -372,19 +372,19 @@ export function executeErasure(
           prevHash2 = predecessor2?.current_hash ?? 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
         }
 
+        // Re-hash using canonical computeEntryHash
+        const sha256Fn2 = (data: string): string => createHash('sha256').update(data).digest('hex');
         for (const entry of allSubsequent2) {
-          const data = [
-            prevHash2,
-            String(entry.seq_no),
-            entry.timestamp,
-            entry.actor_type,
-            entry.actor_id,
-            entry.operation,
-            entry.resource_type,
-            entry.resource_id,
-            entry.detail ? JSON.stringify(JSON.parse(entry.detail), entry.detail !== '{}' ? Object.keys(JSON.parse(entry.detail)).sort() : undefined) : '',
-          ].join('|');
-          const newHash = createHash('sha256').update(data).digest('hex');
+          const input: AuditCreateInput = {
+            tenantId: entry.tenant_id as TenantId | null,
+            actorType: entry.actor_type as AuditCreateInput['actorType'],
+            actorId: entry.actor_id,
+            operation: entry.operation,
+            resourceType: entry.resource_type,
+            resourceId: entry.resource_id,
+            ...(entry.detail ? { detail: JSON.parse(entry.detail) as Record<string, unknown> } : {}),
+          };
+          const newHash = computeEntryHash(sha256Fn2, prevHash2, input, entry.timestamp, entry.seq_no);
           conn.run(
             `UPDATE core_audit_log SET previous_hash = ?, current_hash = ? WHERE seq_no = ?`,
             [prevHash2, newHash, entry.seq_no],
