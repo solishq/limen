@@ -80,6 +80,7 @@ const GENERIC_MESSAGES: Readonly<Record<LimenErrorCode, string>> = {
   PROVIDER_UNAVAILABLE: 'No LLM provider is currently available.',
   SCHEMA_VALIDATION_FAILED: 'Output did not match the expected schema.',
   ENGINE_UNHEALTHY: 'The engine is in an unhealthy state.',
+  ENGINE_SHUTDOWN: 'The engine has been shut down. Create a new instance.',
   SESSION_NOT_FOUND: 'The specified session was not found.',
   INVALID_CONFIG: 'The engine configuration is invalid.',
   INVALID_INPUT: 'The provided input is invalid.',
