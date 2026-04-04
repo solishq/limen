@@ -14,9 +14,6 @@
  *
  * CRITICAL CONSTRAINT: Self-healing MUST use RetractionReason 'incorrect' (I-P12-04).
  * The retraction taxonomy is CONSTITUTIONAL — no new values.
- *
- * v2.1.0: activeCascadeClaims moved from module-level to per-instance Set
- * (InstanceContext.activeCascadeClaims). Eliminates cross-instance interference (C-06).
  */
 
 import { randomUUID } from 'node:crypto';
@@ -41,25 +38,33 @@ export interface SelfHealingDeps {
   readonly time: TimeProvider;
   readonly config: SelfHealingConfig;
   readonly stabilityConfig?: StabilityConfig | undefined;
-  /**
-   * v2.1.0: Per-instance cascade guard Set from InstanceContext.
-   * Replaces module-level activeCascadeClaims for C-06 isolation.
-   */
-  readonly activeCascadeClaims: Set<string>;
 }
+
+/**
+ * Module-level Set tracking claim IDs currently being processed by an active
+ * self-healing cascade. Prevents event re-entry from creating parallel cascades
+ * with fresh depth=0 and visited=new Set() — which would defeat the depth limit.
+ *
+ * F-P12-003 fix: When retractClaim.execute() emits 'claim.retracted', the event
+ * listener fires synchronously. Without this guard, each intermediate retraction
+ * starts a NEW cascade with depth=0. This Set lets the event listener detect
+ * that the retracted claim is already part of an active cascade and skip re-entry.
+ *
+ * Lifecycle: populated during processSelfHealing traversal, cleared when the
+ * top-level cascade (depth=0) completes. Thread-safe because SQLite + event bus
+ * are synchronous — no concurrent cascades possible.
+ */
+const activeCascadeClaims = new Set<string>();
 
 /**
  * Check if a claim is currently being processed by an active self-healing cascade.
  * Exported for use by the event listener in createLimen().
  *
- * v2.1.0: Now accepts the per-instance Set instead of using module-level state.
- *
- * @param cascadeSet - The per-instance active cascade claims Set
  * @param claimId - The claim ID to check
  * @returns true if the claim is part of an active cascade
  */
-export function isInActiveCascade(cascadeSet: Set<string>, claimId: string): boolean {
-  return cascadeSet.has(claimId);
+export function isInActiveCascade(claimId: string): boolean {
+  return activeCascadeClaims.has(claimId);
 }
 
 /**
@@ -76,7 +81,7 @@ export function isInActiveCascade(cascadeSet: Set<string>, claimId: string): boo
  * I-P12-05: Every auto-retraction logged in consolidation_log.
  *
  * @param retractedClaimId - The claim that was just retracted (trigger)
- * @param deps - Self-healing dependencies (includes activeCascadeClaims Set)
+ * @param deps - Self-healing dependencies
  * @param visited - Set of already-visited claim IDs (cycle prevention)
  * @param depth - Current cascade depth
  * @returns Array of self-healing events (for testing/observability)
@@ -88,7 +93,7 @@ export function processSelfHealing(
   depth: number = 0,
 ): SelfHealingEvent[] {
   const isTopLevel = depth === 0;
-  const { config, time, activeCascadeClaims } = deps;
+  const { config, time } = deps;
 
   // Guard: disabled
   if (!config.enabled) return [];
@@ -167,26 +172,35 @@ export function processSelfHealing(
         // and skips re-entry for this child.
         activeCascadeClaims.add(childId);
 
-        // Auto-retract with reason 'incorrect' (I-P12-04: CONSTITUTIONAL)
-        const retractResult = deps.retractClaim.execute(conn, ctx, {
-          claimId: childId as ClaimId,
-          reason: 'incorrect',
+        // C2: Wrap retract + consolidation_log INSERT in a transaction for atomicity per child.
+        // Inner retractClaim.execute() uses conn.transaction() internally, which becomes a
+        // savepoint inside this outer transaction (better-sqlite3 supports nesting).
+        const childResult = conn.transaction(() => {
+          // Auto-retract with reason 'incorrect' (I-P12-04: CONSTITUTIONAL)
+          const retractResult = deps.retractClaim.execute(conn, ctx, {
+            claimId: childId as ClaimId,
+            reason: 'incorrect',
+          });
+
+          if (retractResult.ok) {
+            // Log in consolidation_log (I-P12-05)
+            conn.run(
+              `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
+               VALUES (?, ?, 'self_heal', ?, ?, ?, ?)`,
+              [
+                randomUUID(), ctx.tenantId,
+                JSON.stringify([retractedClaimId]),
+                childId,
+                `Auto-retracted: effectiveConfidence ${effectiveConfidence.toFixed(4)} < threshold ${config.autoRetractThreshold}`,
+                time.nowISO(),
+              ],
+            );
+            return true;
+          }
+          return false;
         });
 
-        if (retractResult.ok) {
-          // Log in consolidation_log (I-P12-05)
-          conn.run(
-            `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
-             VALUES (?, ?, 'self_heal', ?, ?, ?, ?)`,
-            [
-              randomUUID(), ctx.tenantId,
-              JSON.stringify([retractedClaimId]),
-              childId,
-              `Auto-retracted: effectiveConfidence ${effectiveConfidence.toFixed(4)} < threshold ${config.autoRetractThreshold}`,
-              time.nowISO(),
-            ],
-          );
-
+        if (childResult) {
           events.push({
             retractedClaimId,
             derivedClaimId: childId,

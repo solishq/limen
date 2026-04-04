@@ -132,8 +132,7 @@ function runMerge(
   const tenantClause = tenantId !== null ? 'AND ca.tenant_id = ?' : 'AND ca.tenant_id IS NULL';
   const tenantParams = tenantId !== null ? [tenantId] : [];
 
-  // SYSTEM_SCOPE: Complex SQL (INNER JOIN) — use .raw with manual tenant scoping.
-  const embeddedClaims = conn.raw.query<{
+  const embeddedClaims = conn.query<{
     id: string;
     subject: string;
     predicate: string;
@@ -179,13 +178,7 @@ function runMerge(
     const candidates = knnResult.value
       .filter(r => r.claimId !== claim.id && !processed.has(r.claimId))
       .filter(r => {
-        // F-R1-004 FIX: Guard against NaN distance which would bypass threshold.
-        // NaN comparisons always return false, so NaN >= threshold = false = filtered out.
-        // But explicit guard is defense-in-depth and makes intent clear.
-        if (!Number.isFinite(r.distance)) return false;
-        // Convert L2 distance to cosine similarity for normalized vectors.
-        // For unit vectors: cos_sim = 1 - (d^2 / 2) where d = L2 distance.
-        const similarity = 1 - (r.distance * r.distance) / 2;
+        const similarity = 1 - r.distance; // cosine distance → similarity
         return similarity >= opts.mergeSimilarityThreshold;
       });
 
@@ -232,44 +225,54 @@ function runMerge(
         loserId = winnerId === claim.id ? candidateClaim.id : claim.id;
       }
 
-      // Retract loser with reason 'superseded' (I-P12-11)
-      const retractResult = deps.retractClaim.execute(conn, ctx, {
-        claimId: loserId as ClaimId,
-        reason: 'superseded',
-      });
-
-      if (retractResult.ok) {
-        // Create 'supersedes' relationship from winner to loser (I-P12-12)
-        // Need a missionId — use the loser's source_mission_id or a synthetic one
-        const loserMission = conn.get<{ source_mission_id: string | null }>(
-          `SELECT source_mission_id FROM claim_assertions WHERE id = ?`,
-          [loserId],
-        );
-        const missionId = (loserMission?.source_mission_id ?? 'mission:consolidation') as MissionId;
-
-        deps.relateClaims.execute(conn, ctx, {
-          fromClaimId: winnerId as ClaimId,
-          toClaimId: loserId as ClaimId,
-          type: 'supersedes',
-          missionId,
+      // C2: Wrap retract + relate + consolidation_log in a single transaction for atomicity.
+      // Inner handlers (retractClaim, relateClaims) use conn.transaction() internally,
+      // which becomes savepoints inside this outer transaction (better-sqlite3 supports nesting).
+      const mergeResult = conn.transaction(() => {
+        // Retract loser with reason 'superseded' (I-P12-11)
+        const retractResult = deps.retractClaim.execute(conn, ctx, {
+          claimId: loserId as ClaimId,
+          reason: 'superseded',
         });
 
-        // Log in consolidation_log (I-P12-13)
-        const entry: ConsolidationLogEntry = {
-          id: randomUUID(),
-          operation: 'merge',
-          sourceClaimIds: [winnerId, loserId],
-          targetClaimId: winnerId,
-          reason: `Merged: similarity >= ${opts.mergeSimilarityThreshold}, winner EC=${ec1 > ec2 ? ec1.toFixed(4) : ec2.toFixed(4)}`,
-        };
+        if (retractResult.ok) {
+          // Create 'supersedes' relationship from winner to loser (I-P12-12)
+          // Need a missionId — use the loser's source_mission_id or a synthetic one
+          const loserMission = conn.get<{ source_mission_id: string | null }>(
+            `SELECT source_mission_id FROM claim_assertions WHERE id = ?`,
+            [loserId],
+          );
+          const missionId = (loserMission?.source_mission_id ?? 'mission:consolidation') as MissionId;
 
-        conn.run(
-          `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [entry.id, tenantId, entry.operation, JSON.stringify(entry.sourceClaimIds), entry.targetClaimId, entry.reason, nowISO],
-        );
+          deps.relateClaims.execute(conn, ctx, {
+            fromClaimId: winnerId as ClaimId,
+            toClaimId: loserId as ClaimId,
+            type: 'supersedes',
+            missionId,
+          });
 
-        log.push(entry);
+          // Log in consolidation_log (I-P12-13)
+          const entry: ConsolidationLogEntry = {
+            id: randomUUID(),
+            operation: 'merge',
+            sourceClaimIds: [winnerId, loserId],
+            targetClaimId: winnerId,
+            reason: `Merged: similarity >= ${opts.mergeSimilarityThreshold}, winner EC=${ec1 > ec2 ? ec1.toFixed(4) : ec2.toFixed(4)}`,
+          };
+
+          conn.run(
+            `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [entry.id, tenantId, entry.operation, JSON.stringify(entry.sourceClaimIds), entry.targetClaimId, entry.reason, nowISO],
+          );
+
+          return { ok: true as const, entry };
+        }
+        return { ok: false as const, entry: null };
+      });
+
+      if (mergeResult.ok && mergeResult.entry) {
+        log.push(mergeResult.entry);
         processed.add(loserId);
         merged++;
       }
@@ -297,8 +300,10 @@ function runArchive(
 ): number {
   let archived = 0;
 
-  // F-R1-003 FIX: conn.query() auto-injects tenant_id via TenantScopedConnection.
-  // Manual tenantClause removed to prevent double filtering with duplicate params.
+  const tenantClause = tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL';
+  const tenantParams = tenantId !== null ? [tenantId] : [];
+
+  // Get all active, non-archived claims with low access count
   const candidates = conn.query<{
     id: string;
     confidence: number;
@@ -310,8 +315,8 @@ function runArchive(
     `SELECT id, confidence, valid_at, predicate, access_count, last_accessed_at
      FROM claim_assertions
      WHERE status = 'active' AND archived = 0
-     AND access_count <= ?`,
-    [opts.archiveMaxAccessCount],
+     AND access_count <= ? ${tenantClause}`,
+    [opts.archiveMaxAccessCount, ...tenantParams],
   );
 
   for (const claim of candidates) {
@@ -330,25 +335,30 @@ function runArchive(
     );
     if (ec >= opts.archiveMaxConfidence) continue;
 
-    // Archive: set archived=1 (I-P12-15: reversible, never deleted)
-    conn.run(
-      `UPDATE claim_assertions SET archived = 1 WHERE id = ?`,
-      [claim.id],
-    );
+    // C2: Wrap archive UPDATE + consolidation_log INSERT in a transaction for atomicity.
+    const entry: ConsolidationLogEntry = conn.transaction(() => {
+      // Archive: set archived=1 (I-P12-15: reversible, never deleted)
+      conn.run(
+        `UPDATE claim_assertions SET archived = 1 WHERE id = ?`,
+        [claim.id],
+      );
 
-    const entry: ConsolidationLogEntry = {
-      id: randomUUID(),
-      operation: 'archive',
-      sourceClaimIds: [claim.id],
-      targetClaimId: null,
-      reason: `Archived: stale, EC=${ec.toFixed(4)} < ${opts.archiveMaxConfidence}, access=${claim.access_count}`,
-    };
+      const logEntry: ConsolidationLogEntry = {
+        id: randomUUID(),
+        operation: 'archive',
+        sourceClaimIds: [claim.id],
+        targetClaimId: null,
+        reason: `Archived: stale, EC=${ec.toFixed(4)} < ${opts.archiveMaxConfidence}, access=${claim.access_count}`,
+      };
 
-    conn.run(
-      `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [entry.id, tenantId, entry.operation, JSON.stringify(entry.sourceClaimIds), entry.targetClaimId, entry.reason, nowISO],
-    );
+      conn.run(
+        `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [logEntry.id, tenantId, logEntry.operation, JSON.stringify(logEntry.sourceClaimIds), logEntry.targetClaimId, logEntry.reason, nowISO],
+      );
+
+      return logEntry;
+    });
 
     log.push(entry);
     archived++;
@@ -378,8 +388,7 @@ function runSuggestResolution(
     : 'AND ca1.tenant_id IS NULL AND ca2.tenant_id IS NULL';
   const tenantParams = tenantId !== null ? [tenantId, tenantId] : [];
 
-  // SYSTEM_SCOPE: Complex SQL (INNER JOIN) — use .raw with manual tenant scoping.
-  const pairs = conn.raw.query<{
+  const pairs = conn.query<{
     rel_id: string;
     from_id: string;
     to_id: string;

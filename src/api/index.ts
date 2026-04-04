@@ -39,6 +39,8 @@ import { createStringEncryption } from '../kernel/crypto/crypto_engine.js';
 import { createSubstrate as realCreateSubstrate, getPhase2Migrations } from '../substrate/index.js';
 import { createOrchestration as realCreateOrchestration, getPhase3Migrations } from '../orchestration/index.js';
 import { getPhase4BMigrations } from '../orchestration/migration/004_tenant_isolation.js';
+import type { TenantScopedConnection } from '../kernel/tenant/tenant_scope.js';
+import { createTenantScopedConnection } from '../kernel/tenant/tenant_scope.js';
 import { getPhase4D2ImmutabilityMigrations } from '../orchestration/migration/005_immutability_triggers.js';
 import { getPhase4D4TombstoneMigrations } from '../orchestration/migration/006_audit_tombstone.js';
 import type {
@@ -132,10 +134,7 @@ import { getVectorSearchMigrations, createVec0Table } from './migration/035_vect
 import { createVectorStore } from '../vector/vector_store.js';
 import { createEmbeddingQueue } from '../vector/embedding_queue.js';
 import { hybridRank } from '../vector/hybrid_ranker.js';
-import { computeAgeMs, computeEffectiveConfidence } from '../cognitive/decay.js';
-import { classifyFreshness } from '../cognitive/freshness.js';
-import type { FreshnessLabel } from '../cognitive/freshness.js';
-import { checkDuplicate as checkDuplicateImpl } from '../vector/duplicate_detector.js';
+import { checkDuplicate as checkDuplicateImpl, distanceToSimilarity } from '../vector/duplicate_detector.js';
 import { DEFAULT_VECTOR_CONFIG } from '../vector/vector_types.js';
 import type { EmbeddingStats, DuplicateCheckResult } from '../vector/vector_types.js';
 import type { VectorStore } from '../vector/vector_store.js';
@@ -149,6 +148,10 @@ import { getCognitiveEngineMigrations } from './migration/036_cognitive_engine.j
 import { processSelfHealing, isInActiveCascade } from '../cognitive/self_healing.js';
 import { DEFAULT_SELF_HEALING_CONFIG } from '../cognitive/cognitive_types.js';
 import type { SelfHealingConfig } from '../cognitive/cognitive_types.js';
+import { computeDecayFactor, computeAgeMs } from '../cognitive/decay.js';
+import { computeCascadePenalty } from '../cognitive/cascade.js';
+import { resolveStability } from '../cognitive/stability.js';
+import { classifyFreshness } from '../cognitive/freshness.js';
 
 // Phase 5 fix: FTS5 retraction guard migration (v46)
 import { getFts5RetractionGuardMigrations } from './migration/037_fts5_retraction_guard.js';
@@ -215,21 +218,6 @@ function vectorHydrateDisputed(conn: DatabaseConnection, claimId: string): boole
   return (row?.cnt ?? 0) > 0;
 }
 
-/** Compute effective confidence with time-decay for a hydrated claim row. */
-function vectorHydrateEffConf(claimRow: Record<string, unknown>): number {
-  const confidence = claimRow['confidence'] as number;
-  const validAt = claimRow['valid_at'] as string;
-  const stability = (claimRow['stability'] ?? 90) as number;
-  const ageMs = computeAgeMs(validAt, Date.now());
-  return computeEffectiveConfidence(confidence, ageMs, stability);
-}
-
-/** Classify freshness based on last access time for a hydrated claim row. */
-function vectorHydrateFreshness(claimRow: Record<string, unknown>): FreshnessLabel {
-  const lastAccessedAt = claimRow['last_accessed_at'] as string | null;
-  const lastAccessMs = lastAccessedAt ? Date.parse(lastAccessedAt) : null;
-  return classifyFreshness(lastAccessMs, Date.now());
-}
 
 // ============================================================================
 // Re-export public types (convenience for consumers)
@@ -655,6 +643,16 @@ export async function createLimen(
     // Phase 4 §4.5, C.8: Thread requireRbac to kernel RBAC engine.
     // I-P4-10: Default false when undefined.
     ...(resolvedConfig.requireRbac ? { requireRbac: true } : {}),
+    // H12-FIX: Thread rate limiting config overrides to kernel rate limiter.
+    // exactOptionalPropertyTypes: only include defined values.
+    ...(resolvedConfig.rateLimiting ? {
+      rateLimiting: {
+        ...(resolvedConfig.rateLimiting.apiCallsPerMinute !== undefined
+          ? { apiCallsPerMinute: resolvedConfig.rateLimiting.apiCallsPerMinute } : {}),
+        ...(resolvedConfig.rateLimiting.emitEventPerMinute !== undefined
+          ? { emitEventPerMinute: resolvedConfig.rateLimiting.emitEventPerMinute } : {}),
+      },
+    } : {}),
   });
 
   if (!kernelResult.ok) {
@@ -936,7 +934,15 @@ export async function createLimen(
   // DatabaseLifecycle.open() returns a connection. We store it from kernel creation.
   // The kernel manages its own connection internally.
   let activeConn: DatabaseConnection | null = null;
-  const getConnection = (): DatabaseConnection => {
+  // DX-CRITICAL-FIX: Shutdown idempotency guard.
+  // Prevents double-shutdown and post-shutdown connection access.
+  let isShutDown = false;
+
+  const getConnection = (): TenantScopedConnection => {
+    // DX-CRITICAL-FIX: Reject connection requests after shutdown
+    if (isShutDown) {
+      throw new LimenError('ENGINE_SHUTDOWN', 'Limen has been shut down. Create a new instance.');
+    }
     if (!activeConn) {
       // Open a connection via the database lifecycle
       const openResult = kernel.database.open({
@@ -948,7 +954,10 @@ export async function createLimen(
       }
       activeConn = openResult.value;
     }
-    return activeConn;
+    // Wrap raw connection with tenant scope.
+    // In single-tenant mode (tenantId=null), createTenantScopedConnection returns a pass-through.
+    // TenantScopedConnection extends DatabaseConnection — backward compatible for all callers.
+    return createTenantScopedConnection(activeConn, getContext().tenantId);
   };
 
   // Build default operation context for single-user mode
@@ -1002,6 +1011,8 @@ export async function createLimen(
       // Timer errors do not propagate. Expiry will retry next tick.
     }
   }, 30_000);
+  // M6-FIX: unref() so this timer does not keep the Node.js process alive
+  checkpointExpiryTimer.unref();
 
   // CF-033 OP-01: Periodic WAL checkpoint timer.
   // PASSIVE checkpoint every 5 minutes to bound WAL file growth.
@@ -1014,6 +1025,8 @@ export async function createLimen(
       // Checkpoint failure is non-fatal. WAL will be replayed on next open.
     }
   }, 300_000); // 5 minutes
+  // M6-FIX: unref() so this timer does not keep the Node.js process alive
+  walCheckpointTimer.unref();
 
   // Determine default model from providers config
   const defaultModel = resolvedConfig.providers?.[0]?.models[0] ?? 'default';
@@ -1165,6 +1178,8 @@ export async function createLimen(
         // Background embedding errors are non-fatal
       }
     }, vectorConfig.embeddingInterval);
+    // M6-FIX: unref() so this timer does not keep the Node.js process alive
+    embeddingTimer.unref();
   }
 
   // Phase 5 + Phase 12: Create CognitiveNamespace for limen.cognitive
@@ -1638,26 +1653,45 @@ export async function createLimen(
             [kr.claimId],
           );
           if (!claimRow) continue;
+
+          // C3/C4/C6/H7/H8: Proper hydration with decay, cascade penalty, stability, freshness
+          const claimPredicate = claimRow['predicate'] as string;
+          const claimConfidence = claimRow['confidence'] as number;
+          const claimValidAt = claimRow['valid_at'] as string;
+          const claimId = claimRow['id'] as string;
+          const nowMs = kernel.time.nowMs(); // C6: TimeProvider instead of Date.now()
+          const stabilityDays = resolveStability(claimPredicate, config?.cognitive?.stability); // H7: proper stability resolution
+          const ageMs = computeAgeMs(claimValidAt, nowMs);
+          const decayFactor = computeDecayFactor(ageMs, stabilityDays);
+          const cascadePenalty = computeCascadePenalty(conn, claimId); // C4: cascade penalty included
+          const effConf = claimConfidence * decayFactor * cascadePenalty;
+          const lastAccessMs = claimRow['last_accessed_at'] ? Date.parse(claimRow['last_accessed_at'] as string) : null;
+          const freshness = classifyFreshness(
+            lastAccessMs && Number.isFinite(lastAccessMs) ? lastAccessMs : null,
+            nowMs,
+            config?.cognitive?.freshness, // H8: freshness thresholds passed
+          );
+
           results.push({
             belief: {
               claimId: claimRow['id'] as ClaimId,
               subject: claimRow['subject'] as string,
-              predicate: claimRow['predicate'] as string,
+              predicate: claimPredicate,
               value: String(claimRow['object_value'] ?? ''),
-              confidence: claimRow['confidence'] as number,
-              validAt: claimRow['valid_at'] as string,
+              confidence: claimConfidence,
+              validAt: claimValidAt,
               createdAt: claimRow['created_at'] as string,
               superseded: vectorHydrateSuperseded(conn, claimRow['id'] as string),
               disputed: vectorHydrateDisputed(conn, claimRow['id'] as string),
-              effectiveConfidence: vectorHydrateEffConf(claimRow),
-              freshness: vectorHydrateFreshness(claimRow),
-              stability: (claimRow['stability'] ?? 90) as number,
+              effectiveConfidence: effConf, // C4: includes decay * cascadePenalty
+              freshness, // H8: properly classified
+              stability: stabilityDays, // H7: resolveStability instead of hardcoded 90
               lastAccessedAt: (claimRow['last_accessed_at'] ?? null) as string | null,
               accessCount: (claimRow['access_count'] ?? 0) as number,
               reasoning: (claimRow['reasoning'] ?? null) as string | null,
             },
             relevance: -kr.distance, // Negate distance for consistency with FTS5 convention
-            score: 1 / (1 + kr.distance), // Convert distance to similarity-like score
+            score: distanceToSimilarity(kr.distance), // C3: correct L2→cosine formula from duplicate_detector
           });
         }
         return { ok: true as const, value: results };
@@ -1705,20 +1739,39 @@ export async function createLimen(
               [hs.claimId],
             );
             if (!claimRow) continue;
+
+            // C3/C4/C6/H7/H8: Proper hydration with decay, cascade penalty, stability, freshness
+            const hClaimPredicate = claimRow['predicate'] as string;
+            const hClaimConfidence = claimRow['confidence'] as number;
+            const hClaimValidAt = claimRow['valid_at'] as string;
+            const hClaimId = claimRow['id'] as string;
+            const hNowMs = kernel.time.nowMs(); // C6: TimeProvider instead of Date.now()
+            const hStabilityDays = resolveStability(hClaimPredicate, config?.cognitive?.stability); // H7: proper stability
+            const hAgeMs = computeAgeMs(hClaimValidAt, hNowMs);
+            const hDecayFactor = computeDecayFactor(hAgeMs, hStabilityDays);
+            const hCascadePenalty = computeCascadePenalty(conn, hClaimId); // C4: cascade penalty
+            const hEffConf = hClaimConfidence * hDecayFactor * hCascadePenalty;
+            const hLastAccessMs = claimRow['last_accessed_at'] ? Date.parse(claimRow['last_accessed_at'] as string) : null;
+            const hFreshness = classifyFreshness(
+              hLastAccessMs && Number.isFinite(hLastAccessMs) ? hLastAccessMs : null,
+              hNowMs,
+              config?.cognitive?.freshness, // H8: freshness thresholds passed
+            );
+
             results.push({
               belief: {
                 claimId: claimRow['id'] as ClaimId,
                 subject: claimRow['subject'] as string,
-                predicate: claimRow['predicate'] as string,
+                predicate: hClaimPredicate,
                 value: String(claimRow['object_value'] ?? ''),
-                confidence: claimRow['confidence'] as number,
-                validAt: claimRow['valid_at'] as string,
+                confidence: hClaimConfidence,
+                validAt: hClaimValidAt,
                 createdAt: claimRow['created_at'] as string,
                 superseded: vectorHydrateSuperseded(conn, claimRow['id'] as string),
                 disputed: vectorHydrateDisputed(conn, claimRow['id'] as string),
-                effectiveConfidence: vectorHydrateEffConf(claimRow),
-                freshness: vectorHydrateFreshness(claimRow),
-                stability: (claimRow['stability'] ?? 90) as number,
+                effectiveConfidence: hEffConf, // C4: includes decay * cascadePenalty
+                freshness: hFreshness, // H8: properly classified
+                stability: hStabilityDays, // H7: resolveStability instead of hardcoded 90
                 lastAccessedAt: (claimRow['last_accessed_at'] ?? null) as string | null,
                 accessCount: (claimRow['access_count'] ?? 0) as number,
                 reasoning: (claimRow['reasoning'] ?? null) as string | null,
@@ -1908,6 +1961,10 @@ export async function createLimen(
     // CF-011: Each step wrapped in try/catch so that one failure
     // does not prevent subsequent cleanup. Errors are collected.
     async shutdown(): Promise<void> {
+      // DX-CRITICAL-FIX: Idempotent shutdown — second call is a no-op
+      if (isShutDown) return;
+      isShutDown = true;
+
       log({ level: 'info', category: 'shutdown', message: 'Limen shutdown starting' });
       const shutdownErrors: Error[] = [];
 
