@@ -1,4 +1,4 @@
-import { createLimen } from '../src/api/index.js';
+import { createLimen } from 'limen-ai';
 
 const limen = await createLimen();
 
