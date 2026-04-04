@@ -567,17 +567,50 @@ export function createBoundaryCaptureCoordinator(
         // Calling UP from L1.5→L2 would violate layer boundaries.
         // CAS (WHERE id = ? AND state NOT IN terminal) is the L1-level defense.
         // This prevents TOCTOU races where another transaction already terminated the task.
+        //
+        // AUDIT NOTE (Phase 6 fix): This direct SQL UPDATE bypasses:
+        //   - OrchestrationTransitionService (L2 governance checks)
+        //   - core_audit_log hash-chain (I-03 audit trail)
+        //   - REVIEWING auto-trigger (S23 submit_result)
+        // The boundary event (captured in step 1) serves as L1.5-level audit.
+        // We record fromState in the event detail for traceability.
+        // TODO: Inject AuditTrail into coordinator to write core_audit_log entry.
         const now = monotonicNowISO(clock);
         const terminalStates = ['COMPLETED', 'FAILED', 'CANCELLED'];
         const currentTask = conn.get<{ state: string }>(
           'SELECT state FROM core_tasks WHERE id = ?',
           [taskId],
         );
-        if (currentTask && terminalStates.includes(currentTask.state)) {
+
+        if (!currentTask) {
+          // Task not found — cannot transition phantom entity.
+          // Boundary snapshot already captured; return it.
+          return eventResult;
+        }
+
+        if (terminalStates.includes(currentTask.state)) {
           // Task already in terminal state — no-op for idempotency.
           // The boundary snapshot was already captured above, which is the primary concern.
           return eventResult;
         }
+
+        // Record the state transition in wmp_boundary_events for auditability.
+        // This is the L1.5-level audit record since we cannot call up to L2's audit trail.
+        const fromState = currentTask.state;
+        try {
+          conn.run(
+            `INSERT INTO wmp_boundary_events (event_id, task_id, mission_id, trigger_type, snapshot, created_at)
+             VALUES (?, ?, ?, 'state_transition', ?, ?)`,
+            [
+              `evt-st-${taskId}-${now}`,
+              taskId,
+              missionId,
+              JSON.stringify({ fromState, toState: terminalState, source: 'wmp_boundary_capture' }),
+              now,
+            ],
+          );
+        } catch { /* audit event failure is non-fatal — primary operation continues */ }
+
         conn.run(
           'UPDATE core_tasks SET state = ?, completed_at = ?, updated_at = ? WHERE id = ? AND state NOT IN (?, ?, ?)',
           [terminalState, now, now, taskId, ...terminalStates],
