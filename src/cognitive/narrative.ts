@@ -107,7 +107,7 @@ export function computeNarrative(
     conflictsResolved = conflictsRow?.cnt ?? 0;
   }
 
-  // 5. Count active (added) and retracted claims
+  // 5. Count active (added) and retracted claims (cumulative totals for snapshot record)
   const activeRow = conn.get<{ cnt: number }>(
     `SELECT COUNT(*) as cnt FROM claim_assertions ${whereClause}${conditions.length > 0 ? ' AND' : ' WHERE'} status = 'active'`,
     params,
@@ -120,24 +120,48 @@ export function computeNarrative(
   );
   const claimsRetracted = retractedRow?.cnt ?? 0;
 
-  // 6. Compute momentum (I-P12-41)
+  // 6. Compute momentum using RECENT RATES, not cumulative totals (I-P12-41).
+  // Cumulative totals always show "growing" (active >> retracted in any live system).
+  // Rate-based: count claims created in the last 7 days that are still active (net additions)
+  // vs claims created in the last 7 days that are now retracted (recent churn).
+  // This reveals whether the knowledge base is actually growing, stable, or declining.
+  const nowForMomentum = time.nowISO();
+  const sevenDaysAgoMs = new Date(nowForMomentum).getTime() - (7 * 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(sevenDaysAgoMs).toISOString();
+
+  // Recent active claims = new knowledge added in window that's still standing
+  const recentActiveRow = conn.get<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM claim_assertions ${whereClause}${conditions.length > 0 ? ' AND' : ' WHERE'} status = 'active' AND created_at >= ?`,
+    [...params, sevenDaysAgo],
+  );
+  const recentActive = recentActiveRow?.cnt ?? 0;
+
+  // Recent retracted claims = knowledge created in window that was already retracted
+  const recentRetractedRow = conn.get<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM claim_assertions ${whereClause}${conditions.length > 0 ? ' AND' : ' WHERE'} status = 'retracted' AND created_at >= ?`,
+    [...params, sevenDaysAgo],
+  );
+  const recentRetracted = recentRetractedRow?.cnt ?? 0;
+
   let momentum: 'growing' | 'stable' | 'declining';
-  if (claimsAdded > claimsRetracted) {
+  if (recentActive > recentRetracted) {
     momentum = 'growing';
-  } else if (claimsAdded === claimsRetracted) {
+  } else if (recentActive === recentRetracted) {
     momentum = 'stable';
   } else {
     momentum = 'declining';
   }
 
-  // 7. Thread detection: group by predicate prefix, filter 3+ claims
+  // 7. Thread detection: group by predicate prefix, filter 3+ claims.
+  // Thread momentum also uses recent rates (created_at within 7-day window)
+  // to match the global momentum semantics — not cumulative totals.
   const threadPrefix = missionId !== null
     ? `SELECT
          SUBSTR(predicate, 1, INSTR(predicate, '.') - 1) as topic,
          COUNT(*) as claim_count,
          MAX(valid_at) as latest_claim_at,
-         SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count,
-         SUM(CASE WHEN status = 'retracted' THEN 1 ELSE 0 END) as retracted_count
+         SUM(CASE WHEN status = 'active' AND created_at >= ? THEN 1 ELSE 0 END) as recent_active,
+         SUM(CASE WHEN status = 'retracted' AND created_at >= ? THEN 1 ELSE 0 END) as recent_retracted
        FROM claim_assertions
        ${whereClause}
        AND INSTR(predicate, '.') > 0
@@ -148,8 +172,8 @@ export function computeNarrative(
          SUBSTR(predicate, 1, INSTR(predicate, '.') - 1) as topic,
          COUNT(*) as claim_count,
          MAX(valid_at) as latest_claim_at,
-         SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count,
-         SUM(CASE WHEN status = 'retracted' THEN 1 ELSE 0 END) as retracted_count
+         SUM(CASE WHEN status = 'active' AND created_at >= ? THEN 1 ELSE 0 END) as recent_active,
+         SUM(CASE WHEN status = 'retracted' AND created_at >= ? THEN 1 ELSE 0 END) as recent_retracted
        FROM claim_assertions
        ${whereClause}
        ${conditions.length > 0 ? 'AND' : 'WHERE'} INSTR(predicate, '.') > 0
@@ -157,19 +181,22 @@ export function computeNarrative(
        HAVING claim_count >= 3
        ORDER BY claim_count DESC`;
 
+  // Thread queries need the sevenDaysAgo parameter twice (for each CASE), prepended to scope params
+  const threadParams = [sevenDaysAgo, sevenDaysAgo, ...params];
+
   const threadRows = conn.query<{
     topic: string;
     claim_count: number;
     latest_claim_at: string;
-    active_count: number;
-    retracted_count: number;
-  }>(threadPrefix, params);
+    recent_active: number;
+    recent_retracted: number;
+  }>(threadPrefix, threadParams);
 
   const threads: NarrativeThread[] = threadRows.map(row => {
     let threadMomentum: 'growing' | 'stable' | 'declining';
-    if (row.active_count > row.retracted_count) {
+    if (row.recent_active > row.recent_retracted) {
       threadMomentum = 'growing';
-    } else if (row.active_count === row.retracted_count) {
+    } else if (row.recent_active === row.recent_retracted) {
       threadMomentum = 'stable';
     } else {
       threadMomentum = 'declining';

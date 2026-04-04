@@ -88,7 +88,27 @@ export function createBudgetGovernor(transitionService: OrchestrationTransitionS
       return { ok: false, error: { code: 'MISSION_NOT_ACTIVE', message: `No resource record for mission ${missionId}`, spec: 'S11' } };
     }
 
-    if (tokenCost > resource.token_remaining) {
+    // SD-15/I-20: Check all budget dimensions before consuming.
+    // Schema convention: *_max = 0 means unlimited (no cap enforced).
+    // Check tokens, compute, and storage independently.
+    const budgetExceeded =
+      tokenCost > resource.token_remaining
+      || (resource.compute_max_seconds > 0 && (resource.compute_consumed_seconds + computeCost) > resource.compute_max_seconds)
+      || (resource.storage_max_bytes > 0 && (resource.storage_consumed_bytes + storageCost) > resource.storage_max_bytes);
+
+    if (budgetExceeded) {
+      // Build a descriptive message indicating which dimension(s) exceeded.
+      const reasons: string[] = [];
+      if (tokenCost > resource.token_remaining) {
+        reasons.push(`token cost ${tokenCost} exceeds remaining ${resource.token_remaining}`);
+      }
+      if (resource.compute_max_seconds > 0 && (resource.compute_consumed_seconds + computeCost) > resource.compute_max_seconds) {
+        reasons.push(`compute ${resource.compute_consumed_seconds + computeCost}s exceeds max ${resource.compute_max_seconds}s`);
+      }
+      if (resource.storage_max_bytes > 0 && (resource.storage_consumed_bytes + storageCost) > resource.storage_max_bytes) {
+        reasons.push(`storage ${resource.storage_consumed_bytes + storageCost}B exceeds max ${resource.storage_max_bytes}B`);
+      }
+
       // CF-016: On BUDGET_EXCEEDED, transition mission to BLOCKED state.
       // FM-02: Defense against cost explosion — halt execution.
       // P0-A: Sole transition mechanism via OrchestrationTransitionService.
@@ -125,7 +145,7 @@ export function createBudgetGovernor(transitionService: OrchestrationTransitionS
         }
       }
 
-      return { ok: false, error: { code: 'BUDGET_EXCEEDED', message: `Token cost ${tokenCost} exceeds remaining ${resource.token_remaining}`, spec: 'S11' } };
+      return { ok: false, error: { code: 'BUDGET_EXCEEDED', message: reasons.join('; '), spec: 'S11' } };
     }
 
     const now = deps.time.nowISO();
