@@ -134,6 +134,7 @@ const GENERIC_MESSAGES: Readonly<Record<LimenErrorCode, string>> = {
   RESUME_TOKEN_INVALID: 'The resume token is invalid or has been consumed.',
   RESUME_TOKEN_EXPIRED: 'The resume token has expired.',
   IDEMPOTENCY_CONFLICT: 'Same idempotency key with different payload.',
+  NOT_IMPLEMENTED: 'This method is not yet implemented.',
 };
 
 // ============================================================================
