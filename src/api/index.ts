@@ -1460,8 +1460,11 @@ export async function createLimen(
         const conn = getConnection();
         const ctx = getContext();
         return conn.transaction(() => {
-          conn.run(`DELETE FROM governance_classification_rules WHERE id = ? ${ctx.tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL'}`,
+          const result = conn.run(`DELETE FROM governance_classification_rules WHERE id = ? ${ctx.tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL'}`,
             ctx.tenantId !== null ? [ruleId, ctx.tenantId] : [ruleId]);
+          if (result.changes === 0) {
+            return { ok: false as const, error: { code: 'NOT_FOUND' as const, message: `Classification rule '${ruleId}' not found.`, spec: 'P10' } };
+          }
           kernel.audit.append(conn, {
             tenantId: ctx.tenantId,
             actorType: 'system',
