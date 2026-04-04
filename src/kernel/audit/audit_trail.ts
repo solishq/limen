@@ -138,53 +138,60 @@ export function createAuditTrail(sha256Fn: (data: string) => string, time?: Time
      */
     appendBatch(conn: DatabaseConnection, inputs: AuditCreateInput[]): Result<AuditEntry[]> {
       try {
-        const entries: AuditEntry[] = [];
+        // Phase 3 fix: Wrap entire batch in transaction so partial inserts
+        // are rolled back on failure. Without this, a failure mid-batch leaves
+        // orphaned entries with a broken hash chain.
+        const entries = conn.transaction(() => {
+          const result: AuditEntry[] = [];
 
-        // Get chain head once
-        // FM-10: Use raw connection — hash chain is GLOBAL, not per-tenant (§3.5)
-        const rawConn = unwrapForChainQuery(conn);
-        const lastEntry = rawConn.get<{ current_hash: string; seq_no: number }>(
-          `SELECT current_hash, seq_no FROM core_audit_log ORDER BY seq_no DESC LIMIT 1`
-        );
-
-        let previousHash = lastEntry?.current_hash ?? GENESIS_HASH;
-        let seqNo = (lastEntry?.seq_no ?? 0);
-
-        const insertStmt = `INSERT INTO core_audit_log (id, seq_no, tenant_id, timestamp, actor_type, actor_id,
-           operation, resource_type, resource_id, detail, previous_hash, current_hash)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-
-        for (const input of inputs) {
-          const id = randomUUID();
-          const timestamp = clock.nowISO();
-          seqNo += 1;
-
-          const currentHash = computeEntryHash(sha256Fn, previousHash, input, timestamp, seqNo);
-          const detailJson = input.detail ? JSON.stringify(input.detail) : null;
-
-          conn.run(insertStmt,
-            [id, seqNo, input.tenantId, timestamp, input.actorType, input.actorId,
-             input.operation, input.resourceType, input.resourceId,
-             detailJson, previousHash, currentHash]
+          // Get chain head once
+          // FM-10: Use raw connection — hash chain is GLOBAL, not per-tenant (§3.5)
+          const rawConn = unwrapForChainQuery(conn);
+          const lastEntry = rawConn.get<{ current_hash: string; seq_no: number }>(
+            `SELECT current_hash, seq_no FROM core_audit_log ORDER BY seq_no DESC LIMIT 1`
           );
 
-          entries.push({
-            seqNo,
-            id,
-            tenantId: input.tenantId,
-            timestamp,
-            actorType: input.actorType,
-            actorId: input.actorId,
-            operation: input.operation,
-            resourceType: input.resourceType,
-            resourceId: input.resourceId,
-            detail: input.detail ?? null,
-            previousHash,
-            currentHash,
-          });
+          let previousHash = lastEntry?.current_hash ?? GENESIS_HASH;
+          let seqNo = (lastEntry?.seq_no ?? 0);
 
-          previousHash = currentHash;
-        }
+          const insertStmt = `INSERT INTO core_audit_log (id, seq_no, tenant_id, timestamp, actor_type, actor_id,
+             operation, resource_type, resource_id, detail, previous_hash, current_hash)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+          for (const input of inputs) {
+            const id = randomUUID();
+            const timestamp = clock.nowISO();
+            seqNo += 1;
+
+            const currentHash = computeEntryHash(sha256Fn, previousHash, input, timestamp, seqNo);
+            const detailJson = input.detail ? JSON.stringify(input.detail) : null;
+
+            conn.run(insertStmt,
+              [id, seqNo, input.tenantId, timestamp, input.actorType, input.actorId,
+               input.operation, input.resourceType, input.resourceId,
+               detailJson, previousHash, currentHash]
+            );
+
+            result.push({
+              seqNo,
+              id,
+              tenantId: input.tenantId,
+              timestamp,
+              actorType: input.actorType,
+              actorId: input.actorId,
+              operation: input.operation,
+              resourceType: input.resourceType,
+              resourceId: input.resourceId,
+              detail: input.detail ?? null,
+              previousHash,
+              currentHash,
+            });
+
+            previousHash = currentHash;
+          }
+
+          return result;
+        });
 
         return { ok: true, value: entries };
       } catch (err) {
@@ -511,23 +518,28 @@ export function createAuditTrail(sha256Fn: (data: string) => string, time?: Time
 
         archiveDb.close();
 
-        // Record archive segment
-        conn.run(
-          `INSERT INTO core_audit_archive_segments (id, file_path, first_seq_no, last_seq_no, final_hash, entry_count, archived_at)
-           VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
-          [segmentId, outputPath, firstSeqNo, lastSeqNo, finalHash, entries.length]
-        );
+        // Phase 3 fix: Wrap archive segment record + flag lifecycle in transaction.
+        // Without this, a crash between setting the archive flag and clearing it
+        // leaves the flag permanently set, which disables the DELETE trigger protection (I-06).
+        conn.transaction(() => {
+          // Record archive segment
+          conn.run(
+            `INSERT INTO core_audit_archive_segments (id, file_path, first_seq_no, last_seq_no, final_hash, entry_count, archived_at)
+             VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
+            [segmentId, outputPath, firstSeqNo, lastSeqNo, finalHash, entries.length]
+          );
 
-        // Remove archived entries from active table.
-        // SEC-004 fix: Set archival flag to bypass DELETE trigger (I-06 defense-in-depth).
-        // The trigger WHEN clause checks core_audit_archive_active; if a row exists, DELETE is allowed.
-        // Flag is inserted and removed within the same transaction for atomicity.
-        conn.run(`INSERT OR IGNORE INTO core_audit_archive_active (id) VALUES (1)`);
-        conn.run(
-          `DELETE FROM core_audit_log WHERE seq_no >= ? AND seq_no <= ?`,
-          [firstSeqNo, lastSeqNo]
-        );
-        conn.run(`DELETE FROM core_audit_archive_active WHERE id = 1`);
+          // Remove archived entries from active table.
+          // SEC-004 fix: Set archival flag to bypass DELETE trigger (I-06 defense-in-depth).
+          // The trigger WHEN clause checks core_audit_archive_active; if a row exists, DELETE is allowed.
+          // Flag is inserted and removed within the same transaction for atomicity.
+          conn.run(`INSERT OR IGNORE INTO core_audit_archive_active (id) VALUES (1)`);
+          conn.run(
+            `DELETE FROM core_audit_log WHERE seq_no >= ? AND seq_no <= ?`,
+            [firstSeqNo, lastSeqNo]
+          );
+          conn.run(`DELETE FROM core_audit_archive_active WHERE id = 1`);
+        });
 
         return {
           ok: true,
