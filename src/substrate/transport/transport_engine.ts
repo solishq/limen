@@ -127,13 +127,13 @@ function parseRetryAfter(value: string | null, clock: TimeProvider): number | nu
 
   // Try as seconds (integer)
   const seconds = parseInt(value, 10);
-  if (!isNaN(seconds) && seconds >= 0) {
+  if (!Number.isNaN(seconds) && seconds >= 0) {
     return seconds * 1000;
   }
 
   // Try as HTTP-date
   const date = Date.parse(value);
-  if (!isNaN(date)) {
+  if (!Number.isNaN(date)) {
     const delayMs = date - clock.nowMs();
     return delayMs > 0 ? delayMs : 0;
   }
@@ -150,7 +150,7 @@ function parseRetryAfter(value: string | null, clock: TimeProvider): number | nu
 function checkResponseSize(contentLength: string | null): void {
   if (contentLength) {
     const size = parseInt(contentLength, 10);
-    if (!isNaN(size) && size > MAX_RESPONSE_BYTES) {
+    if (!Number.isNaN(size) && size > MAX_RESPONSE_BYTES) {
       throw new TransportError(
         'TRANSPORT_RESPONSE_TOO_LARGE',
         `Response size ${size} bytes exceeds limit of ${MAX_RESPONSE_BYTES} bytes (C-SEC-P5-06)`,

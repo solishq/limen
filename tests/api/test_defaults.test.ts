@@ -359,22 +359,15 @@ describe('resolveDefaults()', () => {
     restoreEnv(envSnap);
   });
 
-  it('throws INVALID_CONFIG with helpful message when zero providers detected', () => {
-    assert.throws(
-      () => resolveDefaults(),
-      (err: unknown) => {
-        assert.ok(err instanceof LimenError);
-        assert.equal(err.code, 'INVALID_CONFIG');
-        // Should list the available env vars
-        assert.ok(err.message.includes('ANTHROPIC_API_KEY'));
-        assert.ok(err.message.includes('OPENAI_API_KEY'));
-        assert.ok(err.message.includes('GEMINI_API_KEY'));
-        assert.ok(err.message.includes('GROQ_API_KEY'));
-        assert.ok(err.message.includes('MISTRAL_API_KEY'));
-        assert.ok(err.message.includes('OLLAMA_HOST'));
-        return true;
-      },
-    );
+  it('returns valid config with empty providers when zero providers detected (zero-config degraded mode)', () => {
+    // P1-VL01-002: Zero-config createLimen() must not throw.
+    // Core CRUD works without LLM. Only cognitive features require a provider.
+    const config = resolveDefaults();
+    assert.ok(config);
+    assert.ok(Array.isArray(config.providers));
+    assert.equal(config.providers!.length, 0);
+    assert.ok(config.dataDir);
+    assert.ok(config.masterKey);
   });
 
   it('composes valid LimenConfig when one provider detected', () => {

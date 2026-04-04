@@ -1,6 +1,6 @@
 # Failure Mode Defense Inventory
 
-**Project:** Limen v3.3.0
+**Project:** Limen v3.3.0 (internal spec version; npm package: v2.0.0)
 **Specification claim:** 45 failure mode defenses
 **Date:** 2026-03-24
 **Evidence class key:** Verified = defense code + meaningful tests | Implemented = defense code + scaffold/decorative tests | Declared = comment/spec reference only | Out of Scope = applies to unimplemented deployment context

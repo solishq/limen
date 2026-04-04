@@ -13,6 +13,7 @@ dist/
 coverage/
 docs/api/
 *.tsbuildinfo
+*.bak
 
 # SolisHQ internal engineering artifacts
 .claude/

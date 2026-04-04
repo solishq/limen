@@ -200,6 +200,7 @@ export function createTenantScopedConnection(
       dataDir: conn.dataDir,
       schemaVersion: conn.schemaVersion,
       tenancyMode: conn.tenancyMode,
+      rawHandle: conn.rawHandle,
       get raw(): DatabaseConnection { return getRawConnection(); },
       tenantId: scopedTenantId,
 
@@ -230,6 +231,7 @@ export function createTenantScopedConnection(
     dataDir: conn.dataDir,
     schemaVersion: conn.schemaVersion,
     tenancyMode: conn.tenancyMode,
+    rawHandle: conn.rawHandle,
     tenantId: scopedTenantId,
     get raw(): DatabaseConnection { return getRawConnection(); },
 

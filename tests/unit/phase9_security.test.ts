@@ -905,6 +905,25 @@ describe('Phase 9 Fix Cycle: F-P9-002 — Phone regex false positive avoidance',
     );
     assert.ok(result.categories.includes('phone'), 'Dot-separated phone should be detected');
   });
+
+  it('P1-SEC-003: international phone +XXXXXXXXXX (E.164 continuous digits) detected', () => {
+    const result = scanForPii(
+      { subject: '', predicate: '', objectValue: '+14155551234 called about the order' },
+      allCategories,
+    );
+    assert.ok(result.hasPii, 'Should detect PII');
+    assert.ok(result.categories.includes('phone'), 'Should detect international phone number');
+    const phoneMatches = result.matches.filter(m => m.category === 'phone');
+    assert.ok(phoneMatches.length >= 1, 'At least one phone match expected');
+  });
+
+  it('P1-SEC-003: UK international phone +44XXXXXXXXXX detected', () => {
+    const result = scanForPii(
+      { subject: '', predicate: '', objectValue: 'Contact: +442071234567' },
+      allCategories,
+    );
+    assert.ok(result.categories.includes('phone'), 'Should detect UK international phone number');
+  });
 });
 
 describe('Phase 9 Fix Cycle: F-P9-019 — Field concatenation false injection', () => {
