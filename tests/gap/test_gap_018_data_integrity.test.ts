@@ -622,8 +622,8 @@ describe('CF-015: data export .limen format', () => {
         'Limen version must match package.json version');
 
       const schemaVer = meta.find(m => m.key === 'schema_version');
-      assert.equal(schemaVer?.value, '35',
-        'Schema version must match current (35)');
+      assert.equal(schemaVer?.value, '47',
+        'Schema version must match current (47)');
 
       exportDb.close();
     } finally {
@@ -982,13 +982,13 @@ describe('Migration v15: Audit tombstone infrastructure', () => {
     conn.close();
   });
 
-  // #23: Schema version is 35 (includes replay pipeline migration)
-  it('#23 schema version is 35 after all migrations', () => {
+  // #23: Schema version is 47 (includes all migrations through sync_foundation)
+  it('#23 schema version is 47 after all migrations', () => {
     const conn = createTestDatabase();
     const version = conn.get<{ version: number }>(
       `SELECT MAX(version) as version FROM core_migrations WHERE status = 'applied'`
     );
-    assert.equal(version?.version, 35, 'Schema version must be 35');
+    assert.equal(version?.version, 47, 'Schema version must be 47');
     conn.close();
   });
 

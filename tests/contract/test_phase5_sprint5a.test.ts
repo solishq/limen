@@ -1187,8 +1187,11 @@ describe('Phase 5A Sprint 5A: Anthropic Adapter', () => {
     });
 
     // Thinking blocks → deliberation metrics
-    assert.equal(result.deliberation.accountingMode, 'provider_authoritative');
-    assert.equal(typeof result.deliberation.providerReportedThinkingTokens, 'number');
+    // Non-streaming Anthropic responses do not provide separate thinking token counts,
+    // so accountingMode is 'estimated' (character-ratio estimation).
+    // provider_authoritative is only available in streaming mode where token deltas are tracked.
+    assert.equal(result.deliberation.accountingMode, 'estimated');
+    assert.equal(result.deliberation.deliberationTokens > 0, true, 'Should estimate non-zero thinking tokens');
 
     // Thinking blocks NOT in LlmResponse.content
     if (typeof result.response.content === 'string') {

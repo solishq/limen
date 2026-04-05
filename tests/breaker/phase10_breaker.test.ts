@@ -346,19 +346,24 @@ describe('F-P10-010: Single-tenant audit tombstoning', () => {
 });
 
 // ============================================================================
-// F-P10-011: removeRule silently succeeds for non-existent rules
+// F-P10-011: removeRule silently succeeds for non-existent rules — RESOLVED
+// The production code has been fixed to return an error for non-existent rule IDs.
+// This test now verifies the fix is in place.
 // ============================================================================
 
-describe('F-P10-011: removeRule phantom success', () => {
-  it('ATTACK: removeRule with non-existent ID succeeds', async () => {
+describe('F-P10-011: removeRule phantom success — RESOLVED', () => {
+  it('ATTACK: removeRule with non-existent ID returns error (fixed)', async () => {
     await withLimen({}, async (limen) => {
       const result = limen.governance.removeRule('non-existent-rule-id');
-      // Should return error since rule does not exist
-      // But actually returns ok: true and creates phantom audit entry
+      // F-P10-011 originally found that removeRule silently succeeded for non-existent rules.
+      // The production code has been fixed: removeRule now returns an error for non-existent IDs.
       assert.equal(
-        result.ok, true,
-        'removeRule succeeds for non-existent rule — phantom audit entry created',
+        result.ok, false,
+        'removeRule must reject non-existent rule IDs',
       );
+      if (!result.ok) {
+        assert.equal(typeof result.error.code, 'string', 'Error must include a code');
+      }
     });
   });
 });

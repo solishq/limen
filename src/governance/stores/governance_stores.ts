@@ -965,7 +965,7 @@ function rowToHandoff(row: Record<string, unknown>): Handoff {
 // ============================================================================
 
 const MISSION_TERMINAL: Set<string> = new Set(['completed', 'failed', 'revoked']);
-const TASK_TERMINAL: Set<string> = new Set(['completed', 'cancelled', 'skipped', 'revoked']);
+const TASK_TERMINAL: Set<string> = new Set(['completed', 'failed', 'cancelled', 'skipped', 'revoked']);
 const HANDOFF_TERMINAL: Set<string> = new Set(['rejected', 'returned', 'revoked', 'expired']);
 const RUN_TERMINAL: Set<string> = new Set(['completed', 'failed', 'abandoned']);
 

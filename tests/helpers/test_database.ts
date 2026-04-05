@@ -43,6 +43,18 @@ import { getAgentPersistenceMigrations } from '../../src/api/migration/023_agent
 import { getTrustLearningMigrations } from '../../src/api/migration/024_trust_learning.js';
 import { getKnowledgeGraphMigrations } from '../../src/api/migration/025_knowledge_graph.js';
 import { getReplayPipelineMigrations } from '../../src/api/migration/026_replay_pipeline.js';
+import { getInteractionsRetentionMigrations } from '../../src/api/migration/027_interactions_retention.js';
+import { getFts5SearchMigrations } from '../../src/api/migration/028_fts5_search.js';
+import { getFts5CjkMigrations } from '../../src/api/migration/029_fts5_cjk.js';
+import { getCognitiveMetabolismMigrations } from '../../src/api/migration/030_cognitive_metabolism.js';
+import { getConflictIndexMigrations } from '../../src/api/migration/031_conflict_index.js';
+import { getReasoningMigrations } from '../../src/api/migration/032_reasoning.js';
+import { getSecurityHardeningMigrations } from '../../src/api/migration/033_security_hardening.js';
+import { getGovernanceSuiteMigrations } from '../../src/api/migration/034_governance_suite.js';
+import { getVectorSearchMigrations } from '../../src/api/migration/035_vector_search.js';
+import { getCognitiveEngineMigrations } from '../../src/api/migration/036_cognitive_engine.js';
+import { getFts5RetractionGuardMigrations } from '../../src/api/migration/037_fts5_retraction_guard.js';
+import { getSyncFoundationMigrations } from '../../src/api/migration/037_sync_foundation.js';
 import { createAuditTrail } from '../../src/kernel/audit/audit_trail.js';
 import { createTenantScopedConnection } from '../../src/kernel/tenant/tenant_scope.js';
 import type {
@@ -149,6 +161,18 @@ export function createTestDatabase(tenancyMode: TenancyConfig['mode'] = 'single'
     ...getTrustLearningMigrations(),
     ...getKnowledgeGraphMigrations(),
     ...getReplayPipelineMigrations(),
+    ...getInteractionsRetentionMigrations(),
+    ...getFts5SearchMigrations(),
+    ...getFts5CjkMigrations(),
+    ...getCognitiveMetabolismMigrations(),
+    ...getConflictIndexMigrations(),
+    ...getReasoningMigrations(),
+    ...getSecurityHardeningMigrations(),
+    ...getGovernanceSuiteMigrations(),
+    ...getVectorSearchMigrations(),
+    ...getCognitiveEngineMigrations(),
+    ...getFts5RetractionGuardMigrations(),
+    ...getSyncFoundationMigrations(),
   ].sort((a, b) => a.version - b.version);
 
   // Create audit_trail view aliasing core_audit_log (tests reference audit_trail)
