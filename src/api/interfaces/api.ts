@@ -338,7 +338,7 @@ export interface LimenConfig {
   /**
    * Phase 12: Self-healing configuration.
    * Controls automatic retraction of derived claims when parent claims are retracted.
-   * Default: enabled=true, threshold=0.1, maxDepth=5.
+   * Default: enabled=false, threshold=0.1, maxDepth=5.
    */
   readonly selfHealing?: import('../../cognitive/cognitive_types.js').SelfHealingConfig;
 

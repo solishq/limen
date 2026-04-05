@@ -120,7 +120,7 @@ The `cognitive` namespace provides knowledge health diagnostics and active knowl
 // Knowledge health diagnostics
 const health = limen.cognitive.health();
 if (health.ok) {
-  console.log(health.value.total);               // total active claims
+  console.log(health.value.totalClaims);          // total active claims
   console.log(health.value.freshness);           // { fresh: N, aging: N, stale: N }
   console.log(health.value.conflicts.unresolved); // unresolved contradictions
   console.log(health.value.gaps);                // predicates with no recent claims
@@ -137,15 +137,15 @@ if (result.ok) {
 // Importance scoring
 const score = limen.cognitive.importance(claimId);
 if (score.ok) {
-  console.log(score.value.composite);  // 0.0-1.0 weighted score
-  console.log(score.value.factors);    // { recency, confidence, connections, access, centrality }
+  console.log(score.value.score);      // 0.0-1.0 weighted composite
+  console.log(score.value.factors);    // { accessFrequency, recency, connectionDensity, confidence, governanceWeight }
 }
 
 // Knowledge narrative
 const narrative = limen.cognitive.narrative();
 if (narrative.ok) {
-  console.log(narrative.value.threads);  // thematic threads across claims
-  console.log(narrative.value.summary);  // compressed knowledge state
+  console.log(narrative.value.threads);    // thematic threads across claims
+  console.log(narrative.value.momentum);  // 'growing' | 'stable' | 'declining'
 }
 ```
 
