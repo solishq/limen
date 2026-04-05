@@ -17,7 +17,7 @@ export default {
 
   testRunner: 'command',
   commandRunner: {
-    command: 'npx tsx --test tests/breaker/gdpr_erasure_breaker.test.ts tests/unit/phase10_governance.test.ts tests/scaffold/invariants/i02_user_owns_data.test.ts tests/scaffold/invariants/i03_atomic_audit.test.ts tests/scaffold/invariants/i06_audit_immutability.test.ts tests/gap/test_gap_004_audit_tamper.test.ts',
+    command: 'npx tsx --test tests/mutation/erasure_mutation_kill.test.ts tests/breaker/gdpr_erasure_breaker.test.ts tests/unit/phase10_governance.test.ts tests/scaffold/invariants/i02_user_owns_data.test.ts tests/scaffold/invariants/i03_atomic_audit.test.ts tests/scaffold/invariants/i06_audit_immutability.test.ts tests/gap/test_gap_004_audit_tamper.test.ts',
   },
 
   checkers: ['typescript'],
