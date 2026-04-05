@@ -13,6 +13,7 @@
 import type { Result } from '../kernel/interfaces/index.js';
 import type { TenantScopedConnection } from '../kernel/tenant/tenant_scope.js';
 import type { TimeProvider } from '../kernel/interfaces/time.js';
+import { escapeLikeWildcards } from '../kernel/sql_utils.js';
 import type {
   ExportOptions,
   LimenExportDocument,
@@ -287,10 +288,4 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
   }
 }
 
-/**
- * Escape SQL LIKE wildcard characters in user input.
- * F-006: Prevents '%' and '_' in user input from being interpreted as wildcards.
- */
-function escapeLikeWildcards(input: string): string {
-  return input.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-}
+// escapeLikeWildcards imported from kernel/sql_utils.ts (P2-DRY-001)

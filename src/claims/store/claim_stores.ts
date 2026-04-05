@@ -69,6 +69,7 @@ import type { ContentScanResult } from '../../security/security_types.js';
 import { classify } from '../../governance/classification/classification_engine.js';
 import { checkPredicateGuard } from '../../governance/classification/predicate_guard.js';
 import { DEFAULT_CLASSIFICATION_RULES, CLASSIFICATION_LEVEL_ORDER } from '../../governance/classification/governance_types.js';
+import { escapeLikeWildcards } from '../../kernel/sql_utils.js';
 
 // ============================================================================
 // Helpers
@@ -127,14 +128,6 @@ function err<T>(code: string, message: string, spec: string): Result<T> {
 
 function newId(): string {
   return randomUUID();
-}
-
-/**
- * Escape SQL LIKE wildcard characters in user input.
- * Prevents '%' and '_' in subject/predicate prefixes from being interpreted as wildcards.
- */
-function escapeLikeWildcards(input: string): string {
-  return input.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
 /** DC-CCP-307: Compute idempotency hash from claim input payload */

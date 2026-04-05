@@ -28,18 +28,11 @@ import type { ClaimStore } from '../../claims/interfaces/claim_types.js';
 import type { ConsentRegistry } from '../../security/security_types.js';
 import type { ErasureRequest, ErasureCertificate } from '../classification/governance_types.js';
 import type { VectorStore } from '../../vector/vector_store.js';
+import { escapeLikeWildcards } from '../../kernel/sql_utils.js';
 
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/**
- * Escape SQL LIKE wildcard characters in user input.
- * F-E2E-008b: Prevents '%' and '_' in dataSubjectId from being interpreted as wildcards.
- */
-function escapeLikeWildcards(input: string): string {
-  return input.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-}
 
 function ok<T>(value: T): Result<T> {
   return { ok: true, value };
