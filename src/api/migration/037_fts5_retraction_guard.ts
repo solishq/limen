@@ -28,13 +28,18 @@ const MIGRATION_046_SQL = `
 -- Drop the old AFTER UPDATE trigger that re-inserts retracted claims
 DROP TRIGGER IF EXISTS claims_fts_au;
 
--- Recreate with status guard: only re-insert when active AND not tombstoned
+-- Recreate with status guard: only re-insert when active AND not tombstoned.
+-- Delete from FTS5 ONLY if the old row was active (i.e., it was actually in the index).
+-- Attempting to delete a row not in FTS5 causes SQLITE_CORRUPT_VTAB.
 CREATE TRIGGER IF NOT EXISTS claims_fts_au
   AFTER UPDATE ON claim_assertions
 BEGIN
-  -- Remove old entry (always — whether retracted, tombstoned, or content changed)
+  -- Remove old entry ONLY if it was active (and thus present in the FTS5 index).
+  -- Non-active entries (retracted, tombstoned) were already removed from FTS5
+  -- during their original status change — deleting again causes SQLITE_CORRUPT_VTAB.
   INSERT INTO claims_fts(claims_fts, rowid, subject, predicate, object_value, tenant_id, status, id)
-  VALUES ('delete', OLD.rowid, OLD.subject, OLD.predicate, OLD.object_value, OLD.tenant_id, OLD.status, OLD.id);
+  SELECT 'delete', OLD.rowid, OLD.subject, OLD.predicate, OLD.object_value, OLD.tenant_id, OLD.status, OLD.id
+  WHERE OLD.status = 'active' AND OLD.subject IS NOT NULL;
   -- Re-insert ONLY if active and not tombstoned (subject NULL = tombstoned)
   INSERT INTO claims_fts(rowid, subject, predicate, object_value, tenant_id, status, id)
   SELECT NEW.rowid, NEW.subject, NEW.predicate, NEW.object_value, NEW.tenant_id, NEW.status, NEW.id

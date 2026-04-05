@@ -34,7 +34,7 @@ function makeIdempotencyKey(overrides: Partial<IdempotencyKey> = {}): Idempotenc
     syscallClass: 'SC-1',
     targetScope: 'mission-001',
     key: 'create-mission-abc',
-    payloadHash: 'sha256-abc123',
+    payloadHash: 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
     canonicalizationVersion: '1.0.0',
     correlationId: correlationId('corr-001'),
     createdAt: testTimestamp(),
@@ -111,21 +111,21 @@ describe('Phase 0A Contract Tests: Idempotency + Resume-Token (Deliverable 12)',
     it('should return conflict with existingPayloadHash when hash differs', () => {
       const key = makeIdempotencyKey({
         key: 'conflict-key-133',
-        payloadHash: 'sha256-original-hash',
+        payloadHash: '1111111111111111111111111111111111111111111111111111111111111111',
       });
       const recordResult = gov.idempotencyStore.record(conn, key);
       assert.equal(recordResult.ok, true);
 
       const conflictingKey = makeIdempotencyKey({
         key: 'conflict-key-133',
-        payloadHash: 'sha256-different-hash',
+        payloadHash: '2222222222222222222222222222222222222222222222222222222222222222',
         correlationId: correlationId('corr-conflict-133'),
       });
       const checkResult = gov.idempotencyStore.check(conn, conflictingKey);
       assert.equal(checkResult.ok, true);
       if (!checkResult.ok) return;
       assert.equal(checkResult.value.outcome, 'conflict');
-      assert.equal(checkResult.value.existingPayloadHash, 'sha256-original-hash');
+      assert.equal(checkResult.value.existingPayloadHash, '1111111111111111111111111111111111111111111111111111111111111111');
     });
   });
 

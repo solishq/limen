@@ -464,7 +464,7 @@ describe('Phase 0A Contract Tests: Structured Error Model (Deliverable 7)', () =
         syscallClass: 'SC-1',
         targetScope: 'mission-idemp-001',
         key: 'create-mission-xyz',
-        payloadHash: 'hash-original-001',
+        payloadHash: 'aa11bb22cc33dd44ee55ff6600112233aa11bb22cc33dd44ee55ff6600112233',
         canonicalizationVersion: '1.0.0',
         correlationId: correlationId('corr-idemp-001'),
         createdAt: now,
@@ -475,7 +475,7 @@ describe('Phase 0A Contract Tests: Structured Error Model (Deliverable 7)', () =
       gov.idempotencyStore.record(conn, key);
 
       // Check with SAME key but DIFFERENT payload hash → conflict (BC-133)
-      const conflictKey = { ...key, payloadHash: 'hash-different-002' };
+      const conflictKey = { ...key, payloadHash: 'ff99ee88dd77cc66bb55aa4400998877ff99ee88dd77cc66bb55aa4400998877' };
       const result = gov.idempotencyStore.check(conn, conflictKey);
       assert.equal(result.ok, true);
       if (!result.ok) return;
