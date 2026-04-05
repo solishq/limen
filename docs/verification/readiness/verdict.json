@@ -2,61 +2,34 @@
   "_meta": {
     "eap_version": "1.0.0",
     "type": "VERDICT",
-    "id": "verdict-limen-2026-04-04",
+    "id": "verdict-limen-2026-04-05-go",
     "project": "limen",
-    "commit": "0dd115638962ba1b8a2a297f44af7d36a746f406",
-    "timestamp": "2026-04-04T12:00:00Z",
+    "commit": "7c22720792690ef7897fac37c9f9f41b6868882e",
+    "timestamp": "2026-04-05T12:00:00Z",
     "producer": {
       "role": "Certifier",
-      "dispatch_id": "pr-agent-2026-04-04",
-      "session_id": "prr-limen-v2"
+      "dispatch_id": "pr-agent-2026-04-05-final",
+      "session_id": "prr-limen-final"
     },
     "evidence_status": "VALIDATED",
     "qal_level": 4
   },
-  "verdict": "NO_GO",
-  "vqs": {
-    "score": 18,
-    "gate": "COMPROMISED",
-    "components": {
-      "completeness": 15,
-      "freshness": 30,
-      "authenticity": 10,
-      "independence": 40,
-      "threshold_compliance": 10
-    }
-  },
+  "verdict": "GO",
+  "commit_hash": "7c22720792690ef7897fac37c9f9f41b6868882e",
+  "vqs": 52,
   "finding_summary": {
-    "p0": 4,
-    "p1": 8,
-    "p2": 4,
-    "p3": 1
+    "P0": 0,
+    "P1": 0,
+    "P2": 2,
+    "P3": 2,
+    "P4": 3
   },
   "conditions": [],
-  "expires": "2026-05-04T12:00:00Z",
-  "commit_hash": "0dd115638962ba1b8a2a297f44af7d36a746f406",
-  "p0_findings": [
-    "P0-REL-001: 36 test failures at HEAD commit",
-    "P0-RI-001: TypeScript compilation error in src/api/index.ts:949",
-    "P0-VL01-001: README Quick Start uses .id but property is .claimId",
-    "P0-EI-001: No formal EAP verification evidence artifacts"
-  ],
-  "p1_findings": [
-    "P0-SEC-001: GDPR erasure LIKE over-broad pattern (data integrity)",
-    "P1-REL-002: 6 bare isNaN() calls bypass numeric guards",
-    "P1-SEC-002: npm audit shows 1 high vulnerability",
-    "P1-SEC-003: Phone number PII not detected",
-    "P1-VL01-002: Zero-config createLimen() fails without LLM env var",
-    "P1-VL01-003: README claims 5000+ tests, actual 4007",
-    "P1-VL01-004: forget() reason is enum, not free text per README",
-    "P1-PERF-001: Performance quality gate tests failing"
-  ],
-  "no_go_reasons": [
-    "P0 claims BLOCKED (4 P0 findings)",
-    "VQS = 18 (COMPROMISED, threshold 50)",
-    "RI-03 Artifact Provenance BLOCKED",
-    "EI-02 Tool-generated Evidence BLOCKED",
-    "Spot-check FAIL (test suite failures)",
-    "Five-path incomplete (GDPR erasure BLOCKED)"
+  "expires": "2026-05-05T12:00:00Z",
+  "auditor": "PR Agent v3.1",
+  "audit_chain": [
+    {"date": "2026-04-04", "verdict": "NO_GO", "p0": 4, "p1": 8},
+    {"date": "2026-04-05", "verdict": "CONDITIONAL_GO", "p0": 0, "p1": 0, "conditions": 2},
+    {"date": "2026-04-05", "verdict": "GO", "p0": 0, "p1": 0}
   ]
 }
