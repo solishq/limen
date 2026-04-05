@@ -37,3 +37,8 @@ packages/*/scripts/seed-*.ts
 
 # Per-project local documents (not tracked — backed up separately)
 docs/local/
+
+# Stryker mutation testing
+.stryker-cache/
+.stryker-tmp/
+stryker.log
