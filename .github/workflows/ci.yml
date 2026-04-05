@@ -33,14 +33,8 @@ jobs:
             exit 1
           fi
 
-      - name: 'No uncontrolled any types'
-        run: |
-          COUNT=$(grep -rn "as any\|: any" src/ --include="*.ts" | grep -v "// " | wc -l | tr -d ' ')
-          if [ "$COUNT" -gt 0 ]; then
-            echo "::error::Uncontrolled 'any' usage found"
-            grep -rn "as any\|: any" src/ --include="*.ts" | grep -v "// "
-            exit 1
-          fi
+      - name: 'No explicit any types (AST-checked)'
+        run: npx tsx scripts/check-explicit-any.ts
 
       - name: 'Single production dependency (I-01)'
         run: |
