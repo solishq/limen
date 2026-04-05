@@ -1163,7 +1163,7 @@ export async function createLimen(
     log({ level: 'info', category: 'init', message: 'sqlite-vec not available, vector features disabled', context: { error: vecErr instanceof Error ? vecErr.message : String(vecErr) } });
   }
 
-  vectorStore = createVectorStore(vectorAvailable, vectorDimensions);
+  vectorStore = createVectorStore(vectorAvailable, vectorDimensions, kernel.time);
   embeddingQueue = createEmbeddingQueue();
 
   // Phase 11: Background embedding interval (if configured)

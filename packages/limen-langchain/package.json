@@ -18,7 +18,7 @@
   },
   "peerDependencies": {
     "limen-ai": "^2.0.0",
-    "@langchain/core": "^0.3.0"
+    "@langchain/core": "^1.1.7"
   },
   "devDependencies": {},
   "scripts": {

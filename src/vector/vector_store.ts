@@ -15,6 +15,7 @@
 
 import type { DatabaseConnection } from '../kernel/interfaces/database.js';
 import type { Result } from '../kernel/interfaces/common.js';
+import type { TimeProvider } from '../kernel/interfaces/time.js';
 import type { StoredEmbedding } from './vector_types.js';
 import { DEFAULT_VECTOR_CONFIG } from './vector_types.js';
 
@@ -56,6 +57,7 @@ export interface VectorStore {
 export function createVectorStore(
   vectorAvailable: boolean,
   dimensions: number = DEFAULT_VECTOR_CONFIG.dimensions,
+  time?: TimeProvider,
 ): VectorStore {
   return {
     store(conn: DatabaseConnection, claimId: string, tenantId: string | null, vector: number[], modelId: string): Result<void> {
@@ -94,12 +96,18 @@ export function createVectorStore(
         );
 
         // I-P11-13: Record model identity in metadata
+        // Hard Stop #7: TimeProvider for all temporal logic. SQLite strftime is primary,
+        // TimeProvider is fallback. No bare new Date() — eliminated per constitution.
         const now = conn.get<{ now: string }>(
           `SELECT strftime('%Y-%m-%dT%H:%M:%f', 'now') as now`,
         );
+        const timestamp = now?.now ?? time?.nowISO();
+        if (!timestamp) {
+          return err('VECTOR_STORE_FAILED', 'Could not determine timestamp: SQLite strftime returned null and no TimeProvider configured', 'I-P11-13');
+        }
         conn.run(
           `INSERT OR REPLACE INTO embedding_metadata(claim_id, tenant_id, model_id, dimensions, created_at) VALUES (?, ?, ?, ?, ?)`,
-          [claimId, tenantId, modelId, dimensions, now?.now ?? new Date().toISOString()],
+          [claimId, tenantId, modelId, dimensions, timestamp],
         );
 
         return ok(undefined);
