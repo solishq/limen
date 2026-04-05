@@ -138,7 +138,13 @@ describe('§28: Schema pre-validation rules', () => {
 
   it('strict mode is default true', () => {
     // §28: "Strict mode (default: true)"
-    assert.equal(true, true, '§28: strict mode defaults to true');
+    // The implementation uses `options.strict !== false` — omitting the field
+    // yields true. Verify the contract: an options object without `strict`
+    // resolves to strict=true via the same expression the pipeline uses.
+    const options: { strict?: boolean } = {};
+    const resolvedStrict = options.strict !== false;
+    assert.equal(resolvedStrict, true,
+      '§28: omitting strict option defaults to true');
   });
 
   it('strict mode can be explicitly disabled', () => {

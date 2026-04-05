@@ -49,13 +49,8 @@ jobs:
             exit 1
           fi
 
-      - name: 'No decorative assertions (Hard Ban #8)'
-        run: |
-          PATTERNS="assert\.ok\(true\)|assert\.ok\(1\)|assert\.equal\(true,\s*true\)|toBeTruthy"
-          if grep -rPn --exclude-dir=scaffold "$PATTERNS" tests/ src/ 2>/dev/null; then
-            echo "::error::Decorative assertion found"
-            exit 1
-          fi
+      - name: 'No decorative assertions (Hard Ban #8, AST-checked)'
+        run: npx tsx scripts/check-decorative-assertions.ts
 
       - name: Test
         run: npm test
