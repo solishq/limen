@@ -1,0 +1,27 @@
+{
+  "$schema": "SolisHQ QAL Classification",
+  "version": "1.0",
+  "rules": [
+    { "path": "src/governance/**", "level": 4, "reason": "Controls agent authority — failure = unauthorized actions" },
+    { "path": "src/kernel/audit/**", "level": 4, "reason": "Integrity verification — failure = undetectable tampering" },
+    { "path": "src/kernel/crypto/**", "level": 4, "reason": "Data protection — failure = data breach" },
+    { "path": "src/kernel/rbac/**", "level": 4, "reason": "Authorization — failure = privilege escalation" },
+    { "path": "src/claims/**", "level": 3, "reason": "Knowledge integrity — failure = corrupted intelligence" },
+    { "path": "src/working-memory/**", "level": 3, "reason": "Cognitive state — failure = lost context" },
+    { "path": "src/budget/**", "level": 3, "reason": "Resource control — failure = runaway costs" },
+    { "path": "src/orchestration/**", "level": 3, "reason": "Workflow integrity — failure = stuck or invalid states" },
+    { "path": "src/context/**", "level": 3, "reason": "Context quality — failure = wrong context in LLM" },
+    { "path": "src/execution/**", "level": 3, "reason": "Scheduling — failure = starvation" },
+    { "path": "src/techniques/**", "level": 3, "reason": "Learning quality — failure = bad techniques promoted" },
+    { "path": "src/learning/**", "level": 3, "reason": "Knowledge acquisition — failure = wrong learning" },
+    { "path": "src/substrate/**", "level": 2, "reason": "LLM communication — failure = degraded capability" },
+    { "path": "src/kernel/events/**", "level": 2, "reason": "Event delivery — failure = missed events" },
+    { "path": "src/kernel/retention/**", "level": 2, "reason": "Data lifecycle — failure = stale data" },
+    { "path": "src/api/**", "level": 2, "reason": "Consumer interface — failure = confusing API" },
+    { "path": "packages/limen-mcp/**", "level": 2, "reason": "MCP interface — failure = wrong tool behavior" },
+    { "path": "docs/**", "level": 1, "reason": "Informational" },
+    { "path": "examples/**", "level": 1, "reason": "Demonstrational" },
+    { "path": "scripts/**", "level": 1, "reason": "Tooling" }
+  ],
+  "default": 2
+}
