@@ -38,6 +38,8 @@
  *   DC-CLI-082: a2a-read messages sorted chronologically (success) [F-BR3-007 unconditional]
  *   DC-CLI-102: a2a-read --from with invalid name rejects with CLI_INVALID_SENDER (F-BR3-013) (rejection)
  *   DC-CLI-103: a2a-read --me with invalid name rejects with CLI_INVALID_SENDER (F-BR3-013) (rejection)
+ *   DC-CLI-104: a2a-read --since filters by middle timestamp (success) [F-BR3-003 remediation]
+ *   DC-CLI-105: a2a-read --agent-id filters by sender (success) [F-BR3-003 remediation]
  *
  *   === a2a-channels command ===
  *   DC-CLI-083: a2a-channels returns thread listing JSON (success)
@@ -105,15 +107,25 @@ async function runCli(args: string, retries = 3): Promise<{
         exitCode: e.code ?? 1,
         json: null as unknown,
       };
-      // Retry on transient engine errors, not on expected validation errors
+      // Retry on transient engine errors, not on expected validation errors.
+      // RATE_LIMITED is included because DC-CLI-104/105 (added for F-BR3-003
+      // remediation) seed additional messages that can push later tests over
+      // the per-process rate-limit bucket within a test run; the limit resets
+      // within a minute so linear backoff recovers deterministically.
       const combined = result.stderr + result.stdout;
       const isTransient = combined.includes('ENGINE_UNHEALTHY') ||
         combined.includes('SQLITE_BUSY') ||
         combined.includes('database is locked') ||
         combined.includes('not initialized') ||
-        combined.includes('Convenience API');
+        combined.includes('Convenience API') ||
+        combined.includes('RATE_LIMITED');
       if (isTransient && attempt < retries) {
-        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        // Rate-limit windows are 60s; back off longer than the SQLite path.
+        const isRateLimit = combined.includes('RATE_LIMITED');
+        const delayMs = isRateLimit
+          ? 2000 * (attempt + 1)
+          : 500 * (attempt + 1);
+        await new Promise(r => setTimeout(r, delayMs));
         continue;
       }
       return result;
@@ -387,6 +399,111 @@ describe('limen a2a-read', () => {
     const errData = JSON.parse(result.stderr) as { error: { code: string } };
     expect(errData.error.code).toBe('CLI_INVALID_SENDER');
   });
+
+  // F-BR3-003 remediation: success-path coverage for --since filter.
+  // Certifier Phase 3 (PHASE-3-CERTIFICATION.md DS-8) probed this scenario
+  // directly and found LIMIT_EXCEEDED because the original fix set
+  // fetchLimit=1000 > engine cap of 200. This test fails against the broken
+  // implementation (exitCode=1, LIMIT_EXCEEDED on stderr) and passes once
+  // fetchLimit is clamped to ENGINE_CLAIM_QUERY_MAX_LIMIT.
+  it('DC-CLI-104: --since filters messages after middle timestamp', { timeout: 60_000 }, async () => {
+    const sinceChannel = `test-since-${Date.now()}`;
+    // Use a fresh agent identity so this test's rate-limit budget is isolated
+    // from the shared `test-agent-a2a` used by earlier tests (CLAIM_RATE_LIMIT
+    // = 100/min per agent at claim_types.ts).
+    const sinceAgent = `since-agent-${Date.now()}`;
+    await runCli(`agent register --name "${sinceAgent}"`);
+
+    // Seed 5 messages with ~50ms spacing so we can capture a middle timestamp.
+    for (let i = 0; i < 5; i++) {
+      const r = await runCli(
+        `a2a-send --from "${sinceAgent}" --channel "${sinceChannel}" --message "msg-${i}"`,
+      );
+      expect(r.exitCode).toBe(0);
+      const data = r.json as { claimId: string };
+      expect(typeof data.claimId).toBe('string');
+      await new Promise((resolve) => setTimeout(resolve, 55));
+    }
+
+    // Pull all messages unfiltered to capture their exact timestamps.
+    const all = await runCli(`a2a-read --channel "${sinceChannel}" --limit 50`);
+    expect(all.exitCode).toBe(0);
+    const allData = all.json as { messages: Array<{ timestamp: string }> };
+    expect(allData.messages.length).toBe(5);
+
+    // Pick the third message's timestamp as the --since boundary.
+    // Filter should return messages where timestamp >= middle (indices 2, 3, 4).
+    const middleTimestamp = allData.messages[2]!.timestamp;
+
+    const filtered = await runCli(
+      `a2a-read --channel "${sinceChannel}" --since "${middleTimestamp}"`,
+    );
+
+    // DISCRIMINATIVE: against the broken fetchLimit=1000 implementation this
+    // line fails because exitCode=1 and stderr contains LIMIT_EXCEEDED.
+    expect(filtered.exitCode).toBe(0);
+    const filteredData = filtered.json as {
+      count: number;
+      messages: Array<{ timestamp: string; message: string }>;
+    };
+    expect(filteredData.count).toBe(3);
+    expect(filteredData.messages.length).toBe(3);
+    // Every returned message must satisfy the filter predicate.
+    for (const m of filteredData.messages) {
+      expect(m.timestamp >= middleTimestamp).toBe(true);
+    }
+  });
+
+  // F-BR3-003 remediation: success-path coverage for --agent-id filter.
+  // Certifier Phase 3 (PHASE-3-CERTIFICATION.md DS-9) probed this scenario
+  // directly and found LIMIT_EXCEEDED. Discriminative against the broken
+  // fetchLimit=1000 path.
+  it('DC-CLI-105: --agent-id filters messages by sender', { timeout: 60_000 }, async () => {
+    const idChannel = `test-agentid-${Date.now()}`;
+    const agentX = `agent-x-${Date.now()}`;
+    const agentY = `agent-y-${Date.now()}`;
+
+    // Register both agents so self-declared senders are accepted.
+    await runCli(`agent register --name "${agentX}"`);
+    await runCli(`agent register --name "${agentY}"`);
+
+    // Two messages from X, three messages from Y, interleaved.
+    const seeds: Array<[string, string]> = [
+      [agentX, 'x-first'],
+      [agentY, 'y-first'],
+      [agentX, 'x-second'],
+      [agentY, 'y-second'],
+      [agentY, 'y-third'],
+    ];
+    for (const [sender, body] of seeds) {
+      const r = await runCli(
+        `a2a-send --from "${sender}" --channel "${idChannel}" --message "${body}"`,
+      );
+      expect(r.exitCode).toBe(0);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    // Filter by agentY: must see exactly 3 messages, all from agentY.
+    const filtered = await runCli(
+      `a2a-read --channel "${idChannel}" --agent-id "${agentY}"`,
+    );
+
+    // DISCRIMINATIVE: against the broken fetchLimit=1000 implementation this
+    // line fails because exitCode=1 and stderr contains LIMIT_EXCEEDED.
+    expect(filtered.exitCode).toBe(0);
+    const data = filtered.json as {
+      count: number;
+      messages: Array<{ sender: string; message: string }>;
+    };
+    expect(data.count).toBe(3);
+    expect(data.messages.length).toBe(3);
+    for (const m of data.messages) {
+      expect(m.sender).toBe(agentY);
+    }
+    // And none of the X messages leaked through.
+    const bodies = data.messages.map((m) => m.message).sort();
+    expect(bodies).toEqual(['y-first', 'y-second', 'y-third']);
+  });
 });
 
 // =====================================================================
@@ -508,7 +625,10 @@ describe('limen a2a-presence', () => {
 // =====================================================================
 
 describe('Phase 3 JSON contract', () => {
-  it('DC-CLI-095: all Phase 3 success stdout is valid JSON', async () => {
+  // Four sequential runCli calls each with up-to-3 rate-limit retries
+  // (see runCli). Default 5s timeout is insufficient once DC-CLI-104/105
+  // have consumed a large share of the per-minute rate-limit budget.
+  it('DC-CLI-095: all Phase 3 success stdout is valid JSON', { timeout: 60_000 }, async () => {
     // Run sequentially to avoid SQLite locking contention
     const r1 = await runCli('a2a-send --from "json-test" --to "recipient" --message "json contract test"');
     expect(r1.exitCode).toBe(0);
@@ -527,7 +647,7 @@ describe('Phase 3 JSON contract', () => {
     expect(r4.json).not.toBeNull();
   });
 
-  it('DC-CLI-096: all Phase 3 error stderr is valid JSON', async () => {
+  it('DC-CLI-096: all Phase 3 error stderr is valid JSON', { timeout: 60_000 }, async () => {
     // Run sequentially to avoid SQLite locking contention
     const e1 = await runCli('a2a-send --from "inv@lid" --to "recipient" --message "hello"');
     expect(e1.exitCode).toBe(1);

@@ -13,8 +13,8 @@
     "Messages sorted chronologically (oldest first)",
     "Each message includes id, sender, timestamp, transport, and message fields",
     "--limit controls maximum messages returned (default 20, max 100)",
-    "--since filters messages after an ISO timestamp",
-    "--agent-id filters messages by sender",
+    "--since filters messages after an ISO timestamp (scans up to 200 most-recent messages before filtering; engine-enforced ceiling CLAIM_QUERY_MAX_LIMIT=200)",
+    "--agent-id filters messages by sender (scans up to 200 most-recent messages before filtering; engine-enforced ceiling CLAIM_QUERY_MAX_LIMIT=200)",
     "All stdout is valid JSON, all errors go to stderr as JSON"
   ],
   "failureCriteria": [
@@ -49,5 +49,5 @@
   },
   "lifecycle": "active",
   "createdAt": "2026-04-10T12:25:00Z",
-  "updatedAt": "2026-04-10T12:25:00Z"
+  "updatedAt": "2026-04-10T17:00:00Z"
 }

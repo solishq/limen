@@ -7,6 +7,13 @@
  * Parity with: limen_a2a_read MCP tool (packages/limen-mcp/src/tools/a2a-chat.ts)
  *
  * F-BR3-003: --since filter applied BEFORE --limit (fetch high, filter, then limit).
+ *   The engine enforces CLAIM_QUERY_MAX_LIMIT = 200 at query time
+ *   (src/claims/interfaces/claim_types.ts:1079, enforced in
+ *   src/claims/store/claim_stores.ts:2061). Any fetchLimit > 200 is
+ *   rejected with LIMIT_EXCEEDED, so the filtered-read window is
+ *   inherently capped at 200 messages BEFORE client-side filtering.
+ *   This is a documented limitation of the convenience API; callers that
+ *   need deeper history must paginate via a subject-scoped query.
  * F-BR3-008: Shared helpers from a2a-helpers.ts.
  *
  * DMs are transparent -- any agent can read any thread.
@@ -19,6 +26,15 @@ import { withEngine } from '../bootstrap.js';
 import { writeResult, writeError, CliError } from '../output.js';
 import { isValidName, channelSubject, dmSubject } from './a2a-helpers.js';
 
+/**
+ * Engine-enforced ceiling on a single recall() call. MUST be kept in sync
+ * with CLAIM_QUERY_MAX_LIMIT at src/claims/interfaces/claim_types.ts:1079.
+ * Not exported from the limen-ai public surface (dist/api/index.d.ts), so
+ * hardcoded here with an explicit pin. If the engine cap changes, update
+ * both sites in the same commit.
+ */
+const ENGINE_CLAIM_QUERY_MAX_LIMIT = 200;
+
 export function createA2aReadCommand(): Command {
   const cmd = new Command('a2a-read')
     .description('Read messages from an A2A chat channel or DM thread')
@@ -26,8 +42,8 @@ export function createA2aReadCommand(): Command {
     .option('--from <agent>', 'For DM: the other agent in the conversation')
     .option('--me <agent>', 'For DM: your agent name (needed to build the DM subject)')
     .option('--limit <n>', 'Maximum messages to return (default: 20, max: 100)', parseInt)
-    .option('--since <timestamp>', 'ISO-8601 timestamp to filter messages after')
-    .option('--agent-id <name>', 'Filter messages by sender agent name')
+    .option('--since <timestamp>', 'ISO-8601 timestamp to filter messages after (scans up to 200 most-recent messages before filtering)')
+    .option('--agent-id <name>', 'Filter messages by sender agent name (scans up to 200 most-recent messages before filtering)')
     .action(async (options: {
       channel?: string;
       from?: string;
@@ -131,8 +147,13 @@ export function createA2aReadCommand(): Command {
         // result set from the engine so filters run BEFORE the user's limit.
         // Without this, the engine limit truncates before filtering, causing
         // the user to receive fewer results than expected.
+        //
+        // CRITICAL: fetchLimit MUST NOT exceed ENGINE_CLAIM_QUERY_MAX_LIMIT (200).
+        // The engine rejects anything larger with LIMIT_EXCEEDED (claim_stores.ts:2061).
+        // This bounds the pre-filter window at 200 messages — a known limitation
+        // of this convenience path.
         const hasFilters = !!options.since || !!options.agentId;
-        const fetchLimit = hasFilters ? 1000 : userLimit;
+        const fetchLimit = hasFilters ? ENGINE_CLAIM_QUERY_MAX_LIMIT : userLimit;
 
         const result = await withEngine(
           (limen) => {
