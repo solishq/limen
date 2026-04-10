@@ -1,0 +1,48 @@
+{
+  "id": "LIMEN-J-016",
+  "name": "CLI A2A Presence",
+  "statement": "A developer views registered agents in the A2A network with their trust levels and governance status, optionally filtering by channel participation or specific agent identity.",
+  "audience": ["developer", "agent"],
+  "tier": 1,
+  "owner": "femi",
+  "authority": "product-authority",
+  "entrySurface": ["packages/limen-cli/README.md"],
+  "successCriteria": [
+    "limen a2a-presence returns JSON with count and agents array",
+    "Each agent includes name, trustLevel, domains, capabilities, and createdAt fields",
+    "--agent-id filters to a specific agent",
+    "--channel filters to agents who have sent to that channel",
+    "All stdout is valid JSON, all errors go to stderr as JSON"
+  ],
+  "failureCriteria": [
+    "limen a2a-presence --agent-id 'inv@lid' crashes instead of returning JSON error",
+    "limen a2a-presence --channel 'inv@lid' crashes instead of returning JSON error",
+    "Agents missing trustLevel field",
+    "Any command outputs non-JSON to stdout"
+  ],
+  "recoveryRequired": true,
+  "recoverySurface": ["packages/limen-cli/README.md"],
+  "deterministicWitnesses": ["cold-start"],
+  "exploratoryWitnesses": ["hostile"],
+  "distributionTargets": ["npm:limen-cli"],
+  "preconditions": [
+    "Node.js >= 22 installed",
+    "limen-cli installed globally",
+    "limen init completed (~/.limen/ exists with master key and config)"
+  ],
+  "stateModel": {
+    "startState": "limen-initialized",
+    "successState": "presence-listed",
+    "failureStates": ["invalid-agent-id", "invalid-channel", "engine-error"],
+    "transitions": [
+      { "from": "limen-initialized", "action": "limen a2a-presence", "to": "presence-listed" },
+      { "from": "limen-initialized", "action": "limen a2a-presence --agent-id 'claude-code'", "to": "presence-listed" },
+      { "from": "limen-initialized", "action": "limen a2a-presence --channel 'general'", "to": "presence-listed" },
+      { "from": "limen-initialized", "action": "limen a2a-presence --agent-id 'inv@lid'", "to": "invalid-agent-id" },
+      { "from": "limen-initialized", "action": "limen a2a-presence --channel 'inv@lid'", "to": "invalid-channel" }
+    ]
+  },
+  "lifecycle": "proposed",
+  "createdAt": "2026-04-10T12:25:00Z",
+  "updatedAt": "2026-04-10T12:25:00Z"
+}

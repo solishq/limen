@@ -24,6 +24,10 @@ import { createReflectCommand } from './commands/reflect.js';
 import { createSearchCommand } from './commands/search.js';
 import { createRecallBulkCommand } from './commands/recall-bulk.js';
 import { createContextCommand } from './commands/context.js';
+import { createA2aSendCommand } from './commands/a2a-send.js';
+import { createA2aReadCommand } from './commands/a2a-read.js';
+import { createA2aChannelsCommand } from './commands/a2a-channels.js';
+import { createA2aPresenceCommand } from './commands/a2a-presence.js';
 
 /**
  * F-001 FIX: Apply JSON error output to a Commander command.
@@ -85,6 +89,10 @@ program.addCommand(createReflectCommand());
 program.addCommand(createSearchCommand());
 program.addCommand(createRecallBulkCommand());
 program.addCommand(createContextCommand());
+program.addCommand(createA2aSendCommand());
+program.addCommand(createA2aReadCommand());
+program.addCommand(createA2aChannelsCommand());
+program.addCommand(createA2aPresenceCommand());
 
 // Apply JSON error handling AFTER all commands are registered,
 // so the recursive walk covers every subcommand.
