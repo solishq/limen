@@ -18,18 +18,39 @@ import { withEngine } from '../bootstrap.js';
 import { writeResult, writeError, CliError } from '../output.js';
 
 /**
- * Validate an optional numeric CLI flag.
- * Returns the parsed number or undefined if not provided.
- * Throws CliError if the value is NaN or negative.
+ * Parse a CLI string as a strict decimal integer.
+ * Returns NaN for anything that is not a pure decimal integer string.
+ *
+ * Why not parseInt: parseInt silently truncates floats (3.7 -> 3),
+ * accepts hex (0x10 -> 16), and mishandles scientific notation (1e5 -> 1).
+ * This function rejects all of those by returning NaN, which the
+ * downstream validateNonNegativeInt catches with the correct error code.
+ *
+ * Commander.js option parser callback: receives the raw string.
  */
-function validatePositiveInt(
+function parseStrictInt(value: string): number {
+  // Only allow optional minus sign followed by decimal digits.
+  // Rejects hex (0x...), scientific notation (1e5), floats (3.7),
+  // and any other non-decimal-integer format at the string level.
+  if (!/^-?\d+$/.test(value)) {
+    return NaN;
+  }
+  return Number(value);
+}
+
+/**
+ * Validate a parsed numeric CLI flag is a non-negative finite integer.
+ * Returns the validated number or undefined if not provided.
+ * Throws CliError if the value is NaN, Infinity, or negative.
+ */
+function validateNonNegativeInt(
   raw: number | undefined,
   flagName: string,
   errorCode: string,
 ): number | undefined {
   if (raw === undefined) return undefined;
-  if (isNaN(raw)) {
-    throw new CliError(errorCode, `${flagName} must be a valid number`);
+  if (!Number.isFinite(raw) || isNaN(raw)) {
+    throw new CliError(errorCode, `${flagName} must be a valid integer`);
   }
   if (raw < 0) {
     throw new CliError(errorCode, `${flagName} must be non-negative`);
@@ -40,11 +61,11 @@ function validatePositiveInt(
 export function createHealthCognitiveCommand(): Command {
   const cmd = new Command('health-cognitive')
     .description('Get cognitive health report: freshness, conflicts, confidence, gaps, stale domains')
-    .option('--gapThresholdDays <n>', 'Days without new claims before a domain is flagged as a gap', parseInt)
-    .option('--staleThresholdDays <n>', 'Days since last access before a domain is flagged as stale', parseInt)
-    .option('--maxCriticalConflicts <n>', 'Maximum critical conflicts to return', parseInt)
-    .option('--maxGaps <n>', 'Maximum gap entries to return', parseInt)
-    .option('--maxStaleDomains <n>', 'Maximum stale domain entries to return', parseInt)
+    .option('--gapThresholdDays <n>', 'Days without new claims before a domain is flagged as a gap', parseStrictInt)
+    .option('--staleThresholdDays <n>', 'Days since last access before a domain is flagged as stale', parseStrictInt)
+    .option('--maxCriticalConflicts <n>', 'Maximum critical conflicts to return', parseStrictInt)
+    .option('--maxGaps <n>', 'Maximum gap entries to return', parseStrictInt)
+    .option('--maxStaleDomains <n>', 'Maximum stale domain entries to return', parseStrictInt)
     .action(async (options: {
       gapThresholdDays?: number;
       staleThresholdDays?: number;
@@ -59,19 +80,19 @@ export function createHealthCognitiveCommand(): Command {
         }>();
 
         // Validate all numeric options before engine bootstrap
-        const gapThresholdDays = validatePositiveInt(
+        const gapThresholdDays = validateNonNegativeInt(
           options.gapThresholdDays, '--gapThresholdDays', 'CLI_INVALID_GAP_THRESHOLD',
         );
-        const staleThresholdDays = validatePositiveInt(
+        const staleThresholdDays = validateNonNegativeInt(
           options.staleThresholdDays, '--staleThresholdDays', 'CLI_INVALID_STALE_THRESHOLD',
         );
-        const maxCriticalConflicts = validatePositiveInt(
+        const maxCriticalConflicts = validateNonNegativeInt(
           options.maxCriticalConflicts, '--maxCriticalConflicts', 'CLI_INVALID_MAX_CONFLICTS',
         );
-        const maxGaps = validatePositiveInt(
+        const maxGaps = validateNonNegativeInt(
           options.maxGaps, '--maxGaps', 'CLI_INVALID_MAX_GAPS',
         );
-        const maxStaleDomains = validatePositiveInt(
+        const maxStaleDomains = validateNonNegativeInt(
           options.maxStaleDomains, '--maxStaleDomains', 'CLI_INVALID_MAX_STALE',
         );
 

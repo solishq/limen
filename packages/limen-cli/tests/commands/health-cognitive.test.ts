@@ -19,6 +19,15 @@
  *   DC-CLI-071: health-cognitive --maxStaleDomains "abc" rejects with CLI_INVALID_MAX_STALE (rejection)
  *   DC-CLI-072: health-cognitive --gapThresholdDays -5 rejects with CLI_INVALID_GAP_THRESHOLD (rejection)
  *   DC-CLI-073: health-cognitive with valid config flags returns report (success)
+ *
+ *   === Phase 4 Remediation (F-P4-001, F-P4-002) ===
+ *   DC-CLI-082: health-cognitive --staleThresholdDays -1 rejects with CLI_INVALID_STALE_THRESHOLD (rejection)
+ *   DC-CLI-083: health-cognitive --maxCriticalConflicts -1 rejects with CLI_INVALID_MAX_CONFLICTS (rejection)
+ *   DC-CLI-084: health-cognitive --maxGaps -1 rejects with CLI_INVALID_MAX_GAPS (rejection)
+ *   DC-CLI-085: health-cognitive --maxStaleDomains -1 rejects with CLI_INVALID_MAX_STALE (rejection)
+ *   DC-CLI-086: health-cognitive --gapThresholdDays 3.7 rejects float input (rejection)
+ *   DC-CLI-087: health-cognitive --gapThresholdDays 0x10 rejects hex input (rejection)
+ *   DC-CLI-088: health-cognitive --gapThresholdDays 1e5 rejects scientific notation input (rejection)
  *   DC-CLI-074: health-cognitive totalClaims reflects seeded data (success)
  *   DC-CLI-075: health-cognitive freshness distribution sums to totalClaims (invariant)
  *   DC-CLI-076: health-cognitive confidence mean is in [0, 1] range (invariant)
@@ -266,6 +275,64 @@ describe('limen health-cognitive validation', () => {
     const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
     expect(errData.error.code).toBe('CLI_INVALID_GAP_THRESHOLD');
     expect(errData.error.message).toContain('non-negative');
+  });
+
+  // F-P4-002: Negative rejection tests for 4 remaining flags (A21 compliance)
+  it('DC-CLI-082: --staleThresholdDays -1 rejects with CLI_INVALID_STALE_THRESHOLD', async () => {
+    const result = await runCli(`${GLOBAL_OPTS} health-cognitive --staleThresholdDays -1`);
+    expect(result.exitCode).toBe(1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    expect(errData.error.code).toBe('CLI_INVALID_STALE_THRESHOLD');
+    expect(errData.error.message).toContain('non-negative');
+  });
+
+  it('DC-CLI-083: --maxCriticalConflicts -1 rejects with CLI_INVALID_MAX_CONFLICTS', async () => {
+    const result = await runCli(`${GLOBAL_OPTS} health-cognitive --maxCriticalConflicts -1`);
+    expect(result.exitCode).toBe(1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    expect(errData.error.code).toBe('CLI_INVALID_MAX_CONFLICTS');
+    expect(errData.error.message).toContain('non-negative');
+  });
+
+  it('DC-CLI-084: --maxGaps -1 rejects with CLI_INVALID_MAX_GAPS', async () => {
+    const result = await runCli(`${GLOBAL_OPTS} health-cognitive --maxGaps -1`);
+    expect(result.exitCode).toBe(1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    expect(errData.error.code).toBe('CLI_INVALID_MAX_GAPS');
+    expect(errData.error.message).toContain('non-negative');
+  });
+
+  it('DC-CLI-085: --maxStaleDomains -1 rejects with CLI_INVALID_MAX_STALE', async () => {
+    const result = await runCli(`${GLOBAL_OPTS} health-cognitive --maxStaleDomains -1`);
+    expect(result.exitCode).toBe(1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    expect(errData.error.code).toBe('CLI_INVALID_MAX_STALE');
+    expect(errData.error.message).toContain('non-negative');
+  });
+
+  // F-P4-001: parseStrictInt rejects floats, hex, and scientific notation
+  it('DC-CLI-086: --gapThresholdDays 3.7 rejects float with CLI_INVALID_GAP_THRESHOLD', async () => {
+    const result = await runCli(`${GLOBAL_OPTS} health-cognitive --gapThresholdDays 3.7`);
+    expect(result.exitCode).toBe(1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    expect(errData.error.code).toBe('CLI_INVALID_GAP_THRESHOLD');
+    expect(errData.error.message).toContain('valid integer');
+  });
+
+  it('DC-CLI-087: --gapThresholdDays 0x10 rejects hex with CLI_INVALID_GAP_THRESHOLD', async () => {
+    const result = await runCli(`${GLOBAL_OPTS} health-cognitive --gapThresholdDays 0x10`);
+    expect(result.exitCode).toBe(1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    expect(errData.error.code).toBe('CLI_INVALID_GAP_THRESHOLD');
+    expect(errData.error.message).toContain('valid integer');
+  });
+
+  it('DC-CLI-088: --gapThresholdDays 1e5 rejects scientific notation with CLI_INVALID_GAP_THRESHOLD', async () => {
+    const result = await runCli(`${GLOBAL_OPTS} health-cognitive --gapThresholdDays 1e5`);
+    expect(result.exitCode).toBe(1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    expect(errData.error.code).toBe('CLI_INVALID_GAP_THRESHOLD');
+    expect(errData.error.message).toContain('valid integer');
   });
 });
 
