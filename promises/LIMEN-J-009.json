@@ -1,0 +1,60 @@
+{
+  "id": "LIMEN-J-009",
+  "name": "CLI Diagnostic Depth",
+  "statement": "A developer runs cognitive health diagnostics and bulk-queries multiple subjects to assess knowledge quality and identify gaps — from the terminal using documented CLI commands.",
+  "audience": [
+    "developer"
+  ],
+  "tier": 2,
+  "owner": "femi",
+  "authority": "product-authority",
+  "entrySurface": [
+    "packages/limen-cli/README.md:120-150"
+  ],
+  "successCriteria": [
+    "limen health cognitive returns JSON cognitive health report with freshness distribution, conflicts, confidence stats, knowledge gaps, and stale domains",
+    "limen health cognitive --gapThresholdDays 7 overrides the gap detection threshold",
+    "limen recall-bulk --subjects '[\"entity:project:alpha\",\"entity:project:beta\"]' returns JSON array of result sets, one per subject",
+    "limen recall-bulk with --predicate and --minConfidence filters applies filters to all subjects",
+    "All stdout is valid JSON, all errors go to stderr as JSON"
+  ],
+  "failureCriteria": [
+    "limen health cognitive crashes on empty knowledge base instead of returning valid JSON",
+    "limen recall-bulk without --subjects produces non-JSON error",
+    "limen recall-bulk with invalid JSON in --subjects crashes instead of returning JSON error",
+    "Any command outputs non-JSON to stdout"
+  ],
+  "recoveryRequired": false,
+  "deterministicWitnesses": [
+    "cold-start"
+  ],
+  "exploratoryWitnesses": [
+    "hostile"
+  ],
+  "distributionTargets": [
+    "npm:limen-cli"
+  ],
+  "preconditions": [
+    "Node.js >= 22 installed",
+    "npm available",
+    "limen-cli installed globally",
+    "limen init completed (~/.limen/ exists with master key and config)"
+  ],
+  "stateModel": {
+    "startState": "limen-initialized",
+    "successState": "diagnostics-complete",
+    "failureStates": [
+      "cognitive-failed",
+      "bulk-recall-failed"
+    ],
+    "transitions": [
+      { "from": "limen-initialized", "action": "limen health cognitive", "to": "cognitive-healthy" },
+      { "from": "limen-initialized", "action": "limen health cognitive fails", "to": "cognitive-failed" },
+      { "from": "cognitive-healthy", "action": "limen recall-bulk --subjects '[\"entity:project:alpha\"]'", "to": "diagnostics-complete" },
+      { "from": "cognitive-healthy", "action": "limen recall-bulk fails", "to": "bulk-recall-failed" }
+    ]
+  },
+  "lifecycle": "proposed",
+  "createdAt": "2026-04-10T12:00:00Z",
+  "updatedAt": "2026-04-10T12:00:00Z"
+}

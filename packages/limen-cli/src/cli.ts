@@ -16,6 +16,11 @@ import { createAgentCommand } from './commands/agent.js';
 import { createClaimCommand } from './commands/claim.js';
 import { createWmCommand } from './commands/wm.js';
 import { createMissionCommand } from './commands/mission.js';
+import { createRememberCommand } from './commands/remember.js';
+import { createRecallCommand } from './commands/recall.js';
+import { createForgetCommand } from './commands/forget.js';
+import { createConnectCommand } from './commands/connect.js';
+import { createReflectCommand } from './commands/reflect.js';
 
 const program = new Command();
 
@@ -32,6 +37,11 @@ program.addCommand(createAgentCommand());
 program.addCommand(createClaimCommand());
 program.addCommand(createWmCommand());
 program.addCommand(createMissionCommand());
+program.addCommand(createRememberCommand());
+program.addCommand(createRecallCommand());
+program.addCommand(createForgetCommand());
+program.addCommand(createConnectCommand());
+program.addCommand(createReflectCommand());
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err);
