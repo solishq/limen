@@ -13,7 +13,7 @@
 import { Command } from 'commander';
 import { readFileSync } from 'node:fs';
 import { withEngine } from '../bootstrap.js';
-import { writeResult, writeError } from '../output.js';
+import { writeResult, writeError, CliError } from '../output.js';
 import type { Limen } from 'limen-ai';
 
 export function createReflectCommand(): Command {
@@ -79,7 +79,10 @@ export function createReflectCommand(): Command {
             );
 
             if (!reflectResult.ok) {
-              throw new Error(`Reflect failed: ${reflectResult.error.message}`);
+              throw new CliError(
+                reflectResult.error.code,
+                `Reflect failed: ${reflectResult.error.message}`,
+              );
             }
             return reflectResult.value;
           },

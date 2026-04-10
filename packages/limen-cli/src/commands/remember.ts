@@ -10,7 +10,7 @@
 
 import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
-import { writeResult, writeError } from '../output.js';
+import { writeResult, writeError, CliError } from '../output.js';
 
 export function createRememberCommand(): Command {
   const cmd = new Command('remember')
@@ -33,6 +33,34 @@ export function createRememberCommand(): Command {
           masterKey?: string;
         }>();
 
+        // F-007: Reject empty value
+        if (options.value.trim().length === 0) {
+          writeError(new CliError('CLI_INVALID_VALUE', '--value must not be empty or whitespace-only'));
+          process.exitCode = 1;
+          return;
+        }
+
+        // F-006: Enforce max 500 chars (documented contract)
+        if (options.value.length > 500) {
+          writeError(new CliError('CLI_INVALID_VALUE', `--value must not exceed 500 characters (got ${options.value.length})`));
+          process.exitCode = 1;
+          return;
+        }
+
+        // Validate --confidence at CLI boundary
+        if (options.confidence !== undefined) {
+          if (isNaN(options.confidence)) {
+            writeError(new CliError('CLI_INVALID_CONFIDENCE', '--confidence must be a valid number'));
+            process.exitCode = 1;
+            return;
+          }
+          if (options.confidence < 0 || options.confidence > 1) {
+            writeError(new CliError('CLI_INVALID_CONFIDENCE', '--confidence must be in range [0.0, 1.0]'));
+            process.exitCode = 1;
+            return;
+          }
+        }
+
         const result = await withEngine(
           (limen) => {
             const rememberResult = limen.remember(
@@ -46,7 +74,10 @@ export function createRememberCommand(): Command {
             );
 
             if (!rememberResult.ok) {
-              throw new Error(`Remember failed: ${rememberResult.error.message}`);
+              throw new CliError(
+                rememberResult.error.code,
+                `Remember failed: ${rememberResult.error.message}`,
+              );
             }
             return rememberResult.value;
           },

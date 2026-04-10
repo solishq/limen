@@ -10,7 +10,7 @@
 
 import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
-import { writeResult, writeError } from '../output.js';
+import { writeResult, writeError, CliError } from '../output.js';
 import type { Limen } from 'limen-ai';
 
 export function createConnectCommand(): Command {
@@ -49,7 +49,10 @@ export function createConnectCommand(): Command {
             );
 
             if (!connectResult.ok) {
-              throw new Error(`Connect failed: ${connectResult.error.message}`);
+              throw new CliError(
+                connectResult.error.code,
+                `Connect failed: ${connectResult.error.message}`,
+              );
             }
             return { connected: true, from: options.from, to: options.to, type: options.type };
           },

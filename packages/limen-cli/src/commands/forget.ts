@@ -10,7 +10,7 @@
 
 import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
-import { writeResult, writeError } from '../output.js';
+import { writeResult, writeError, CliError } from '../output.js';
 import type { Limen } from 'limen-ai';
 
 export function createForgetCommand(): Command {
@@ -46,7 +46,10 @@ export function createForgetCommand(): Command {
             );
 
             if (!forgetResult.ok) {
-              throw new Error(`Forget failed: ${forgetResult.error.message}`);
+              throw new CliError(
+                forgetResult.error.code,
+                `Forget failed: ${forgetResult.error.message}`,
+              );
             }
             return { retracted: true, claimId: options.claimId };
           },

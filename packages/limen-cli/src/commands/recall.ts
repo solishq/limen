@@ -9,7 +9,7 @@
 
 import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
-import { writeResult, writeError } from '../output.js';
+import { writeResult, writeError, CliError } from '../output.js';
 
 export function createRecallCommand(): Command {
   const cmd = new Command('recall')
@@ -32,6 +32,39 @@ export function createRecallCommand(): Command {
           masterKey?: string;
         }>();
 
+        // F-002/F-004: Validate --limit is a positive integer within bounds
+        if (options.limit !== undefined) {
+          if (isNaN(options.limit)) {
+            writeError(new CliError('CLI_INVALID_LIMIT', '--limit must be a valid integer'));
+            process.exitCode = 1;
+            return;
+          }
+          if (options.limit <= 0) {
+            writeError(new CliError('CLI_INVALID_LIMIT', '--limit must be a positive integer (1-1000)'));
+            process.exitCode = 1;
+            return;
+          }
+          if (options.limit > 1000) {
+            writeError(new CliError('CLI_INVALID_LIMIT', '--limit must not exceed 1000'));
+            process.exitCode = 1;
+            return;
+          }
+        }
+
+        // F-003: Validate --minConfidence is a valid number in [0.0, 1.0]
+        if (options.minConfidence !== undefined) {
+          if (isNaN(options.minConfidence)) {
+            writeError(new CliError('CLI_INVALID_CONFIDENCE', '--minConfidence must be a valid number'));
+            process.exitCode = 1;
+            return;
+          }
+          if (options.minConfidence < 0 || options.minConfidence > 1) {
+            writeError(new CliError('CLI_INVALID_CONFIDENCE', '--minConfidence must be in range [0.0, 1.0]'));
+            process.exitCode = 1;
+            return;
+          }
+        }
+
         const result = await withEngine(
           (limen) => {
             const recallResult = limen.recall(
@@ -45,7 +78,10 @@ export function createRecallCommand(): Command {
             );
 
             if (!recallResult.ok) {
-              throw new Error(`Recall failed: ${recallResult.error.message}`);
+              throw new CliError(
+                recallResult.error.code,
+                `Recall failed: ${recallResult.error.message}`,
+              );
             }
             return recallResult.value;
           },

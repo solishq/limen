@@ -26,6 +26,22 @@
  *   DC-CLI-014: reflect with --file reads from file (success)
  *   DC-CLI-015: all stdout is valid JSON (success)
  *   DC-CLI-016: all stderr is valid JSON (rejection)
+ *
+ * === Amendment 21 Rejection-Path Tests (Breaker remediation) ===
+ *   DC-CLI-017: remember missing required params → JSON error to stderr (rejection)
+ *   DC-CLI-018: remember --confidence -1 → rejection with CLI_INVALID_CONFIDENCE (rejection)
+ *   DC-CLI-019: remember --confidence 2 → rejection with CLI_INVALID_CONFIDENCE (rejection)
+ *   DC-CLI-020: forget missing --claimId → JSON error to stderr (rejection)
+ *   DC-CLI-021: connect missing required params → JSON error to stderr (rejection)
+ *   DC-CLI-022: reflect --entries and --file both provided → mutual exclusion error (rejection)
+ *   DC-CLI-023: reflect --file /nonexistent/path.json → JSON error (rejection)
+ *   DC-CLI-024: recall --limit "abc" → CLI_INVALID_LIMIT (rejection)
+ *   DC-CLI-025: recall --limit -5 → CLI_INVALID_LIMIT (rejection)
+ *   DC-CLI-026: recall --minConfidence "abc" → CLI_INVALID_CONFIDENCE (rejection)
+ *   DC-CLI-027: remember --value "" → CLI_INVALID_VALUE (rejection)
+ *   DC-CLI-028: remember --value exceeding 500 chars → CLI_INVALID_VALUE (rejection)
+ *   DC-CLI-029: forget missing --claimId outputs JSON stderr (not plain text) (rejection)
+ *   DC-CLI-030: error code propagation — engine errors carry typed codes (rejection)
  */
 
 import { describe, it } from 'node:test';
@@ -238,5 +254,149 @@ describe('JSON contract', () => {
     const result = await runCli('forget --claimId "nonexistent"');
     assert.equal(result.exitCode, 1);
     assert.doesNotThrow(() => JSON.parse(result.stderr), 'stderr must be valid JSON');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Amendment 21 Rejection-Path Tests — Breaker Findings Remediation
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('F-001: Commander required-option errors as JSON', () => {
+  it('DC-CLI-017: remember missing required params → JSON error to stderr', async () => {
+    const result = await runCli('remember');
+    assert.equal(result.exitCode, 1);
+    // Must be valid JSON, not plain text
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    assert.equal(errData.error.code, 'CLI_USAGE');
+    assert.ok(errData.error.message.includes('--subject'), `message: ${errData.error.message}`);
+  });
+
+  it('DC-CLI-020: forget missing --claimId → JSON error to stderr', async () => {
+    const result = await runCli('forget');
+    assert.equal(result.exitCode, 1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    assert.equal(errData.error.code, 'CLI_USAGE');
+    assert.ok(errData.error.message.includes('--claimId'), `message: ${errData.error.message}`);
+  });
+
+  it('DC-CLI-021: connect missing required params → JSON error to stderr', async () => {
+    const result = await runCli('connect');
+    assert.equal(result.exitCode, 1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    assert.equal(errData.error.code, 'CLI_USAGE');
+    assert.ok(errData.error.message.includes('--from'), `message: ${errData.error.message}`);
+  });
+
+  it('DC-CLI-029: Commander JSON errors are parseable (not plain text)', async () => {
+    // Verify the ACTUAL contract: stderr from Commander errors is valid JSON
+    const result = await runCli('remember --subject "entity:test:x" --predicate "test.x"');
+    assert.equal(result.exitCode, 1);
+    let parsed: unknown;
+    assert.doesNotThrow(() => { parsed = JSON.parse(result.stderr); }, 'stderr must be valid JSON');
+    const errData = parsed as { error: { code: string } };
+    assert.equal(errData.error.code, 'CLI_USAGE');
+  });
+});
+
+describe('F-002/F-003/F-004: recall numeric validation', () => {
+  it('DC-CLI-024: recall --limit "abc" → CLI_INVALID_LIMIT', async () => {
+    const result = await runCli('recall --limit "abc"');
+    assert.equal(result.exitCode, 1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    assert.equal(errData.error.code, 'CLI_INVALID_LIMIT');
+    assert.ok(errData.error.message.includes('valid integer'));
+  });
+
+  it('DC-CLI-025: recall --limit -5 → CLI_INVALID_LIMIT', async () => {
+    const result = await runCli('recall --limit -5');
+    assert.equal(result.exitCode, 1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    assert.equal(errData.error.code, 'CLI_INVALID_LIMIT');
+    assert.ok(errData.error.message.includes('positive'));
+  });
+
+  it('DC-CLI-026: recall --minConfidence "abc" → CLI_INVALID_CONFIDENCE', async () => {
+    const result = await runCli('recall --minConfidence "abc"');
+    assert.equal(result.exitCode, 1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    assert.equal(errData.error.code, 'CLI_INVALID_CONFIDENCE');
+    assert.ok(errData.error.message.includes('valid number'));
+  });
+});
+
+describe('F-005: Error code propagation', () => {
+  it('DC-CLI-030: engine errors carry typed codes, not UNKNOWN', async () => {
+    // remember with confidence=2 triggers CONV_INVALID_CONFIDENCE in the engine
+    // BUT our CLI-layer validation catches it first with CLI_INVALID_CONFIDENCE.
+    // To test engine error propagation, we need to bypass CLI validation.
+    // Use forget with a nonexistent claim — engine returns CLAIM_NOT_FOUND
+    // which should propagate as a typed code, not UNKNOWN.
+    const result = await runCli('forget --claimId "nonexistent-id-for-code-test"');
+    assert.equal(result.exitCode, 1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string } };
+    assert.notEqual(errData.error.code, 'UNKNOWN', 'error code must not be UNKNOWN');
+    // It should be either CLAIM_NOT_FOUND or CONV_CLAIM_NOT_FOUND
+    assert.ok(
+      errData.error.code.includes('NOT_FOUND') || errData.error.code.includes('CLAIM'),
+      `expected NOT_FOUND-related code, got: ${errData.error.code}`,
+    );
+  });
+});
+
+describe('F-006/F-007: remember value enforcement', () => {
+  it('DC-CLI-018: remember --confidence -1 → rejection', async () => {
+    const result = await runCli(
+      'remember --subject "entity:test:conf-neg" --predicate "test.conf" --value "test" --confidence -1',
+    );
+    assert.equal(result.exitCode, 1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    assert.equal(errData.error.code, 'CLI_INVALID_CONFIDENCE');
+    assert.ok(errData.error.message.includes('[0.0, 1.0]'));
+  });
+
+  it('DC-CLI-019: remember --confidence 2 → rejection', async () => {
+    const result = await runCli(
+      'remember --subject "entity:test:conf-over" --predicate "test.conf" --value "test" --confidence 2',
+    );
+    assert.equal(result.exitCode, 1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    assert.equal(errData.error.code, 'CLI_INVALID_CONFIDENCE');
+  });
+
+  it('DC-CLI-027: remember --value "" (empty) → rejection', async () => {
+    const result = await runCli(
+      'remember --subject "entity:test:empty-val" --predicate "test.val" --value "   "',
+    );
+    assert.equal(result.exitCode, 1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    assert.equal(errData.error.code, 'CLI_INVALID_VALUE');
+    assert.ok(errData.error.message.includes('empty'));
+  });
+
+  it('DC-CLI-028: remember --value exceeding 500 chars → rejection', async () => {
+    const longValue = 'x'.repeat(501);
+    const result = await runCli(
+      `remember --subject "entity:test:long-val" --predicate "test.val" --value "${longValue}"`,
+    );
+    assert.equal(result.exitCode, 1);
+    const errData = JSON.parse(result.stderr) as { error: { code: string; message: string } };
+    assert.equal(errData.error.code, 'CLI_INVALID_VALUE');
+    assert.ok(errData.error.message.includes('500'));
+  });
+});
+
+describe('F-008: reflect mutual exclusion', () => {
+  it('DC-CLI-022: reflect --entries and --file both provided → error', async () => {
+    const result = await runCli('reflect --entries "[]" --file "/tmp/test.json"');
+    assert.equal(result.exitCode, 1);
+    const errData = JSON.parse(result.stderr) as { error: { message: string } };
+    assert.ok(errData.error.message.includes('not both'), `message: ${errData.error.message}`);
+  });
+
+  it('DC-CLI-023: reflect --file /nonexistent/path.json → JSON error', async () => {
+    const result = await runCli('reflect --file "/nonexistent/path/entries.json"');
+    assert.equal(result.exitCode, 1);
+    const errData = JSON.parse(result.stderr) as { error: { message: string } };
+    assert.ok(errData.error.message.includes('Failed to read file'));
   });
 });
