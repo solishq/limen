@@ -13,18 +13,20 @@ Requires `limen-ai` as a peer — installed automatically.
 ## Usage
 
 ```bash
-# Initialize a Limen data directory
-limen init --dataDir ./my-project
+# Initialize ~/.limen/ directory with master key and default config
+limen init
 
 # Check engine health
-limen health --dataDir ./my-project
+limen health
 
 # Register an agent
-limen agent register --name "my-agent" --dataDir ./my-project
+limen agent register --name "my-agent"
 
 # Create a mission
-limen mission create --goal "Analyze dataset" --agentId <id> --dataDir ./my-project
+limen mission create --agent "my-agent" --objective "Analyze dataset" --budget 100000 --deadline "2026-12-31T00:00:00Z"
 ```
+
+All data is stored in `~/.limen/` by default. Override with `--dataDir` and `--masterKey` global options.
 
 Every command writes valid JSON to stdout. Errors go to stderr as JSON.
 
