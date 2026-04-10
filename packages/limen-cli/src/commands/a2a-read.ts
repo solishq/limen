@@ -6,6 +6,9 @@
  *
  * Parity with: limen_a2a_read MCP tool (packages/limen-mcp/src/tools/a2a-chat.ts)
  *
+ * F-BR3-003: --since filter applied BEFORE --limit (fetch high, filter, then limit).
+ * F-BR3-008: Shared helpers from a2a-helpers.ts.
+ *
  * DMs are transparent -- any agent can read any thread.
  *
  * JSON stdout, JSON stderr -- no exceptions.
@@ -14,22 +17,7 @@
 import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
 import { writeResult, writeError, CliError } from '../output.js';
-
-/** Validate name: alphanumeric, hyphens, underscores, 1-64 chars. Matches MCP. */
-function isValidName(name: string): boolean {
-  return /^[a-zA-Z0-9_-]{1,64}$/.test(name);
-}
-
-/** Build the subject URN for a channel. */
-function channelSubject(channel: string): string {
-  return `entity:channel:${channel}`;
-}
-
-/** Build the subject URN for a DM between two agents. Sorted for determinism. */
-function dmSubject(agent1: string, agent2: string): string {
-  const sorted = [agent1, agent2].sort();
-  return `entity:dm:${sorted[0]}_${sorted[1]}`;
-}
+import { isValidName, channelSubject, dmSubject } from './a2a-helpers.js';
 
 export function createA2aReadCommand(): Command {
   const cmd = new Command('a2a-read')
@@ -110,7 +98,7 @@ export function createA2aReadCommand(): Command {
           }
         }
         // Clamp limit to [1, 100] matching MCP
-        const limit = Math.max(1, Math.min(options.limit ?? 20, 100));
+        const userLimit = Math.max(1, Math.min(options.limit ?? 20, 100));
 
         // Validate --since is valid ISO timestamp if provided
         if (options.since !== undefined) {
@@ -139,12 +127,19 @@ export function createA2aReadCommand(): Command {
           ? channelSubject(options.channel)
           : dmSubject(options.me!, options.from!);
 
+        // F-BR3-003: When --since or --agent-id filters are active, fetch a larger
+        // result set from the engine so filters run BEFORE the user's limit.
+        // Without this, the engine limit truncates before filtering, causing
+        // the user to receive fewer results than expected.
+        const hasFilters = !!options.since || !!options.agentId;
+        const fetchLimit = hasFilters ? 1000 : userLimit;
+
         const result = await withEngine(
           (limen) => {
             const recallResult = limen.recall(
               subject,
               'a2a.message',
-              { limit },
+              { limit: fetchLimit },
             );
 
             if (!recallResult.ok) {
@@ -190,6 +185,7 @@ export function createA2aReadCommand(): Command {
               };
             });
 
+            // F-BR3-003: Filter BEFORE applying limit
             // Filter by --since if provided
             if (options.since) {
               const sinceMs = Date.parse(options.since);
@@ -203,6 +199,11 @@ export function createA2aReadCommand(): Command {
 
             // Sort chronologically (oldest first)
             messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+            // Apply user's limit AFTER filtering
+            if (hasFilters) {
+              messages = messages.slice(0, userLimit);
+            }
 
             const target = options.channel
               ? `#${options.channel}`

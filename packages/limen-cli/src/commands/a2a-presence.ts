@@ -15,11 +15,7 @@
 import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
 import { writeResult, writeError, CliError } from '../output.js';
-
-/** Validate name: alphanumeric, hyphens, underscores, 1-64 chars. Matches MCP. */
-function isValidName(name: string): boolean {
-  return /^[a-zA-Z0-9_-]{1,64}$/.test(name);
-}
+import { isValidName } from './a2a-helpers.js';
 
 export function createA2aPresenceCommand(): Command {
   const cmd = new Command('a2a-presence')

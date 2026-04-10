@@ -42,7 +42,7 @@
       { "from": "limen-initialized", "action": "limen a2a-presence --channel 'inv@lid'", "to": "invalid-channel" }
     ]
   },
-  "lifecycle": "proposed",
+  "lifecycle": "active",
   "createdAt": "2026-04-10T12:25:00Z",
   "updatedAt": "2026-04-10T12:25:00Z"
 }

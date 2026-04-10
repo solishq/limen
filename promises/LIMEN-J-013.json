@@ -45,7 +45,7 @@
       { "from": "limen-initialized", "action": "limen a2a-send --from 'a' --to 'r' --message 'hi' --metadata 'bad'", "to": "invalid-metadata" }
     ]
   },
-  "lifecycle": "proposed",
+  "lifecycle": "active",
   "createdAt": "2026-04-10T12:25:00Z",
   "updatedAt": "2026-04-10T12:25:00Z"
 }

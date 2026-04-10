@@ -44,42 +44,72 @@
  *   DC-CLI-030: error code propagation -- engine errors carry typed codes (rejection)
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { writeFileSync, unlinkSync } from 'node:fs';
+import { writeFileSync, unlinkSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const execAsync = promisify(exec);
 
 const CLI = join(import.meta.dirname, '..', '..', 'dist', 'cli.js');
 
-/** Run a CLI command and return parsed stdout/stderr. */
-async function runCli(args: string): Promise<{
+// F-BR3-010: Use isolated temp directory to prevent global database pollution
+const TEST_DATA_DIR = mkdtempSync(join(tmpdir(), 'limen-knowledge-test-'));
+const GLOBAL_OPTS = `--dataDir "${TEST_DATA_DIR}"`;
+
+// Cleanup temp directory after all tests
+afterAll(() => {
+  try { rmSync(TEST_DATA_DIR, { recursive: true, force: true }); } catch { /* best effort */ }
+});
+
+/**
+ * Run a CLI command and return parsed stdout/stderr.
+ * Retries on transient engine errors (SQLITE_BUSY, ENGINE_UNHEALTHY)
+ * which occur during integration tests due to WAL contention.
+ */
+async function runCli(args: string, retries = 3): Promise<{
   stdout: string;
   stderr: string;
   exitCode: number;
   json: unknown;
 }> {
-  try {
-    const { stdout, stderr } = await execAsync(`node ${CLI} ${args}`, {
-      timeout: 15000,
-    });
-    return {
-      stdout: stdout.trim(),
-      stderr: stderr.trim(),
-      exitCode: 0,
-      json: stdout.trim() ? JSON.parse(stdout.trim()) : null,
-    };
-  } catch (err: unknown) {
-    const e = err as { stdout?: string; stderr?: string; code?: number };
-    return {
-      stdout: (e.stdout ?? '').trim(),
-      stderr: (e.stderr ?? '').trim(),
-      exitCode: e.code ?? 1,
-      json: null,
-    };
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const { stdout, stderr } = await execAsync(`node ${CLI} ${GLOBAL_OPTS} ${args}`, {
+        timeout: 15000,
+      });
+      return {
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+        exitCode: 0,
+        json: stdout.trim() ? JSON.parse(stdout.trim()) : null,
+      };
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; code?: number };
+      const result = {
+        stdout: (e.stdout ?? '').trim(),
+        stderr: (e.stderr ?? '').trim(),
+        exitCode: e.code ?? 1,
+        json: null as unknown,
+      };
+      // Retry on transient engine errors, not on expected validation errors
+      const combined = result.stderr + result.stdout;
+      const isTransient = combined.includes('ENGINE_UNHEALTHY') ||
+        combined.includes('SQLITE_BUSY') ||
+        combined.includes('database is locked') ||
+        combined.includes('not initialized') ||
+        combined.includes('Convenience API');
+      if (isTransient && attempt < retries) {
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      return result;
+    }
   }
+  // Unreachable, but TypeScript wants it
+  throw new Error('unreachable');
 }
 
 describe('limen remember', () => {

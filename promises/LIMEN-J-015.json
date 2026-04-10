@@ -40,7 +40,7 @@
       { "from": "limen-initialized", "action": "engine failure during query", "to": "engine-error" }
     ]
   },
-  "lifecycle": "proposed",
+  "lifecycle": "active",
   "createdAt": "2026-04-10T12:25:00Z",
   "updatedAt": "2026-04-10T12:25:00Z"
 }

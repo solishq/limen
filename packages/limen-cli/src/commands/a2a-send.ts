@@ -8,6 +8,11 @@
  *
  * Parity with: limen_a2a_send MCP tool (packages/limen-mcp/src/tools/a2a-chat.ts)
  *
+ * F-BR3-001: --to is optional. Must provide exactly one of --to or --channel.
+ * F-BR3-002: --mentions added for MCP parity.
+ * F-BR3-004: Clock injection via shared TimeProvider.
+ * F-BR3-008: Shared helpers from a2a-helpers.ts.
+ *
  * Sender identity is self-declared. Transport is 'cli'.
  * DMs are transparent -- any agent can read any thread.
  *
@@ -17,37 +22,24 @@
 import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
 import { writeResult, writeError, CliError } from '../output.js';
-
-/** Validate name: alphanumeric, hyphens, underscores, 1-64 chars. Matches MCP. */
-function isValidName(name: string): boolean {
-  return /^[a-zA-Z0-9_-]{1,64}$/.test(name);
-}
-
-/** Build the subject URN for a channel. 3-segment URN: entity:channel:{name} */
-function channelSubject(channel: string): string {
-  return `entity:channel:${channel}`;
-}
-
-/** Build the subject URN for a DM between two agents. Sorted for determinism. */
-function dmSubject(agent1: string, agent2: string): string {
-  const sorted = [agent1, agent2].sort();
-  return `entity:dm:${sorted[0]}_${sorted[1]}`;
-}
+import { isValidName, channelSubject, dmSubject, getClock } from './a2a-helpers.js';
 
 export function createA2aSendCommand(): Command {
   const cmd = new Command('a2a-send')
     .description('Send a message to an A2A chat channel or direct message')
     .requiredOption('--from <sender>', 'Your agent name (1-64 chars: alphanumeric, hyphens, underscores)')
-    .requiredOption('--to <recipient>', 'Recipient: channel name for group chat, or agent name for DM')
+    .option('--to <recipient>', 'Recipient agent name for DM (mutually exclusive with --channel)')
     .requiredOption('--message <text>', 'The message text (max 2000 chars)')
-    .option('--channel <name>', 'Explicit channel name (routes to group chat instead of DM)')
+    .option('--channel <name>', 'Channel name for group chat (mutually exclusive with --to)')
+    .option('--mentions <names>', 'Comma-separated agent names to mention (e.g. "codex,femi")')
     .option('--priority <level>', 'Message priority level')
     .option('--metadata <json>', 'Additional JSON metadata string')
     .action(async (options: {
       from: string;
-      to: string;
+      to?: string;
       message: string;
       channel?: string;
+      mentions?: string;
       priority?: string;
       metadata?: string;
     }, command: Command) => {
@@ -56,6 +48,25 @@ export function createA2aSendCommand(): Command {
           dataDir?: string;
           masterKey?: string;
         }>();
+
+        // F-BR3-001: Validate mutual exclusion -- must have exactly one of --to or --channel
+        if (!options.to && !options.channel) {
+          writeError(new CliError(
+            'CLI_NO_TARGET',
+            'Provide either --to for DM or --channel for group chat',
+          ));
+          process.exitCode = 1;
+          return;
+        }
+
+        if (options.to && options.channel) {
+          writeError(new CliError(
+            'CLI_DUAL_TARGET',
+            'Provide either --to or --channel, not both',
+          ));
+          process.exitCode = 1;
+          return;
+        }
 
         // Validate --from (sender name)
         if (!isValidName(options.from)) {
@@ -67,8 +78,8 @@ export function createA2aSendCommand(): Command {
           return;
         }
 
-        // Validate --to (recipient name)
-        if (!isValidName(options.to)) {
+        // Validate --to (recipient name) if provided
+        if (options.to && !isValidName(options.to)) {
           writeError(new CliError(
             'CLI_INVALID_RECIPIENT',
             '--to must be 1-64 chars: alphanumeric, hyphens, underscores',
@@ -107,6 +118,22 @@ export function createA2aSendCommand(): Command {
           return;
         }
 
+        // F-BR3-002: Validate --mentions (comma-separated, each must pass isValidName)
+        const mentions: string[] = [];
+        if (options.mentions) {
+          for (const m of options.mentions.split(',').map(s => s.trim()).filter(Boolean)) {
+            if (!isValidName(m)) {
+              writeError(new CliError(
+                'CLI_INVALID_MENTION',
+                `Invalid mention name: "${m}". Must be 1-64 chars: alphanumeric, hyphens, underscores`,
+              ));
+              process.exitCode = 1;
+              return;
+            }
+            mentions.push(m);
+          }
+        }
+
         // Validate --metadata is valid JSON if provided
         if (options.metadata !== undefined) {
           try {
@@ -125,16 +152,20 @@ export function createA2aSendCommand(): Command {
         const isChannel = options.channel !== undefined;
         const subject = isChannel
           ? channelSubject(options.channel!)
-          : dmSubject(options.from, options.to);
+          : dmSubject(options.from, options.to!);
+
+        // F-BR3-004: Use injectable clock instead of direct Date.now()
+        const clock = getClock();
 
         // Build metadata (transport = 'cli' for CLI parity with MCP's 'stdio'/'http')
         const reasoning = JSON.stringify({
           sender: options.from,
-          timestamp: new Date().toISOString(),
+          timestamp: clock(),
           transport: 'cli',
           target: isChannel
             ? { type: 'channel', name: options.channel }
             : { type: 'dm', to: options.to },
+          ...(mentions.length > 0 ? { mentions } : {}),
           ...(options.priority ? { priority: options.priority } : {}),
           ...(options.metadata ? { userMetadata: JSON.parse(options.metadata) } : {}),
         });
