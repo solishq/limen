@@ -1,0 +1,54 @@
+{
+  "id": "LIMEN-J-012",
+  "name": "CLI Context Generation",
+  "statement": "A developer generates a knowledge summary suitable for system prompt injection, receiving either a formatted text block or structured JSON of relevant beliefs.",
+  "audience": ["developer"],
+  "tier": 1,
+  "owner": "femi",
+  "authority": "product-authority",
+  "entrySurface": ["packages/limen-cli/README.md:120-140"],
+  "successCriteria": [
+    "limen context --subject 'entity:project:*' returns text-formatted knowledge summary by default",
+    "limen context --format json returns JSON array of BeliefView objects",
+    "limen context --format text returns JSON with 'text' field containing markdown-formatted summary",
+    "limen context --predicate 'decision.*' filters by predicate",
+    "limen context --minConfidence 0.8 filters by confidence threshold",
+    "limen context --limit 5 limits number of beliefs included",
+    "Empty results return 'No relevant beliefs found' text",
+    "All stdout is valid JSON, all errors go to stderr as JSON"
+  ],
+  "failureCriteria": [
+    "limen context --format 'bogus' crashes instead of returning JSON error",
+    "limen context --limit 'abc' crashes instead of returning JSON error",
+    "limen context --minConfidence 2 crashes instead of returning JSON error",
+    "Text format output is not valid JSON wrapper",
+    "Any command outputs non-JSON to stdout"
+  ],
+  "recoveryRequired": true,
+  "recoverySurface": ["packages/limen-cli/README.md:35-37"],
+  "deterministicWitnesses": ["cold-start", "recovery"],
+  "exploratoryWitnesses": ["hostile"],
+  "distributionTargets": ["npm:limen-cli"],
+  "preconditions": [
+    "Node.js >= 22 installed",
+    "npm available",
+    "limen-cli installed globally",
+    "limen init completed (~/.limen/ exists with master key and config)"
+  ],
+  "stateModel": {
+    "startState": "limen-initialized",
+    "successState": "context-generated",
+    "failureStates": ["context-failed", "invalid-format", "invalid-limit", "invalid-confidence"],
+    "transitions": [
+      { "from": "limen-initialized", "action": "limen context --subject 'entity:project:*'", "to": "context-generated" },
+      { "from": "limen-initialized", "action": "limen context --format json", "to": "context-generated" },
+      { "from": "limen-initialized", "action": "limen context --format 'bogus'", "to": "invalid-format" },
+      { "from": "limen-initialized", "action": "limen context --limit 'abc'", "to": "invalid-limit" },
+      { "from": "limen-initialized", "action": "limen context --minConfidence 2", "to": "invalid-confidence" },
+      { "from": "limen-initialized", "action": "engine error during context generation", "to": "context-failed" }
+    ]
+  },
+  "lifecycle": "proposed",
+  "createdAt": "2026-04-10T14:00:00Z",
+  "updatedAt": "2026-04-10T14:00:00Z"
+}

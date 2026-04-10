@@ -31,7 +31,8 @@ export function createForgetCommand(): Command {
         // Validate reason before engine bootstrap
         const validReasons = ['incorrect', 'superseded', 'expired', 'manual'];
         if (options.reason !== undefined && !validReasons.includes(options.reason)) {
-          writeError(new Error(
+          writeError(new CliError(
+            'CLI_INVALID_REASON',
             `Invalid retraction reason: '${options.reason}'. Must be one of: ${validReasons.join(', ')}`,
           ));
           process.exitCode = 1;

@@ -33,7 +33,8 @@ export function createConnectCommand(): Command {
         // Validate type before engine bootstrap
         const validTypes = ['supports', 'contradicts', 'supersedes', 'derived_from'];
         if (!validTypes.includes(options.type)) {
-          writeError(new Error(
+          writeError(new CliError(
+            'CLI_INVALID_TYPE',
             `Invalid relationship type: '${options.type}'. Must be one of: ${validTypes.join(', ')}`,
           ));
           process.exitCode = 1;

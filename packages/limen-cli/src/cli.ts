@@ -21,6 +21,9 @@ import { createRecallCommand } from './commands/recall.js';
 import { createForgetCommand } from './commands/forget.js';
 import { createConnectCommand } from './commands/connect.js';
 import { createReflectCommand } from './commands/reflect.js';
+import { createSearchCommand } from './commands/search.js';
+import { createRecallBulkCommand } from './commands/recall-bulk.js';
+import { createContextCommand } from './commands/context.js';
 
 /**
  * F-001 FIX: Apply JSON error output to a Commander command.
@@ -79,6 +82,9 @@ program.addCommand(createRecallCommand());
 program.addCommand(createForgetCommand());
 program.addCommand(createConnectCommand());
 program.addCommand(createReflectCommand());
+program.addCommand(createSearchCommand());
+program.addCommand(createRecallBulkCommand());
+program.addCommand(createContextCommand());
 
 // Apply JSON error handling AFTER all commands are registered,
 // so the recursive walk covers every subcommand.
