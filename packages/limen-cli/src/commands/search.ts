@@ -2,10 +2,15 @@
  * limen search -- Full-text search across claim content.
  *
  * Wraps the Limen convenience API search() method.
- * Uses FTS5 with BM25 relevance ranking. Returns SearchResult[]
+ * Uses FTS5 with BM25 relevance ranking. Returns Result<readonly SearchResult[]>
  * with belief, relevance, and score.
  *
  * Parity with: limen_search MCP tool (packages/limen-mcp/src/tools/search.ts)
+ * MCP clamps limit via Math.max(1, Math.min(limit ?? 20, 200)).
+ * CLI matches this behavior for interface equivalence.
+ *
+ * Note: --mode is not exposed (only 'fulltext' exists). When Phase 11
+ * semantic search ships, both CLI and MCP will need --mode.
  *
  * JSON stdout, JSON stderr -- no exceptions.
  */
@@ -24,7 +29,7 @@ export function createSearchCommand(): Command {
     .action(async (options: {
       query: string;
       minConfidence?: number;
-      includeSuperseded?: true;
+      includeSuperseded?: boolean;
       limit?: number;
     }, command: Command) => {
       try {
@@ -40,24 +45,16 @@ export function createSearchCommand(): Command {
           return;
         }
 
-        // Validate --limit is a positive integer within bounds
+        // Validate --limit is a valid integer, then clamp to [1, 200] (MCP parity)
         if (options.limit !== undefined) {
           if (isNaN(options.limit)) {
             writeError(new CliError('CLI_INVALID_LIMIT', '--limit must be a valid integer'));
             process.exitCode = 1;
             return;
           }
-          if (options.limit <= 0) {
-            writeError(new CliError('CLI_INVALID_LIMIT', '--limit must be a positive integer (1-200)'));
-            process.exitCode = 1;
-            return;
-          }
-          if (options.limit > 200) {
-            writeError(new CliError('CLI_INVALID_LIMIT', '--limit must not exceed 200'));
-            process.exitCode = 1;
-            return;
-          }
         }
+        // Clamp limit to [1, 200] matching MCP: Math.max(1, Math.min(limit ?? 20, 200))
+        const limit = Math.max(1, Math.min(options.limit ?? 20, 200));
 
         // Validate --minConfidence is a valid number in [0.0, 1.0]
         if (options.minConfidence !== undefined) {
@@ -78,7 +75,7 @@ export function createSearchCommand(): Command {
             const searchResult = limen.search(options.query, {
               ...(options.minConfidence !== undefined ? { minConfidence: options.minConfidence } : {}),
               ...(options.includeSuperseded !== undefined ? { includeSuperseded: true } : {}),
-              ...(options.limit !== undefined ? { limit: options.limit } : {}),
+              limit,
             });
 
             if (!searchResult.ok) {

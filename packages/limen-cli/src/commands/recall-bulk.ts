@@ -5,7 +5,11 @@
  * multiple subjects. Returns an array of result sets, one per input subject.
  * Reduces round-trips for agents.
  *
- * Parity with: limen_recall_bulk MCP tool (packages/limen-mcp/src/tools/search.ts)
+ * Parity with: limen_recall_bulk MCP tool (packages/limen-mcp/src/tools/search.ts:54)
+ * MCP accepts JSON array string ('["entity:a","entity:b"]').
+ * CLI accepts BOTH JSON array and comma-separated formats for parity + ergonomics.
+ * MCP clamps limit via Math.max(1, Math.min(limit ?? 20, 100)).
+ * CLI matches this clamping behavior.
  *
  * JSON stdout, JSON stderr -- no exceptions.
  */
@@ -33,11 +37,36 @@ export function createRecallBulkCommand(): Command {
           masterKey?: string;
         }>();
 
-        // Parse and validate subjects
-        const subjects = options.subjects
-          .split(',')
-          .map(s => s.trim())
-          .filter(s => s.length > 0);
+        // Parse subjects: accept JSON array (MCP parity) or comma-separated (CLI ergonomics)
+        let subjects: string[];
+        const trimmed = options.subjects.trim();
+        if (trimmed.startsWith('[')) {
+          // JSON array format (MCP-compatible)
+          try {
+            const parsed = JSON.parse(trimmed) as unknown;
+            if (!Array.isArray(parsed)) {
+              writeError(new CliError('CLI_INVALID_SUBJECTS', '--subjects JSON must be an array'));
+              process.exitCode = 1;
+              return;
+            }
+            if (!parsed.every((s: unknown) => typeof s === 'string')) {
+              writeError(new CliError('CLI_INVALID_SUBJECTS', 'All elements in --subjects array must be strings'));
+              process.exitCode = 1;
+              return;
+            }
+            subjects = (parsed as string[]).map(s => s.trim()).filter(s => s.length > 0);
+          } catch {
+            writeError(new CliError('CLI_INVALID_SUBJECTS', '--subjects contains invalid JSON'));
+            process.exitCode = 1;
+            return;
+          }
+        } else {
+          // Comma-separated format (CLI ergonomics)
+          subjects = trimmed
+            .split(',')
+            .map(s => s.trim())
+            .filter(s => s.length > 0);
+        }
 
         if (subjects.length === 0) {
           writeError(new CliError('CLI_INVALID_SUBJECTS', '--subjects must contain at least one subject URN'));
@@ -51,24 +80,16 @@ export function createRecallBulkCommand(): Command {
           return;
         }
 
-        // Validate --limit is a positive integer within bounds
+        // Validate --limit is a valid integer, then clamp to [1, 100] (MCP parity)
         if (options.limit !== undefined) {
           if (isNaN(options.limit)) {
             writeError(new CliError('CLI_INVALID_LIMIT', '--limit must be a valid integer'));
             process.exitCode = 1;
             return;
           }
-          if (options.limit <= 0) {
-            writeError(new CliError('CLI_INVALID_LIMIT', '--limit must be a positive integer (1-100)'));
-            process.exitCode = 1;
-            return;
-          }
-          if (options.limit > 100) {
-            writeError(new CliError('CLI_INVALID_LIMIT', '--limit must not exceed 100'));
-            process.exitCode = 1;
-            return;
-          }
         }
+        // Clamp limit to [1, 100] matching MCP: Math.max(1, Math.min(limit ?? 20, 100))
+        const limitPerSubject = Math.max(1, Math.min(options.limit ?? 20, 100));
 
         // Validate --minConfidence is a valid number in [0.0, 1.0]
         if (options.minConfidence !== undefined) {
@@ -88,7 +109,7 @@ export function createRecallBulkCommand(): Command {
           (limen) => {
             const recallOptions = {
               ...(options.minConfidence !== undefined ? { minConfidence: options.minConfidence } : {}),
-              ...(options.limit !== undefined ? { limit: options.limit } : {}),
+              limit: limitPerSubject,
             };
 
             const results: Array<{ subject: string; beliefs: unknown[]; error?: string }> = [];

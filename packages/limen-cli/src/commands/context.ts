@@ -6,6 +6,8 @@
  * can inject into their context.
  *
  * Parity with: limen_context MCP tool (packages/limen-mcp/src/tools/context.ts)
+ * MCP clamps limit via Math.max(1, Math.min(limit ?? 20, 100)).
+ * CLI matches this behavior for interface equivalence.
  *
  * JSON stdout, JSON stderr -- no exceptions.
  */
@@ -46,24 +48,16 @@ export function createContextCommand(): Command {
           return;
         }
 
-        // Validate --limit is a positive integer within bounds
+        // Validate --limit is a valid integer, then clamp to [1, 100] (MCP parity)
         if (options.limit !== undefined) {
           if (isNaN(options.limit)) {
             writeError(new CliError('CLI_INVALID_LIMIT', '--limit must be a valid integer'));
             process.exitCode = 1;
             return;
           }
-          if (options.limit <= 0) {
-            writeError(new CliError('CLI_INVALID_LIMIT', '--limit must be a positive integer (1-100)'));
-            process.exitCode = 1;
-            return;
-          }
-          if (options.limit > 100) {
-            writeError(new CliError('CLI_INVALID_LIMIT', '--limit must not exceed 100'));
-            process.exitCode = 1;
-            return;
-          }
         }
+        // Clamp limit to [1, 100] matching MCP: Math.max(1, Math.min(limit ?? 20, 100))
+        const limit = Math.max(1, Math.min(options.limit ?? 20, 100));
 
         // Validate --minConfidence is a valid number in [0.0, 1.0]
         if (options.minConfidence !== undefined) {
@@ -86,7 +80,7 @@ export function createContextCommand(): Command {
               options.predicate,
               {
                 ...(options.minConfidence !== undefined ? { minConfidence: options.minConfidence } : {}),
-                ...(options.limit !== undefined ? { limit: options.limit } : {}),
+                limit,
               },
             );
 
