@@ -390,30 +390,47 @@ Every validation failure produces a JSON error on stderr with exit code 1:
 }
 ```
 
-Selected codes:
+Every `CLI_*` code emitted by the CLI source is listed here. This table is
+cross-referenced against the source by the loopback audit (F-BR4-010) — if
+the code shows up in `src/` it must appear here.
 
 | Code | When |
 |---|---|
 | `CLI_USAGE` | Commander-level errors: missing required option, unknown command/option |
-| `CLI_INVALID_CONFIDENCE` | Confidence out of range or not a number |
-| `CLI_INVALID_VALUE` | Empty / over-length `--value` |
-| `CLI_INVALID_LIMIT` | `--limit` not a positive integer |
-| `CLI_INVALID_QUERY` | Empty `--query` |
-| `CLI_INVALID_FORMAT` | Unknown `--format` (must be `text` or `json`) |
+| `CLI_FATAL` | Unhandled internal error |
+| `CLI_INVALID_CONFIDENCE` | Confidence out of range or not a number (`remember`, `recall`, `recall-bulk`, `context`) |
+| `CLI_INVALID_VALUE` | Empty / over-length `--value` (`remember`) |
+| `CLI_INVALID_LIMIT` | `--limit` not a positive integer (`recall`, `recall-bulk`, `search`, `context`, `a2a-read`) |
+| `CLI_INVALID_QUERY` | Empty `--query` (`search`) |
+| `CLI_INVALID_FORMAT` | Unknown `--format` (must be `text` or `json`, `context`) |
 | `CLI_INVALID_JSON` | `reflect --entries` or `recall-bulk --subjects` JSON is malformed |
-| `CLI_INVALID_DATADIR` | `--dataDir` is empty/whitespace |
+| `CLI_INVALID_DATADIR` | `--dataDir` is empty/whitespace (`init`) |
+| `CLI_DATADIR_NOT_DIRECTORY` | `--dataDir` points at an existing non-directory path (F-BR4-008, `init`) |
+| `CLI_UNINITIALIZED_DATADIR` | `--dataDir` has no `master.key` yet — run `limen --dataDir <path> init` (F-BR4-001, bootstrap) |
+| `CLI_MASTER_KEY_NOT_FOUND` | Explicit `--masterKey` path or default home key missing (bootstrap) |
 | `CLI_DUAL_TARGET` / `CLI_NO_TARGET` | `a2a-send` / `a2a-read` target mis-specified |
 | `CLI_INVALID_SENDER` / `CLI_INVALID_RECIPIENT` / `CLI_INVALID_CHANNEL` / `CLI_INVALID_MENTION` / `CLI_INVALID_AGENT_ID` | A2A name validation |
-| `CLI_INVALID_TIMESTAMP` | Invalid `--since` value |
-| `CLI_INVALID_METADATA` | Invalid JSON in `--metadata` |
-| `CLI_INVALID_SUBJECTS` | `recall-bulk --subjects` empty or > 50 |
+| `CLI_INVALID_TIMESTAMP` | Invalid `--since` value (`a2a-read`) |
+| `CLI_INVALID_METADATA` | Invalid JSON in `--metadata` (`a2a-send`) |
+| `CLI_INVALID_MESSAGE` | `a2a-send --message` empty or exceeds 2000 characters |
+| `CLI_INVALID_SUBJECTS` | `recall-bulk --subjects` empty, > 50, or invalid shape |
 | `CLI_INVALID_TYPE` | `connect --type` not in allowed set |
 | `CLI_INVALID_REASON` | `forget --reason` not in allowed set |
+| `CLI_INVALID_GAP_THRESHOLD` | `health-cognitive --gapThresholdDays` invalid |
+| `CLI_INVALID_STALE_THRESHOLD` | `health-cognitive --staleThresholdDays` invalid |
+| `CLI_INVALID_MAX_CONFLICTS` | `health-cognitive --maxCriticalConflicts` invalid |
+| `CLI_INVALID_MAX_GAPS` | `health-cognitive --maxGaps` invalid |
+| `CLI_INVALID_MAX_STALE` | `health-cognitive --maxStaleDomains` invalid |
 | `CLI_MISSING_ENTRIES` / `CLI_DUAL_ENTRIES` | `reflect` missing/conflicting source |
 | `CLI_FILE_READ_ERROR` | `reflect --file` could not be read |
-| `CLI_FATAL` | Unhandled internal error |
 | `CONV_CLAIM_NOT_FOUND` | Engine could not find the referenced claim |
 | `CONV_ALREADY_RETRACTED` | Claim already retracted |
+
+Warnings (non-fatal, written to stderr alongside the success payload):
+
+| Code | When |
+|---|---|
+| `CLI_AGENT_AUTOREGISTER_FAILED` | `a2a-send` attempted to auto-register the sender and the engine rejected the register call. Message send still proceeds. (F-BR4-005) |
 
 ## License
 

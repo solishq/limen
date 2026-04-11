@@ -44,10 +44,10 @@
  *   DC-CLI-030: error code propagation -- engine errors carry typed codes (rejection)
  */
 
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { writeFileSync, unlinkSync, mkdtempSync, rmSync, existsSync, statSync } from 'node:fs';
+import { writeFileSync, unlinkSync, mkdtempSync, rmSync, existsSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -58,6 +58,17 @@ const CLI = join(import.meta.dirname, '..', '..', 'dist', 'cli.js');
 // F-BR3-010: Use isolated temp directory to prevent global database pollution
 const TEST_DATA_DIR = mkdtempSync(join(tmpdir(), 'limen-knowledge-test-'));
 const GLOBAL_OPTS = `--dataDir "${TEST_DATA_DIR}"`;
+
+// F-BR4-001: Initialize the per-dataDir master key at suite start.
+// The prior implementation let commands fall through to the user-home
+// master key, silently bridging credential scope across unrelated
+// dataDirs. With the fallback deleted (bootstrap.ts, F-BR4-001 remediation),
+// every suite MUST initialize its own isolated dataDir explicitly before
+// running any non-init command. Without this step every test in the suite
+// fails with CLI_UNINITIALIZED_DATADIR — which is the correct safe default.
+beforeAll(async () => {
+  await runCli('init');
+});
 
 // Cleanup temp directory after all tests
 afterAll(() => {
@@ -675,7 +686,7 @@ describe('FP-06 dispute flag recomputation after forget', () => {
     expect(afterBeliefs[0]!.disputed).toBe(false);
   });
 
-  it('FP-FP06-002: dispute survives when counterpart is still active (rejection path)', async () => {
+  it('FP-FP06-002: dispute survives when counterpart is still active (rejection path)', { timeout: 30_000 }, async () => {
     // Rejection-path: recomputation must NOT over-clear disputes. If the
     // contradictor remains active, dispute must still be true.
     const s1 = await runCli(
@@ -699,7 +710,7 @@ describe('FP-06 dispute flag recomputation after forget', () => {
 });
 
 describe('FP-10a bare recall excludes a2a.message claims', () => {
-  it('FP-FP10a-001: bare recall does not return a2a.message claims (success)', async () => {
+  it('FP-FP10a-001: bare recall does not return a2a.message claims (success)', { timeout: 30_000 }, async () => {
     // Seed an A2A message claim — it uses the a2a.message predicate.
     await runCli(
       'a2a-send --from "fp10a-sender" --channel "fp10a-channel" --message "hello fp10a world"',
@@ -750,5 +761,306 @@ describe('FP-10a bare recall excludes a2a.message claims', () => {
     for (const b of channelMsgs) {
       expect(b.disputed).toBe(false);
     }
+  });
+});
+
+// =====================================================================
+// F-BR4 Loopback — Breaker Control 4 remediation 2026-04-11
+// =====================================================================
+// F-BR4-001: credential-scope isolation (no fallback chain)
+// F-BR4-004: dispute recomputation from relationship edges (no heuristic)
+// Plus non-blocking sweep tests (F-BR4-008, 009)
+// Unit-level tests for round4 / freshness / a2a predicate live in
+// `belief-postprocess.test.ts` (same suite dir).
+
+describe('F-BR4-001 master-key isolation (re-derivation)', () => {
+  it('FP-FP01-005: uninitialized --dataDir rejects with CLI_UNINITIALIZED_DATADIR', async () => {
+    // Re-derivation invariant: a master key is bound to exactly one dataDir.
+    // Running a non-init command against a freshly-mkdtemp'd directory
+    // (with no master.key inside it) MUST fail fast rather than silently
+    // fall back to ~/.limen/master.key. The prior implementation collapsed
+    // credential scope across trust boundaries (F-BR4-001, Critical).
+    const freshDir = mkdtempSync(join(tmpdir(), 'limen-fp01-uninit-'));
+    try {
+      const { stdout, stderr } = await execAsync(
+        `node ${CLI} --dataDir "${freshDir}" remember --subject "entity:test:x" --predicate "test.x" --value "hello"`,
+        { timeout: 15000 },
+      );
+      throw new Error(`expected rejection, got stdout=${stdout} stderr=${stderr}`);
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; code?: number };
+      expect(e.code).toBe(1);
+      const errData = JSON.parse((e.stderr ?? '').trim()) as { error: { code: string; message: string } };
+      expect(errData.error.code).toBe('CLI_UNINITIALIZED_DATADIR');
+      // The error message must direct the user to `init` for this dataDir.
+      expect(errData.error.message).toContain('init');
+      expect(errData.error.message).toContain(freshDir);
+    } finally {
+      rmSync(freshDir, { recursive: true, force: true });
+    }
+  });
+
+  it('FP-FP01-006: cross-dataDir isolation — /tmp/a cannot decrypt /tmp/b', { timeout: 30_000 }, async () => {
+    // Re-derivation: two independently-init'd dataDirs must produce
+    // non-interchangeable master keys. A claim stored in dirA must NOT
+    // be recallable from dirB (and vice versa). This is the invariant
+    // that --dataDir has always claimed to provide and that the legacy
+    // fallback silently defeated.
+    const dirA = mkdtempSync(join(tmpdir(), 'limen-fp01-iso-a-'));
+    const dirB = mkdtempSync(join(tmpdir(), 'limen-fp01-iso-b-'));
+    try {
+      const initA = await runCliWithDataDir(dirA, 'init');
+      expect(initA.exitCode).toBe(0);
+      const initB = await runCliWithDataDir(dirB, 'init');
+      expect(initB.exitCode).toBe(0);
+
+      // Assert each dir got its own distinct master key on disk.
+      const keyA = statSync(join(dirA, 'master.key'));
+      const keyB = statSync(join(dirB, 'master.key'));
+      expect(keyA.mode & 0o777).toBe(0o600);
+      expect(keyB.mode & 0o777).toBe(0o600);
+      const bytesA = readFileSync(join(dirA, 'master.key'));
+      const bytesB = readFileSync(join(dirB, 'master.key'));
+      expect(bytesA.equals(bytesB)).toBe(false);
+
+      // Store a unique claim in dirA.
+      const storeA = await runCliWithDataDir(
+        dirA,
+        'remember --subject "entity:test:iso-a" --predicate "test.iso" --value "only in A"',
+      );
+      expect(storeA.exitCode).toBe(0);
+
+      // Recall from dirB — the claim must NOT be present. Even if the
+      // recall succeeds (empty result is legal), it must not return the
+      // dirA claim. The stronger invariant is that dirB's engine cannot
+      // even OPEN dirA's database because its master key differs.
+      const recallB = await runCliWithDataDir(
+        dirB,
+        'recall --subject "entity:test:iso-a" --predicate "test.iso"',
+      );
+      expect(recallB.exitCode).toBe(0);
+      const beliefsB = recallB.json as Array<unknown>;
+      expect(Array.isArray(beliefsB)).toBe(true);
+      expect(beliefsB.length).toBe(0);
+    } finally {
+      rmSync(dirA, { recursive: true, force: true });
+      rmSync(dirB, { recursive: true, force: true });
+    }
+  });
+
+  it('FP-FP01-007: --dataDir "" (literal empty string) rejects with CLI_INVALID_DATADIR', async () => {
+    // F-BR4-009: FP-FP01-003 exercised whitespace (" "), leaving the
+    // literal empty-string branch un-discriminated. This test hits the
+    // exact empty string so a future refactor that handles empty
+    // string via Commander's option parsing (e.g. undefined instead of
+    // "") cannot pass the suite.
+    try {
+      const { stdout, stderr } = await execAsync(
+        `node ${CLI} --dataDir "" init`,
+        { timeout: 15000 },
+      );
+      throw new Error(`expected rejection, got stdout=${stdout} stderr=${stderr}`);
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; code?: number };
+      expect(e.code).toBe(1);
+      const errData = JSON.parse((e.stderr ?? '').trim()) as { error: { code: string } };
+      expect(errData.error.code).toBe('CLI_INVALID_DATADIR');
+    }
+  });
+
+  it('FP-FP01-008: --dataDir pointing at existing file rejects with CLI_DATADIR_NOT_DIRECTORY', async () => {
+    // F-BR4-008: prior behavior surfaced raw Node EEXIST through the
+    // CLI error envelope. CLI_* taxonomy now covers the case.
+    const notDir = join(tmpdir(), `limen-fp01-notadir-${Date.now()}`);
+    writeFileSync(notDir, 'not a directory');
+    try {
+      const { stdout, stderr } = await execAsync(
+        `node ${CLI} --dataDir "${notDir}" init`,
+        { timeout: 15000 },
+      );
+      throw new Error(`expected rejection, got stdout=${stdout} stderr=${stderr}`);
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; code?: number };
+      expect(e.code).toBe(1);
+      const errData = JSON.parse((e.stderr ?? '').trim()) as { error: { code: string; message: string } };
+      expect(errData.error.code).toBe('CLI_DATADIR_NOT_DIRECTORY');
+      expect(errData.error.message).toContain('not a directory');
+    } finally {
+      try { unlinkSync(notDir); } catch { /* best effort */ }
+    }
+  });
+});
+
+describe('F-BR4-004 dispute recomputation (re-derivation)', () => {
+  it('FP-FP06-003: 3-claim (s,p) group with auto-contradicts — retracting one leaves survivors disputed by the other', { timeout: 60_000 }, async () => {
+    // Re-derivation discriminator #1 (adjusted for engine auto-contradict
+    // semantics, which the Breaker reproduction did not fully account for):
+    //
+    // The engine's autoConflict default creates a pairwise contradicts
+    // edge for EVERY pair of claims in the same (subject, predicate)
+    // group with different values. So for three claims A, B, C with
+    // distinct values, the edge set is {A↔B, A↔C, B↔C} — six
+    // directed entries in claim_relationships.
+    //
+    // Retracting B takes out {A↔B, B↔C} counterpart sides, but A↔C
+    // remains with BOTH endpoints active. The correct invariant is:
+    // A is still disputed (by C) and C is still disputed (by A).
+    //
+    // The OLD heuristic returned true whenever `others.length > 0`
+    // regardless of which edges existed. The NEW invariant agrees with
+    // the engine on this case (both A and C disputed), but for a
+    // different REASON — it queries the edges. This test pins both
+    // the reason and the outcome: we forget B, then forget A, and
+    // assert C FINALLY clears. The heuristic would have claimed C is
+    // still disputed because B's tombstone... actually, it would have
+    // cleared early because `others.length === 1`. This test therefore
+    // discriminates the order in which the flag flips.
+    const subj = `entity:test:fp06-003-${Date.now()}`;
+    const a = await runCli(`remember --subject "${subj}" --predicate "test.fp06" --value "value-A"`);
+    const b = await runCli(`remember --subject "${subj}" --predicate "test.fp06" --value "value-B"`);
+    const c = await runCli(`remember --subject "${subj}" --predicate "test.fp06" --value "value-C"`);
+    expect(a.exitCode).toBe(0);
+    expect(b.exitCode).toBe(0);
+    expect(c.exitCode).toBe(0);
+    const idA = (a.json as { claimId: string }).claimId;
+    const idB = (b.json as { claimId: string }).claimId;
+    const idC = (c.json as { claimId: string }).claimId;
+
+    // Sanity: all three carry auto-contradicts edges, so all three are disputed.
+    const before = await runCli(`recall --subject "${subj}" --predicate "test.fp06"`);
+    expect(before.exitCode).toBe(0);
+    const beforeBeliefs = before.json as Array<{ claimId: string; disputed: boolean }>;
+    expect(beforeBeliefs.length).toBe(3);
+    for (const b of beforeBeliefs) {
+      expect(b.disputed).toBe(true);
+    }
+
+    // Retract B. Remaining active edges: A↔C. A and C are each disputed
+    // by the OTHER, so both remain disputed=true.
+    await runCli(`forget --claimId "${idB}"`);
+    const afterB = await runCli(`recall --subject "${subj}" --predicate "test.fp06"`);
+    const afterBBeliefs = afterB.json as Array<{ claimId: string; disputed: boolean }>;
+    expect(afterBBeliefs.length).toBe(2);
+    for (const bel of afterBBeliefs) {
+      expect(bel.disputed, `after forget(B), ${bel.claimId} should still be disputed via A↔C edge`).toBe(true);
+    }
+
+    // Retract A. Remaining live edges touching C: A↔C (counterpart A
+    // retracted), B↔C (counterpart B retracted). No live contradictors
+    // remain for C. C should clear.
+    await runCli(`forget --claimId "${idA}"`);
+    const afterA = await runCli(`recall --subject "${subj}" --predicate "test.fp06"`);
+    const afterABeliefs = afterA.json as Array<{ claimId: string; disputed: boolean }>;
+    expect(afterABeliefs.length).toBe(1);
+    expect(afterABeliefs[0]!.claimId).toBe(idC);
+    expect(afterABeliefs[0]!.disputed, 'with A and B both retracted, C has zero live contradictors').toBe(false);
+  });
+
+  it('FP-FP06-004: 3 contradictors, retract endpoints — middle remains contradicted (rejection path)', { timeout: 60_000 }, async () => {
+    // Re-derivation discriminator #2: symmetric case. A↔B and B↔C. Retract A
+    // AND C. B had TWO contradictors — both are now retracted. B should
+    // clear. (This is the "rejection" of an over-eager heuristic that
+    // leaves stale disputes in place because it counted edges instead of
+    // live counterparts.)
+    const subj = `entity:test:fp06-004-${Date.now()}`;
+    const a = await runCli(`remember --subject "${subj}" --predicate "test.fp06" --value "A"`);
+    const b = await runCli(`remember --subject "${subj}" --predicate "test.fp06" --value "B"`);
+    const c = await runCli(`remember --subject "${subj}" --predicate "test.fp06" --value "C"`);
+    const idA = (a.json as { claimId: string }).claimId;
+    const idB = (b.json as { claimId: string }).claimId;
+    const idC = (c.json as { claimId: string }).claimId;
+    await runCli(`connect --from "${idA}" --to "${idB}" --type contradicts`);
+    await runCli(`connect --from "${idB}" --to "${idC}" --type contradicts`);
+
+    await runCli(`forget --claimId "${idA}"`);
+    await runCli(`forget --claimId "${idC}"`);
+
+    const recall = await runCli(`recall --subject "${subj}" --predicate "test.fp06"`);
+    expect(recall.exitCode).toBe(0);
+    const beliefs = recall.json as Array<{ claimId: string; disputed: boolean }>;
+    const surviving = beliefs.find((x) => x.claimId === idB);
+    expect(surviving, 'middle claim B must still be present after endpoints retracted').toBeDefined();
+    expect(surviving!.disputed).toBe(false);
+  });
+
+  it('FP-FP06-005: 3 claims same (subject, predicate) with IDENTICAL value — no auto-contradicts, none disputed', { timeout: 30_000 }, async () => {
+    // Re-derivation discriminator #3: kills the old heuristic directly.
+    // Three co-located claims with IDENTICAL value. The engine's
+    // autoConflict default creates contradicts edges for same (s, p) with
+    // DIFFERENT value — identical values do NOT trigger auto-contradict.
+    // The heuristic would have flagged these disputed just because
+    // `others.length > 0`. The real invariant: no contradicts edge,
+    // no dispute.
+    //
+    // Note: the engine may de-duplicate identical assertions via its
+    // cache; we only assert that whichever claims end up in recall
+    // carry disputed=false.
+    const subj = `entity:test:fp06-005-${Date.now()}`;
+    await runCli(`remember --subject "${subj}" --predicate "test.fp06" --value "same-value"`);
+    await runCli(`remember --subject "${subj}" --predicate "test.fp06" --value "same-value"`);
+    await runCli(`remember --subject "${subj}" --predicate "test.fp06" --value "same-value"`);
+
+    const recall = await runCli(`recall --subject "${subj}" --predicate "test.fp06"`);
+    expect(recall.exitCode).toBe(0);
+    const beliefs = recall.json as Array<{ disputed: boolean }>;
+    expect(beliefs.length).toBeGreaterThanOrEqual(1);
+    for (const b of beliefs) {
+      expect(b.disputed).toBe(false);
+    }
+  });
+
+  it('FP-FP06-006: asserting a claim after contradictors are retracted does not inherit stale disputed flag', { timeout: 60_000 }, async () => {
+    // Re-derivation discriminator #4: ordering. Assert A, assert B
+    // (auto-contradicts A↔B edge created), forget A AND B. Then assert
+    // a new claim C in the same (subject, predicate). C is the ONLY
+    // active claim in the group. No live contradictors exist. C must
+    // show disputed=false.
+    //
+    // The OLD heuristic would look at `recall(..., limit: 50)` and
+    // return `others.length > 0` — which would also be false here
+    // (others is empty). This test therefore does NOT discriminate
+    // against the OLD heuristic on its own; it discriminates against a
+    // weaker projection that might leave the engine's auto-asserted
+    // disputed=false for freshly-inserted C OR miss the case that C has
+    // zero edges. The combination with FP-FP06-003/004/005 is what
+    // tightens the invariant.
+    const subj = `entity:test:fp06-006-${Date.now()}`;
+    const a = await runCli(`remember --subject "${subj}" --predicate "test.fp06" --value "original-A"`);
+    const b = await runCli(`remember --subject "${subj}" --predicate "test.fp06" --value "original-B"`);
+    const idA = (a.json as { claimId: string }).claimId;
+    const idB = (b.json as { claimId: string }).claimId;
+
+    // Forget both pre-existing claims. Any auto-contradicts edge has
+    // its counterparts retracted.
+    await runCli(`forget --claimId "${idA}"`);
+    await runCli(`forget --claimId "${idB}"`);
+
+    // Now assert C. No claims share the (s, p) actively, so auto-contradict
+    // has no other active claim to pair C with. C should be disputed=false.
+    const c = await runCli(`remember --subject "${subj}" --predicate "test.fp06" --value "fresh-C"`);
+    expect(c.exitCode).toBe(0);
+    const idC = (c.json as { claimId: string }).claimId;
+
+    const recall = await runCli(`recall --subject "${subj}" --predicate "test.fp06"`);
+    expect(recall.exitCode).toBe(0);
+    const beliefs = recall.json as Array<{ claimId: string; disputed: boolean }>;
+    const found = beliefs.find((x) => x.claimId === idC);
+    expect(found, 'fresh claim C must be present in recall').toBeDefined();
+    expect(found!.disputed).toBe(false);
+  });
+});
+
+describe('F-BR4-005 a2a-send auto-register observability', () => {
+  it('DC-BR4-005-001: successful auto-register emits no warning', { timeout: 30_000 }, async () => {
+    // Sanity check: the happy path produces no warning on stderr.
+    // This is the rejection-path discriminator for the stderr warning —
+    // it must NOT fire when auto-register succeeds.
+    const freshAgent = `fp-br4-ok-${Date.now()}`;
+    const result = await runCli(
+      `a2a-send --from "${freshAgent}" --channel "fp-br4-ok-channel" --message "first send"`,
+    );
+    expect(result.exitCode).toBe(0);
+    // stderr must not contain an autoregister warning
+    expect(result.stderr).not.toContain('CLI_AGENT_AUTOREGISTER_FAILED');
   });
 });

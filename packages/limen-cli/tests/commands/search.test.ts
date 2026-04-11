@@ -138,6 +138,8 @@ async function runCli(args: string, retries = 3): Promise<{
 
 // Seed data before tests
 beforeAll(async () => {
+  // F-BR4-001: initialize isolated dataDir (no fallback to ~/.limen key).
+  await runCli('init');
   await runCli(
     'remember --subject "entity:test:search-001" --predicate "test.search" --value "the quick brown fox jumps over the lazy dog"',
   );

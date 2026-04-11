@@ -146,6 +146,12 @@ const SORT_CHANNEL = `test-sort-${Date.now()}`;
 
 // Seed data: register an agent and send some messages before tests
 beforeAll(async () => {
+  // F-BR4-001: init the per-dataDir master key. The prior implementation
+  // let commands fall through to the user-home master key, silently
+  // bridging credential scope. With that fallback deleted, every suite
+  // must initialize its own isolated dataDir explicitly.
+  await runCli('init');
+
   // Register a test agent
   await runCli('agent register --name "test-agent-a2a"');
 
