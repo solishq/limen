@@ -2,8 +2,10 @@
  * limen search -- Full-text search across claim content.
  *
  * Wraps the Limen convenience API search() method.
- * Uses FTS5 with BM25 relevance ranking. Returns Result<readonly SearchResult[]>
- * with belief, relevance, and score.
+ * Uses FTS5 with BM25 ranking internally. Returns Result<readonly SearchResult[]>
+ * with `belief` and `score` fields. The raw BM25 `relevance` is stripped at
+ * the CLI boundary (FP-05 / F-BR4-011): the negative half-plane was a source
+ * of user confusion and the composed `score` already incorporates relevance.
  *
  * Parity with: limen_search MCP tool (packages/limen-mcp/src/tools/search.ts)
  * MCP clamps limit via Math.max(1, Math.min(limit ?? 20, 200)).

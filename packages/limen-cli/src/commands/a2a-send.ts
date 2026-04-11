@@ -176,9 +176,15 @@ export function createA2aSendCommand(): Command {
             // Messages from unregistered agents used to "just work" silently,
             // but the presence list only showed auto-created agents — the
             // testimony (step 30) flagged this as a discoverability defect.
-            // We now register on demand. Failures are swallowed (agent may
-            // already exist, or the tenant may lack permission — neither
-            // should block message delivery).
+            // We register on demand so the sender appears in presence.
+            //
+            // F-BR4-005: Register failures are no longer silently swallowed.
+            // The prior implementation wrapped this in a bare `catch {}` which
+            // masked real errors (permission denied, tenant quota, invalid
+            // name that slipped validation, database error). Message send
+            // still proceeds to preserve the UX contract, but the failure is
+            // emitted as a structured JSON warning on stderr so operators
+            // can observe auto-registration regressions without parsing logs.
             try {
               const existing = await limen.agents.get(options.from);
               if (existing === null) {
@@ -188,7 +194,22 @@ export function createA2aSendCommand(): Command {
                   domains: ['a2a'],
                 });
               }
-            } catch { /* best-effort; continue to send */ }
+            } catch (regErr: unknown) {
+              const regMsg = regErr instanceof Error ? regErr.message : String(regErr);
+              const regCode = (regErr instanceof Error && 'code' in regErr && typeof (regErr as { code: unknown }).code === 'string')
+                ? (regErr as { code: string }).code
+                : undefined;
+              process.stderr.write(
+                JSON.stringify({
+                  warning: {
+                    code: 'CLI_AGENT_AUTOREGISTER_FAILED',
+                    message: `Auto-register failed for agent "${options.from}": ${regMsg}`,
+                    agent: options.from,
+                    ...(regCode !== undefined ? { cause: regCode } : {}),
+                  },
+                }) + '\n',
+              );
+            }
             const rememberResult = limen.remember(
               subject,
               'a2a.message',
