@@ -677,12 +677,28 @@ describe('FP-06 dispute flag recomputation after forget', () => {
     const forg = await runCli(`forget --claimId "${id2}"`);
     expect(forg.exitCode).toBe(0);
 
-    // After retract: surviving claim must be disputed=false
-    const after = await runCli('recall --subject "entity:test:fp06-dispute" --predicate "test.fp06"');
-    expect(after.exitCode).toBe(0);
-    const afterBeliefs = after.json as Array<{ claimId: string; disputed: boolean }>;
-    expect(afterBeliefs.length).toBe(1);
-    expect(afterBeliefs[0]!.claimId).toBe(id1);
+    // After retract: surviving claim must be disputed=false.
+    // F-BR5-005 interaction: processBeliefs' internal getClaimStatus call
+    // shares the user-facing rate-limit bucket. When the full test suite
+    // exhausts the bucket, getClaimStatus throws RATE_LIMITED, the
+    // fail-closed path preserves disputed=true with disputedUncertain=true.
+    // We retry with back-off (same pattern as runCli's transient retry)
+    // to give the rate-limit window time to refill.
+    let afterBeliefs: Array<{ claimId: string; disputed: boolean; disputedUncertain?: boolean }> = [];
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const after = await runCli('recall --subject "entity:test:fp06-dispute" --predicate "test.fp06"');
+      expect(after.exitCode).toBe(0);
+      afterBeliefs = after.json as typeof afterBeliefs;
+      expect(afterBeliefs.length).toBe(1);
+      expect(afterBeliefs[0]!.claimId).toBe(id1);
+      // If dispute recomputation succeeded (no rate-limit interference),
+      // disputed should be false and we can assert immediately.
+      if (!afterBeliefs[0]!.disputedUncertain) break;
+      // Rate-limit cooldown: back off before retrying.
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+      }
+    }
     expect(afterBeliefs[0]!.disputed).toBe(false);
   });
 
