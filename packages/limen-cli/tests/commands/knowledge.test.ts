@@ -800,12 +800,37 @@ describe('F-BR4-001 master-key isolation (re-derivation)', () => {
     }
   });
 
-  it('FP-FP01-006: cross-dataDir isolation — /tmp/a cannot decrypt /tmp/b', { timeout: 30_000 }, async () => {
-    // Re-derivation: two independently-init'd dataDirs must produce
-    // non-interchangeable master keys. A claim stored in dirA must NOT
-    // be recallable from dirB (and vice versa). This is the invariant
-    // that --dataDir has always claimed to provide and that the legacy
-    // fallback silently defeated.
+  it('FP-FP01-006: cross-dataDir filesystem-scoped isolation — dirB does not surface dirA claims', { timeout: 30_000 }, async () => {
+    // F-BR4-001 + F-BR5-001: what this test asserts, and what it does NOT.
+    //
+    // ASSERTS (the CLI-layer invariant the loopback was scoped to):
+    //   Two independently-init'd dataDirs produce independent master-key
+    //   files and independent sqlite files. A claim stored through
+    //   `limen --dataDir dirA remember ...` is NOT surfaced when
+    //   `limen --dataDir dirB recall ...` is invoked, because:
+    //     1. `--dataDir dirB` makes the CLI resolve master.key to
+    //        `dirB/master.key` (not a fallback to dirA or ~/.limen),
+    //     2. the engine opens `dirB`'s sqlite file, which has no
+    //        record of the dirA claim.
+    //   This defeats the prior silent fallback that let dirB read
+    //   dirA's claims via `~/.limen/master.key`.
+    //
+    // DOES NOT ASSERT (F-BR5-001 residual):
+    //   That master-key bytes cryptographically gate claim content.
+    //   An attacker who copies `dirA/master.key` on top of
+    //   `dirB/master.key` is NOT exercised by this test and is NOT
+    //   defended against at the CLI layer. That is a filesystem
+    //   access-control concern, tracked as F-BR5-001 in the residual
+    //   risk register, not a property this test or the loopback
+    //   claims to deliver.
+    //
+    // The test body therefore verifies (a) each dataDir has its own
+    // distinct master-key file at 0600 mode, and (b) dirB's recall of
+    // a dirA-only subject/predicate returns an empty belief list.
+    // Those are the falsifiable claims. Any stronger reading of this
+    // test — e.g. "dirB cannot open dirA's database" — was retracted
+    // after the F-BR5-001 discovery: that claim is stronger than the
+    // implementation delivers and stronger than this body verifies.
     const dirA = mkdtempSync(join(tmpdir(), 'limen-fp01-iso-a-'));
     const dirB = mkdtempSync(join(tmpdir(), 'limen-fp01-iso-b-'));
     try {
@@ -832,8 +857,9 @@ describe('F-BR4-001 master-key isolation (re-derivation)', () => {
 
       // Recall from dirB — the claim must NOT be present. Even if the
       // recall succeeds (empty result is legal), it must not return the
-      // dirA claim. The stronger invariant is that dirB's engine cannot
-      // even OPEN dirA's database because its master key differs.
+      // dirA claim. What this verifies is filesystem-scoped isolation:
+      // dirB opens its own sqlite file and sees no dirA rows. See
+      // F-BR5-001 residual notes above for what this does NOT prove.
       const recallB = await runCliWithDataDir(
         dirB,
         'recall --subject "entity:test:iso-a" --predicate "test.iso"',

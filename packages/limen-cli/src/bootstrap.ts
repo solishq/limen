@@ -4,33 +4,65 @@
  * Creates a Limen engine instance from config, executes a command,
  * then shuts down. Each CLI invocation is a fresh engine lifecycle.
  *
- * F-BR4-001 (Loopback): credential-scope isolation.
+ * F-BR4-001 (Loopback): CLI-layer credential path resolution.
  *
- * INVARIANT: A master key is bound to exactly one dataDir. Given a
- * --dataDir override, resolveMasterKeyPath returns EXACTLY the path
- * <dataDir>/master.key (or an explicit --masterKey override). There
- * is no fallback to <dataDir>/../master.key or to ~/.limen/master.key.
- * Isolation between dataDirs is structural, not advisory.
+ * ── SCOPE OF THE INVARIANT ───────────────────────────────────────────
  *
- * Rationale: the prior implementation had a fallback ladder that
- * terminated at the user-home master key, silently bridging
- * credential scope across unrelated dataDirs. A CI pipeline using
- * --dataDir /tmp/ci-run could decrypt rows belonging to ~/.limen or
- * vice versa. This defeats the entire purpose of --dataDir and was
- * classified as a trust-boundary violation (Breaker finding
- * F-BR4-001, Critical). The fallback branches are deleted, not
- * guarded — re-derivation, not patching (Hard Ban #21).
+ * The CLI binds each dataDir to exactly one master key file under
+ * `<dataDir>/master.key`. Given `--dataDir <X>`, `resolveMasterKeyPath`
+ * returns EXACTLY that path (or an explicit `--masterKey` override).
+ * There is no fallback to `<dataDir>/../master.key` or to
+ * `~/.limen/master.key`.
  *
- * First-use behavior: if --dataDir is provided and the per-dataDir
+ * This is **filesystem-scoped path isolation**, not cryptographic
+ * isolation of claim content:
+ *   - Two dataDirs resolve to independent master-key files and
+ *     independent sqlite files. The CLI resolver never reaches
+ *     across dataDirs.
+ *   - This prevents the prior silent cross-tenant leak where
+ *     `--dataDir /tmp/ci-run` would fall through to `~/.limen`
+ *     credentials.
+ *
+ * ── WHAT THIS DOES NOT GUARANTEE (F-BR5-001 residual) ────────────────
+ *
+ * The master-key file is the CLI's credential boundary, NOT a proof
+ * that claim content is cryptographically gated on its bytes. An
+ * attacker (or operator, or buggy workflow) with filesystem access to
+ * a dataDir who can read or copy `master.key` across dataDirs may be
+ * able to access claim content regardless of this resolver's behavior.
+ * That is a filesystem access-control concern, not something the CLI
+ * path resolver can defend against. Anyone backing up dataDirs must
+ * treat `master.key` and the sqlite files as a single unit: they are
+ * co-located, and the isolation is co-location, not encryption-at-rest.
+ *
+ * If you need cryptographic isolation of claim content (e.g. the
+ * master key MUST authenticate the data before decryption succeeds),
+ * that is an engine concern tracked as F-BR5-001 in the CLI Friction
+ * Remediation residual-risk register — NOT delivered by this resolver.
+ *
+ * ── WHY THE FALLBACK LADDER WAS DELETED ──────────────────────────────
+ *
+ * The prior implementation had a fallback ladder that terminated at
+ * the user-home master key, silently bridging credential paths across
+ * unrelated dataDirs. A CI pipeline using `--dataDir /tmp/ci-run`
+ * could end up reading `~/.limen` credentials because the ladder
+ * fell through when `/tmp/ci-run/master.key` was absent. That
+ * defeats the entire purpose of `--dataDir` and was classified as a
+ * trust-boundary violation (Breaker finding F-BR4-001, Critical).
+ * The fallback branches are deleted, not guarded — re-derivation,
+ * not patching (Hard Ban #21).
+ *
+ * First-use behavior: if `--dataDir` is provided and the per-dataDir
  * master key does not exist, bootstrap throws
- * CLI_UNINITIALIZED_DATADIR. This fails fast and points the user at
+ * `CLI_UNINITIALIZED_DATADIR`. This fails fast and points the user at
  * `limen --dataDir <path> init`. Auto-generation was rejected: a
- * typo in --dataDir would otherwise silently spin up a new tenant
+ * typo in `--dataDir` would otherwise silently spin up a new tenant
  * with a fresh key, losing access to the intended tenant without
  * any error.
  *
- * Default (no --dataDir): ~/.limen/ via config.masterKeyPath (legacy
- * behavior — this is the user's single home-scoped installation).
+ * Default (no `--dataDir`): `~/.limen/` via `config.masterKeyPath`
+ * (legacy behavior — this is the user's single home-scoped
+ * installation).
  */
 
 import { createLimen } from 'limen-ai';
@@ -57,9 +89,11 @@ function resolveMasterKeyPath(
 ): string {
   if (overrides?.masterKeyPath !== undefined) return overrides.masterKeyPath;
   if (overrides?.dataDir !== undefined) {
-    // F-BR4-001: structural isolation. NO fallback to parent dir, NO
-    // fallback to ~/.limen. The per-dataDir master key is the ONLY
-    // credential bound to this dataDir.
+    // F-BR4-001: filesystem-scoped path isolation. NO fallback to
+    // parent dir, NO fallback to ~/.limen. The per-dataDir master key
+    // path is the ONLY credential path this resolver will produce for
+    // this dataDir. See file-level docstring for the precise meaning
+    // and limits of this guarantee (F-BR5-001 residual).
     return join(overrides.dataDir, 'master.key');
   }
   return configMasterKeyPath;
