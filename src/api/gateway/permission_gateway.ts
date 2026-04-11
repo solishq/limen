@@ -72,6 +72,8 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'claims.queryClaims': { permission: 'query_claims', rateLimit: 'api_calls' },
   'claims.relateClaims': { permission: 'relate_claims', rateLimit: 'api_calls' },
   'claims.searchClaims': { permission: 'query_claims', rateLimit: 'api_calls' },
+  // F-BR4-004: Single-claim status lookup — strictly narrower scope than queryClaims
+  'claims.getClaimStatus': { permission: 'query_claims', rateLimit: 'api_calls' },
 
   // ── Working Memory namespace ──
   'workingMemory.write': { permission: 'write_wm', rateLimit: 'api_calls' },

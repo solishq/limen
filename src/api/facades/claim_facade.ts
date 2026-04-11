@@ -29,6 +29,7 @@ import type {
   ClaimQueryInput, ClaimQueryResult,
   RetractClaimInput,
   SearchClaimInput, SearchClaimResult,
+  ClaimId,
 } from '../../claims/interfaces/claim_types.js';
 
 // DC-P4-404: RBAC enforcement at facade level (I-13 authorization completeness).
@@ -53,6 +54,17 @@ export interface RawClaimFacade {
   retractClaim(conn: DatabaseConnection, ctx: OperationContext, input: RetractClaimInput): Result<void>;
   /** Phase 2: Full-text search. RBAC-gated, rate-limited. Not a new system call. */
   searchClaims(conn: DatabaseConnection, ctx: OperationContext, input: SearchClaimInput): Result<SearchClaimResult>;
+  /**
+   * F-BR4-004: Single-claim status lookup for projection-layer consumers
+   * (CLI dispute recomputation). Uses the same 'query_claims' permission
+   * as queryClaims since it is strictly narrower (returns only the
+   * status enum, no content, no relationships). Tenant-scoped.
+   */
+  getClaimStatus(
+    conn: DatabaseConnection,
+    ctx: OperationContext,
+    claimId: string,
+  ): Result<'active' | 'retracted' | 'not_found'>;
 }
 
 // ============================================================================
@@ -140,6 +152,31 @@ export function createRawClaimFacade(
     ): Result<SearchClaimResult> {
       requirePermission(rbac, ctx, 'query_claims');
       return claimSystem.store.search(conn, ctx.tenantId, input);
+    },
+
+    /**
+     * F-BR4-004: Projection-layer status lookup.
+     * Returns the claim's current status ('active' | 'retracted') or
+     * 'not_found' when no claim with the given id exists within the
+     * caller's tenant scope. Uses the same 'query_claims' permission as
+     * queryClaims — strictly narrower scope (no content, no relationships,
+     * no evidence). Delegates to ClaimStore.get which already enforces
+     * tenant scoping.
+     */
+    getClaimStatus(
+      conn: DatabaseConnection,
+      ctx: OperationContext,
+      claimId: string,
+    ): Result<'active' | 'retracted' | 'not_found'> {
+      requirePermission(rbac, ctx, 'query_claims');
+      const result = claimSystem.store.get(conn, claimId as ClaimId, ctx.tenantId);
+      if (!result.ok) {
+        if (result.error.code === 'CLAIM_NOT_FOUND') {
+          return { ok: true, value: 'not_found' };
+        }
+        return { ok: false, error: result.error };
+      }
+      return { ok: true, value: result.value.status };
     },
   });
 }

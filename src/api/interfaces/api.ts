@@ -86,6 +86,9 @@ export type {
   ClaimQueryInput, ClaimQueryResult,
   RetractClaimInput,
   SearchClaimInput, SearchClaimResult,
+  // F-BR4-004: CLI and other projection-layer consumers need the
+  // relationship type/shape to iterate contradicts edges on a belief.
+  ClaimRelationship, RelationshipType,
 } from '../../claims/interfaces/claim_types.js';
 
 export type {
@@ -169,6 +172,19 @@ export interface ClaimApi {
   retractClaim(input: RetractClaimInput): Result<void>;
   /** Phase 2: Full-text search over claim content using FTS5. Not a new system call. */
   searchClaims(input: SearchClaimInput): Result<SearchClaimResult>;
+  /**
+   * Read-only single-claim status lookup. Returns the claim's status
+   * ('active' | 'retracted') or 'not_found' if no claim with the given
+   * ID exists within the caller's tenant scope. Used by CLI and other
+   * projection-layer consumers to derive accurate dispute/supersession
+   * state from relationship edges without re-implementing the query.
+   *
+   * Permission: 'query_claims' (same as queryClaims — strictly narrower scope).
+   * Added 2026-04-11 to close F-BR4-004 (dispute projection required a
+   * bounded counterpart-status lookup the projection layer could not
+   * derive from queryClaims alone).
+   */
+  getClaimStatus(claimId: string): Result<'active' | 'retracted' | 'not_found'>;
 }
 
 // Sprint 7: Consumer-facing WorkingMemoryApi — no conn/ctx required (DC-P4-406, C-SEC-05)

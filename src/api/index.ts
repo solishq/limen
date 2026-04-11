@@ -258,6 +258,7 @@ export type {
   BackpressureConfig,
   ClaimApi, ClaimCreateInput, AssertClaimOutput,
   RelationshipCreateInput, RelateClaimsOutput,
+  ClaimRelationship, RelationshipType,
   ClaimQueryInput, ClaimQueryResult, RetractClaimInput,
   CognitiveConfig, RememberOptions, RememberResult,
   RecallOptions, BeliefView, ReflectEntry, ReflectResult,

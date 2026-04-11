@@ -67,6 +67,14 @@ export class ClaimApiImpl implements ClaimApi {
     return this.raw.retractClaim(this.getConnection(), this.getContext(), input);
   }
 
+  /**
+   * F-BR4-004: Read-only single-claim status lookup. Tenant-scoped.
+   * Returns 'active' | 'retracted' | 'not_found'.
+   */
+  getClaimStatus(claimId: string): Result<'active' | 'retracted' | 'not_found'> {
+    return this.raw.getClaimStatus(this.getConnection(), this.getContext(), claimId);
+  }
+
   searchClaims(input: SearchClaimInput): Result<SearchClaimResult> {
     const result = this.raw.searchClaims(this.getConnection(), this.getContext(), input);
     // Phase 3 (I-P3-05): Record access for RETURNED claims
