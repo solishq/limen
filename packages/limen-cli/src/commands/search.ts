@@ -21,7 +21,7 @@ import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
 import { writeResult, writeError, CliError } from '../output.js';
 import { round4 } from '../output.js';
-import { computeTimeFreshness } from './belief-postprocess.js';
+import { processBeliefs } from './belief-postprocess.js';
 
 export function createSearchCommand(): Command {
   const cmd = new Command('search')
@@ -90,16 +90,21 @@ export function createSearchCommand(): Command {
             }
             // FP-05: Remove the raw BM25 `relevance` field (negative numbers
             //        undermine user trust). Keep only the normalized `score`.
-            // FP-04: Round effectiveConfidence on the nested belief.
-            // FP-03: Replace access-based freshness with time-based.
-            const now = Date.now();
-            return searchResult.value.map((r) => ({
-              belief: {
-                ...r.belief,
-                effectiveConfidence: round4(r.belief.effectiveConfidence),
-                freshness: computeTimeFreshness(r.belief.createdAt, now),
-              },
-              score: round4(r.score),
+            // FP-03/04/06: Apply full belief postprocessing (freshness,
+            //   effectiveConfidence rounding, AND dispute recomputation)
+            //   so search results match recall's presentation layer.
+            //   Prior code only applied FP-03/FP-04 but skipped FP-06
+            //   (dispute recomputation), causing search and recall to
+            //   disagree on the `disputed` flag for the same claim after
+            //   a retraction removed the contradicting counterpart.
+            const rawBeliefs = searchResult.value.map((r) => r.belief);
+            const processed = processBeliefs(limen, rawBeliefs, undefined, Date.now());
+            // Re-associate processed beliefs with their search scores.
+            // processBeliefs preserves input order and does NOT reorder,
+            // so index-based zip is safe.
+            return processed.map((belief, i) => ({
+              belief,
+              score: round4(searchResult.value[i]!.score),
             }));
           },
           {

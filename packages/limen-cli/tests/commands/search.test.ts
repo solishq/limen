@@ -545,3 +545,75 @@ describe('FP-08 context text format discriminative', () => {
     expect(() => JSON.parse(result.stdout)).toThrow();
   });
 });
+
+// =====================================================================
+// FP-06 search/recall disputed status agreement
+// =====================================================================
+
+describe('FP-06 search disputed status matches recall after retraction', () => {
+  it('DC-CLI-065: search shows disputed=false after contradicting claim retracted', { timeout: 60000 }, async () => {
+    // Setup: create two claims with the same (subject, predicate),
+    // connect them as contradicts, then retract one. After retraction,
+    // BOTH search and recall must agree the remaining claim is NOT disputed.
+    const subject = `entity:test:dispute-search-${Date.now()}`;
+    const predicate = 'test.dispute';
+    const val1 = 'dispute search unique alpha xyzzy';
+    const val2 = 'dispute search unique beta xyzzy';
+
+    // Store both claims
+    const s1 = await runCli(
+      `remember --subject "${subject}" --predicate "${predicate}" --value "${val1}"`,
+    );
+    expect(s1.exitCode).toBe(0);
+    const s2 = await runCli(
+      `remember --subject "${subject}" --predicate "${predicate}" --value "${val2}"`,
+    );
+    expect(s2.exitCode).toBe(0);
+
+    // Recall to get both claimIds
+    const r1 = await runCli(`recall --subject "${subject}" --predicate "${predicate}"`);
+    expect(r1.exitCode).toBe(0);
+    const beliefs = r1.json as Array<{ claimId: string; value: string }>;
+    expect(beliefs.length).toBe(2);
+    const claim1 = beliefs.find((b) => b.value === val1);
+    const claim2 = beliefs.find((b) => b.value === val2);
+    expect(claim1).toBeDefined();
+    expect(claim2).toBeDefined();
+
+    // Connect them as contradicts so the engine marks both disputed
+    const conn = await runCli(
+      `connect --from "${claim1!.claimId}" --to "${claim2!.claimId}" --type contradicts`,
+    );
+    expect(conn.exitCode).toBe(0);
+
+    // Retract the second claim
+    const retract = await runCli(`forget --claimId "${claim2!.claimId}" --reason incorrect`);
+    expect(retract.exitCode).toBe(0);
+
+    // Now search for the first claim's unique text
+    const searchResult = await runCli('search --query "dispute search unique alpha xyzzy"');
+    expect(searchResult.exitCode).toBe(0);
+    const searchResults = searchResult.json as Array<{
+      belief: { claimId: string; disputed: boolean };
+      score: number;
+    }>;
+    const searchMatch = searchResults.find((r) => r.belief.claimId === claim1!.claimId);
+    expect(searchMatch).toBeDefined();
+    // After retraction of the only contradicting counterpart, disputed must be false
+    expect(searchMatch!.belief.disputed).toBe(false);
+
+    // Verify recall agrees
+    const recallResult = await runCli(`recall --subject "${subject}" --predicate "${predicate}"`);
+    expect(recallResult.exitCode).toBe(0);
+    const recallBeliefs = recallResult.json as Array<{
+      claimId: string;
+      disputed: boolean;
+    }>;
+    const recallMatch = recallBeliefs.find((b) => b.claimId === claim1!.claimId);
+    expect(recallMatch).toBeDefined();
+    expect(recallMatch!.disputed).toBe(false);
+
+    // The key assertion: search and recall AGREE on disputed status
+    expect(searchMatch!.belief.disputed).toBe(recallMatch!.disputed);
+  });
+});
