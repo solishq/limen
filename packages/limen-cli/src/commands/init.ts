@@ -16,7 +16,7 @@
  */
 
 import { Command } from 'commander';
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { getLimenHome } from '../config.js';
@@ -63,6 +63,22 @@ export function createInitCommand(): Command {
           dataDir = join(home, 'data');
           masterKeyPath = globals.masterKey ?? join(home, 'master.key');
           configPath = join(home, 'config.json');
+        }
+
+        // F-BR4-008: If --dataDir points at an existing non-directory path,
+        // Node surfaces a raw EEXIST from mkdir. That leaks the errno
+        // taxonomy through the CLI envelope instead of our CLI_* codes.
+        // Detect the condition explicitly and surface CLI_DATADIR_NOT_DIRECTORY.
+        if (existsSync(home)) {
+          const homeStat = statSync(home);
+          if (!homeStat.isDirectory()) {
+            writeError(new CliError(
+              'CLI_DATADIR_NOT_DIRECTORY',
+              `--dataDir "${home}" is not a directory`,
+            ));
+            process.exitCode = 1;
+            return;
+          }
         }
 
         // Create directories
