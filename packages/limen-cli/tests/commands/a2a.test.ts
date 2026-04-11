@@ -621,6 +621,57 @@ describe('limen a2a-presence', () => {
 });
 
 // =====================================================================
+// FP-09 a2a-send auto-registers sender in presence
+// =====================================================================
+
+describe('FP-09 a2a-send auto-registers sender', () => {
+  it('FP-FP09-001: sending from a fresh sender auto-registers them in presence (success)', { timeout: 30_000 }, async () => {
+    // Success path: a sender name that has never been registered. After
+    // a2a-send, a2a-presence --agent-id <name> should return exactly 1 hit.
+    const freshSender = `fp09-fresh-${Date.now()}`;
+    const sendR = await runCli(
+      `a2a-send --from "${freshSender}" --channel "${TEST_CHANNEL}" --message "FP-09 auto-register"`,
+    );
+    expect(sendR.exitCode).toBe(0);
+    const sendData = sendR.json as { sent: boolean; sender: string };
+    expect(sendData.sent).toBe(true);
+    expect(sendData.sender).toBe(freshSender);
+
+    const presenceR = await runCli(`a2a-presence --agent-id "${freshSender}"`);
+    expect(presenceR.exitCode).toBe(0);
+    const presenceData = presenceR.json as {
+      count: number;
+      agents: Array<{ name: string; capabilities: string[]; domains: string[] }>;
+    };
+    expect(presenceData.count).toBe(1);
+    expect(presenceData.agents[0]!.name).toBe(freshSender);
+    // Verify the auto-registration tagged the agent with the a2a domain
+    expect(presenceData.agents[0]!.domains).toContain('a2a');
+  });
+
+  it('FP-FP09-002: sending twice from the same sender does not duplicate (rejection path)', { timeout: 30_000 }, async () => {
+    // Rejection path: the auto-register branch must be idempotent. Sending
+    // a second message from the same name must not produce two agents with
+    // the same name or cause a registration error that propagates to the
+    // user. The first send registers; the second must be a no-op.
+    const repeatSender = `fp09-repeat-${Date.now()}`;
+    const r1 = await runCli(
+      `a2a-send --from "${repeatSender}" --channel "${TEST_CHANNEL}" --message "first"`,
+    );
+    expect(r1.exitCode).toBe(0);
+    const r2 = await runCli(
+      `a2a-send --from "${repeatSender}" --channel "${TEST_CHANNEL}" --message "second"`,
+    );
+    expect(r2.exitCode).toBe(0);
+
+    const presenceR = await runCli(`a2a-presence --agent-id "${repeatSender}"`);
+    expect(presenceR.exitCode).toBe(0);
+    const presenceData = presenceR.json as { count: number };
+    expect(presenceData.count).toBe(1);
+  });
+});
+
+// =====================================================================
 // JSON contract for Phase 3
 // =====================================================================
 
