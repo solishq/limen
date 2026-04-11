@@ -171,7 +171,24 @@ export function createA2aSendCommand(): Command {
         });
 
         const result = await withEngine(
-          (limen) => {
+          async (limen) => {
+            // FP-09: Auto-register the sender so they show up in a2a-presence.
+            // Messages from unregistered agents used to "just work" silently,
+            // but the presence list only showed auto-created agents — the
+            // testimony (step 30) flagged this as a discoverability defect.
+            // We now register on demand. Failures are swallowed (agent may
+            // already exist, or the tenant may lack permission — neither
+            // should block message delivery).
+            try {
+              const existing = await limen.agents.get(options.from);
+              if (existing === null) {
+                await limen.agents.register({
+                  name: options.from,
+                  capabilities: ['a2a.send'],
+                  domains: ['a2a'],
+                });
+              }
+            } catch { /* best-effort; continue to send */ }
             const rememberResult = limen.remember(
               subject,
               'a2a.message',

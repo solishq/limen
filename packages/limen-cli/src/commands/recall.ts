@@ -10,6 +10,7 @@
 import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
 import { writeResult, writeError, CliError } from '../output.js';
+import { processBeliefs } from './belief-postprocess.js';
 
 export function createRecallCommand(): Command {
   const cmd = new Command('recall')
@@ -83,7 +84,13 @@ export function createRecallCommand(): Command {
                 `Recall failed: ${recallResult.error.message}`,
               );
             }
-            return recallResult.value;
+            // FP-03/04/06/10a: apply CLI-layer corrections
+            return processBeliefs(
+              limen,
+              recallResult.value,
+              options.predicate,
+              Date.now(),
+            );
           },
           {
             dataDir: globals.dataDir,

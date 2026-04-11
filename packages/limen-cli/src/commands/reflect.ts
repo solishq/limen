@@ -33,12 +33,18 @@ export function createReflectCommand(): Command {
 
         // Must provide exactly one of --entries or --file
         if (!options.entries && !options.file) {
-          writeError(new Error('Provide either --entries <json> or --file <path>'));
+          writeError(new CliError(
+            'CLI_MISSING_ENTRIES',
+            'Provide either --entries <json> or --file <path>',
+          ));
           process.exitCode = 1;
           return;
         }
         if (options.entries && options.file) {
-          writeError(new Error('Provide either --entries or --file, not both'));
+          writeError(new CliError(
+            'CLI_DUAL_ENTRIES',
+            'Provide either --entries or --file, not both',
+          ));
           process.exitCode = 1;
           return;
         }
@@ -50,7 +56,10 @@ export function createReflectCommand(): Command {
             entriesJson = readFileSync(options.file, 'utf-8');
           } catch (readErr: unknown) {
             const msg = readErr instanceof Error ? readErr.message : String(readErr);
-            writeError(new Error(`Failed to read file '${options.file}': ${msg}`));
+            writeError(new CliError(
+              'CLI_FILE_READ_ERROR',
+              `Failed to read file '${options.file}': ${msg}`,
+            ));
             process.exitCode = 1;
             return;
           }
@@ -62,12 +71,20 @@ export function createReflectCommand(): Command {
         try {
           entries = JSON.parse(entriesJson) as typeof entries;
           if (!Array.isArray(entries)) {
-            writeError(new Error('Entries must be a JSON array'));
+            writeError(new CliError(
+              'CLI_INVALID_JSON',
+              'Entries must be a JSON array',
+            ));
             process.exitCode = 1;
             return;
           }
         } catch {
-          writeError(new Error('Invalid JSON in entries'));
+          // FP-07: Use specific CLI_INVALID_JSON code for parse failures,
+          // consistent with other CLI_* validation error codes.
+          writeError(new CliError(
+            'CLI_INVALID_JSON',
+            'Invalid JSON in entries',
+          ));
           process.exitCode = 1;
           return;
         }

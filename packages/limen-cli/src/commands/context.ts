@@ -14,7 +14,8 @@
 
 import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
-import { writeResult, writeError, CliError } from '../output.js';
+import { writeResult, writeRawText, writeError, CliError } from '../output.js';
+import { processBeliefs } from './belief-postprocess.js';
 
 export function createContextCommand(): Command {
   const cmd = new Command('context')
@@ -91,27 +92,38 @@ export function createContextCommand(): Command {
               );
             }
 
-            const beliefs = recallResult.value;
+            // FP-03/04/06/10a: apply CLI-layer belief corrections
+            const beliefs = processBeliefs(
+              limen,
+              recallResult.value,
+              options.predicate,
+              Date.now(),
+            );
 
-            // JSON format: return beliefs directly
+            // JSON format: return processed beliefs directly
             if (options.format === 'json') {
-              return beliefs;
+              return { mode: 'json' as const, data: beliefs };
             }
 
-            // Default: text format for system prompt injection
+            // FP-08: Default text format emits RAW text (not JSON-wrapped) so
+            // users can pipe directly into files:
+            //   limen context --subject X --format text > prompt.txt
             if (beliefs.length === 0) {
-              return { text: '# Knowledge Context\n\nNo relevant beliefs found.' };
+              return {
+                mode: 'text' as const,
+                data: '# Knowledge Context\n\nNo relevant beliefs found.',
+              };
             }
 
             const lines: string[] = ['# Knowledge Context', ''];
             for (const b of beliefs) {
               lines.push(`- **${b.subject}** | ${b.predicate}: ${b.value}`);
-              lines.push(`  confidence: ${typeof b.effectiveConfidence === 'number' ? b.effectiveConfidence.toFixed(2) : 'N/A'} | freshness: ${b.freshness ?? 'N/A'} | asserted: ${b.validAt}`);
+              lines.push(`  confidence: ${b.effectiveConfidence.toFixed(2)} | freshness: ${b.freshness} | asserted: ${b.validAt}`);
             }
             lines.push('');
             lines.push(`_${beliefs.length} belief(s) retrieved._`);
 
-            return { text: lines.join('\n') };
+            return { mode: 'text' as const, data: lines.join('\n') };
           },
           {
             dataDir: globals.dataDir,
@@ -119,7 +131,14 @@ export function createContextCommand(): Command {
           },
         );
 
-        writeResult(result);
+        // FP-08: Dispatch on the mode returned by the inner closure so that
+        // text format emits raw stdout (pipeable) and json format emits
+        // the processed belief array as JSON.
+        if (result.mode === 'text') {
+          writeRawText(result.data);
+        } else {
+          writeResult(result.data);
+        }
       } catch (err: unknown) {
         writeError(err);
         process.exitCode = 1;

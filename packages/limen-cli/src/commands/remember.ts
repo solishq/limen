@@ -12,6 +12,16 @@ import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
 import { writeResult, writeError, CliError } from '../output.js';
 
+/**
+ * FP-02: The engine caps confidence at CognitiveConfig.maxAutoConfidence
+ * (default 0.7) for non-grounded claims. The CLI does not currently
+ * propagate a custom CognitiveConfig to createLimen(), so the effective
+ * ceiling is the engine default. Hardcode that value here with an explicit
+ * pin — if the CLI ever starts passing a CognitiveConfig, update both
+ * sites in the same commit.
+ */
+const CLI_MAX_AUTO_CONFIDENCE = 0.7;
+
 export function createRememberCommand(): Command {
   const cmd = new Command('remember')
     .description('Store a knowledge claim in Limen')
@@ -87,7 +97,24 @@ export function createRememberCommand(): Command {
           },
         );
 
-        writeResult(result);
+        // FP-02: Detect confidence capping and annotate the response so the
+        // caller knows their requested value was governed. We only annotate
+        // when the user explicitly passed --confidence AND the returned
+        // confidence is strictly less than the requested value.
+        const wasCapped =
+          options.confidence !== undefined &&
+          result.confidence < options.confidence;
+
+        if (wasCapped) {
+          writeResult({
+            ...result,
+            requestedConfidence: options.confidence,
+            governed: true,
+            governanceReason: `maxAutoConfidence ceiling (${CLI_MAX_AUTO_CONFIDENCE})`,
+          });
+        } else {
+          writeResult(result);
+        }
       } catch (err: unknown) {
         writeError(err);
         process.exitCode = 1;

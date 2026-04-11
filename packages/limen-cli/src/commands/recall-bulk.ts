@@ -17,6 +17,7 @@
 import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
 import { writeResult, writeError, CliError } from '../output.js';
+import { processBeliefs } from './belief-postprocess.js';
 
 export function createRecallBulkCommand(): Command {
   const cmd = new Command('recall-bulk')
@@ -113,13 +114,21 @@ export function createRecallBulkCommand(): Command {
             };
 
             const results: Array<{ subject: string; beliefs: unknown[]; error?: string }> = [];
+            const now = Date.now();
 
             for (const subject of subjects) {
               const recallResult = limen.recall(subject, options.predicate, recallOptions);
               if (!recallResult.ok) {
                 results.push({ subject, beliefs: [], error: recallResult.error.message });
               } else {
-                results.push({ subject, beliefs: [...recallResult.value] });
+                // FP-03/04/06/10a: apply CLI-layer corrections per subject
+                const processed = processBeliefs(
+                  limen,
+                  recallResult.value,
+                  options.predicate,
+                  now,
+                );
+                results.push({ subject, beliefs: processed });
               }
             }
 

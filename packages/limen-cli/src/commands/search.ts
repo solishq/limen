@@ -18,6 +18,8 @@
 import { Command } from 'commander';
 import { withEngine } from '../bootstrap.js';
 import { writeResult, writeError, CliError } from '../output.js';
+import { round4 } from '../output.js';
+import { computeTimeFreshness } from './belief-postprocess.js';
 
 export function createSearchCommand(): Command {
   const cmd = new Command('search')
@@ -84,7 +86,19 @@ export function createSearchCommand(): Command {
                 `Search failed: ${searchResult.error.message}`,
               );
             }
-            return searchResult.value;
+            // FP-05: Remove the raw BM25 `relevance` field (negative numbers
+            //        undermine user trust). Keep only the normalized `score`.
+            // FP-04: Round effectiveConfidence on the nested belief.
+            // FP-03: Replace access-based freshness with time-based.
+            const now = Date.now();
+            return searchResult.value.map((r) => ({
+              belief: {
+                ...r.belief,
+                effectiveConfidence: round4(r.belief.effectiveConfidence),
+                freshness: computeTimeFreshness(r.belief.createdAt, now),
+              },
+              score: round4(r.score),
+            }));
           },
           {
             dataDir: globals.dataDir,
