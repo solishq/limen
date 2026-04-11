@@ -408,6 +408,7 @@ the code shows up in `src/` it must appear here.
 | `CLI_DATADIR_NOT_DIRECTORY` | `--dataDir` points at an existing non-directory path (F-BR4-008, `init`) |
 | `CLI_UNINITIALIZED_DATADIR` | `--dataDir` has no `master.key` yet — run `limen --dataDir <path> init` (F-BR4-001, bootstrap) |
 | `CLI_MASTER_KEY_NOT_FOUND` | Explicit `--masterKey` path or default home key missing (bootstrap) |
+| `CLI_MASTER_KEY_CORRUPTED` | `init` found an existing `master.key` that is not a valid 32-byte key. Refuses to overwrite. (F-BR5-006) |
 | `CLI_DUAL_TARGET` / `CLI_NO_TARGET` | `a2a-send` / `a2a-read` target mis-specified |
 | `CLI_INVALID_SENDER` / `CLI_INVALID_RECIPIENT` / `CLI_INVALID_CHANNEL` / `CLI_INVALID_MENTION` / `CLI_INVALID_AGENT_ID` | A2A name validation |
 | `CLI_INVALID_TIMESTAMP` | Invalid `--since` value (`a2a-read`) |
@@ -431,6 +432,9 @@ Warnings (non-fatal, written to stderr alongside the success payload):
 | Code | When |
 |---|---|
 | `CLI_AGENT_AUTOREGISTER_FAILED` | `a2a-send` attempted to auto-register the sender and the engine rejected the register call. Message send still proceeds. (F-BR4-005) |
+| `CLI_RELATIONSHIP_LIMIT_REACHED` | `recall`/`search` dispute recomputation fetched a (subject, predicate) group at the internal 200-claim ceiling. Every affected belief gets `disputedUncertain: true`. Dispute flag preserved from engine. (F-BR5-003) |
+| `CLI_RELATIONSHIP_FETCH_FAILED` | `recall`/`search` dispute recomputation's relationship fetch for a (subject, predicate) group failed (e.g. rate-limited, engine error). Every affected belief gets `disputedUncertain: true`. Dispute flag preserved from engine. (F-BR5-005) |
+| `CLI_STATUS_LOOKUP_FAILED` | `recall`/`search` dispute recomputation could not resolve a counterpart claim's status (permission denied, DB error, etc.). Belief's `disputed` flag preserved from engine with `disputedUncertain: true`. (F-BR5-005) |
 
 ## License
 

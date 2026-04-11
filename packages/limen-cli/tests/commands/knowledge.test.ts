@@ -894,6 +894,72 @@ describe('F-BR4-001 master-key isolation (re-derivation)', () => {
     }
   });
 
+  it('FP-FP01-009: F-BR5-006 — second init on same dataDir is idempotent when master.key exists and is valid', async () => {
+    // F-BR5-006: the prior implementation used existsSync() + writeFileSync()
+    // which left a TOCTOU window between check and write. The fix switches
+    // master.key creation to atomic `flag: 'wx'` (fails with EEXIST if the
+    // file exists) and treats EEXIST as idempotent-when-valid.
+    //
+    // This test exercises the idempotent path: init creates the key on
+    // first run, second run observes EEXIST + a valid 32-byte file and
+    // reports master.key as `skipped` rather than re-creating.
+    const tmpHome = mkdtempSync(join(tmpdir(), 'limen-fp01-idempotent-'));
+    try {
+      const first = await runCliWithDataDir(tmpHome, 'init');
+      expect(first.exitCode).toBe(0);
+      const firstJson = first.json as { created: string[]; skipped: string[] };
+      expect(firstJson.created).toContain('master.key');
+
+      // Snapshot the key bytes so we can verify the second init did NOT
+      // overwrite. This is the discriminating assertion: if EEXIST
+      // handling were removed and write used flag 'w' (overwrite), the
+      // bytes would change.
+      const beforeBytes = readFileSync(join(tmpHome, 'master.key'));
+      expect(beforeBytes.length).toBe(32);
+
+      const second = await runCliWithDataDir(tmpHome, 'init');
+      expect(second.exitCode).toBe(0);
+      const secondJson = second.json as { created: string[]; skipped: string[] };
+      // DISCRIMINATIVE: second run must NOT report master.key as created.
+      expect(secondJson.created).not.toContain('master.key');
+      // And must explicitly report it as skipped.
+      expect(secondJson.skipped).toContain('master.key (already exists)');
+
+      const afterBytes = readFileSync(join(tmpHome, 'master.key'));
+      expect(afterBytes.equals(beforeBytes)).toBe(true);
+    } finally {
+      rmSync(tmpHome, { recursive: true, force: true });
+    }
+  });
+
+  it('FP-FP01-010: F-BR5-006 — init rejects with CLI_MASTER_KEY_CORRUPTED when existing master.key is not 32 bytes', async () => {
+    // F-BR5-006 rejection path: a short/corrupted file at master.key
+    // must NOT be silently treated as idempotent. Failing hard at this
+    // point prevents the engine from loading a broken credential and
+    // producing cryptic downstream errors.
+    const tmpHome = mkdtempSync(join(tmpdir(), 'limen-fp01-corrupted-'));
+    try {
+      // Pre-seed a bogus master.key (0 bytes is a common post-crash state).
+      writeFileSync(join(tmpHome, 'master.key'), '', { mode: 0o600 });
+
+      try {
+        const { stdout, stderr } = await execAsync(
+          `node ${CLI} --dataDir "${tmpHome}" init`,
+          { timeout: 15000 },
+        );
+        throw new Error(`expected rejection, got stdout=${stdout} stderr=${stderr}`);
+      } catch (err: unknown) {
+        const e = err as { stdout?: string; stderr?: string; code?: number };
+        expect(e.code).toBe(1);
+        const errData = JSON.parse((e.stderr ?? '').trim()) as { error: { code: string; message: string } };
+        expect(errData.error.code).toBe('CLI_MASTER_KEY_CORRUPTED');
+        expect(errData.error.message).toContain('Refusing to overwrite');
+      }
+    } finally {
+      rmSync(tmpHome, { recursive: true, force: true });
+    }
+  });
+
   it('FP-FP01-008: --dataDir pointing at existing file rejects with CLI_DATADIR_NOT_DIRECTORY', async () => {
     // F-BR4-008: prior behavior surfaced raw Node EEXIST through the
     // CLI error envelope. CLI_* taxonomy now covers the case.

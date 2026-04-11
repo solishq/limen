@@ -13,10 +13,29 @@
  *
  * Rejection path (FP-01): When --dataDir is provided, init MUST NOT
  * create or mutate ~/.limen/. Tested in knowledge.test.ts.
+ *
+ * F-BR5-006: master.key creation is atomic. The prior implementation
+ * used existsSync() + writeFileSync() which left a TOCTOU window
+ * between the check and the write — two parallel init processes
+ * could both observe "no file", both write, and the second write
+ * would overwrite the first with a different key (silent data loss
+ * for any claims written between the two writes). The fix:
+ *
+ *   1. Try writeFileSync with flag 'wx' — atomic "create-or-fail".
+ *      On EEXIST, the file already exists and we did not clobber it.
+ *   2. On EEXIST, read the existing key and validate its size. If it
+ *      is a 32-byte buffer, treat init as idempotent (no-op on key,
+ *      report as skipped). Any other size means the file is either
+ *      corrupted or not a Limen master key — fail hard with
+ *      CLI_MASTER_KEY_CORRUPTED rather than silently "succeeding"
+ *      against a broken credential.
+ *
+ * This preserves the existing test invariant (init is safe to run
+ * once per unique temp dir) while closing the concurrent-init race.
  */
 
 import { Command } from 'commander';
-import { writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, statSync, readFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { getLimenHome } from '../config.js';
@@ -88,13 +107,31 @@ export function createInitCommand(): Command {
         const created: string[] = [];
         const skipped: string[] = [];
 
-        // Generate master key — never overwrite existing
-        if (existsSync(masterKeyPath)) {
-          skipped.push('master.key (already exists)');
-        } else {
+        // F-BR5-006: atomic master-key creation. Use flag 'wx' so
+        // the write fails (EEXIST) if the file exists — no TOCTOU
+        // window between check and write.
+        try {
           const key = randomBytes(32);
-          writeFileSync(masterKeyPath, key, { mode: 0o600 });
+          writeFileSync(masterKeyPath, key, { mode: 0o600, flag: 'wx' });
           created.push('master.key');
+        } catch (err: unknown) {
+          const e = err as { code?: string };
+          if (e.code !== 'EEXIST') throw err;
+          // EEXIST: the file already exists. Validate it is a
+          // well-formed 32-byte master key before treating this as
+          // idempotent. A corrupted/zero-length file means an earlier
+          // init was interrupted mid-write, or a non-Limen file is
+          // sitting at the path; both cases are hard errors.
+          const existing = readFileSync(masterKeyPath);
+          if (existing.length !== 32) {
+            throw new CliError(
+              'CLI_MASTER_KEY_CORRUPTED',
+              `Master key at ${masterKeyPath} is not a valid 32-byte key ` +
+              `(found ${existing.length} bytes). Refusing to overwrite. ` +
+              `Inspect the file manually and remove it if you intend to re-initialize.`,
+            );
+          }
+          skipped.push('master.key (already exists)');
         }
 
         // Write default config — never overwrite existing
