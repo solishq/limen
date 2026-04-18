@@ -70,6 +70,8 @@ If any actionable update is found, the agent MUST acknowledge it and pause conti
 
 This rule is intentionally slice-bounded: it prevents silent drift between implementations without forcing every message into a blocker.
 
+If an agent is waiting on a counterpart's breaker or certifier result and has any independent, non-overlapping slice available, it MUST continue that slice instead of going idle. Waiting is only allowed when the next step is genuinely blocked.
+
 ---
 
 ## Part 1. Substrate (Verified)
