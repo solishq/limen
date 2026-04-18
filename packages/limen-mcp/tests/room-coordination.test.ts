@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createLimen } from '../../../src/api/index.js';
 import type { Limen } from '../../../src/api/index.js';
 import {
@@ -12,7 +13,18 @@ import {
   roomPredicate,
   recordRoomEvent,
   readRoomEvents,
+  registerRoomCoordinationTools,
 } from '../src/tools/room-coordination.js';
+
+interface ToolResult {
+  content: Array<{ type: string; text: string }>;
+  isError?: boolean;
+}
+
+interface RegisteredTool {
+  handler: (args: Record<string, unknown>, extra: Record<string, unknown>) => Promise<ToolResult>;
+  enabled: boolean;
+}
 
 function makeTempDir(): string {
   return mkdtempSync(join(tmpdir(), 'limen-mcp-room-'));
@@ -48,6 +60,26 @@ function parseToolText(result: {
   readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
 }): unknown {
   return JSON.parse(result.content[0].text);
+}
+
+function getRegisteredTools(server: McpServer): Record<string, RegisteredTool> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (server as any)._registeredTools as Record<string, RegisteredTool>;
+}
+
+function createRoomServer(limen: Limen): McpServer {
+  const server = new McpServer({ name: 'test-room', version: '0.0.0' });
+  registerRoomCoordinationTools(server, limen, 'http');
+  return server;
+}
+
+async function callTool(server: McpServer, name: string, args: Record<string, unknown>): Promise<ToolResult> {
+  const tools = getRegisteredTools(server);
+  const tool = tools[name];
+  if (!tool) {
+    throw new Error(`Tool "${name}" not registered. Available: ${Object.keys(tools).join(', ')}`);
+  }
+  return await tool.handler(args, {});
 }
 
 describe('room coordination helpers', () => {
@@ -261,5 +293,52 @@ describe('room coordination record/read', () => {
       readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
     }) as { error: string };
     assert.equal(payload.error, 'ROOM_INVALID_DETAILS_JSON');
+  });
+});
+
+describe('room coordination MCP handlers', () => {
+  it('registers limen_room_record and limen_room_read', async () => {
+    const limen = await createTestEngine();
+    const server = createRoomServer(limen);
+    const tools = getRegisteredTools(server);
+
+    assert.ok(tools['limen_room_record']);
+    assert.ok(tools['limen_room_read']);
+    assert.equal(tools['limen_room_record'].enabled, true);
+    assert.equal(tools['limen_room_read'].enabled, true);
+  });
+
+  it('records and reads events through actual MCP handlers', async () => {
+    const limen = await createTestEngine();
+    const server = createRoomServer(limen);
+
+    const recordResult = await callTool(server, 'limen_room_record', {
+      room: 'artemis:slice-a1-1',
+      sender: 'codex',
+      kind: 'message',
+      value: 'mcp handler roundtrip',
+      sourceId: 'handler-001',
+    });
+    assert.equal(recordResult.isError, undefined);
+    const recordPayload = parseToolText(recordResult as {
+      readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
+    }) as { predicate: string; deduped: boolean };
+    assert.equal(recordPayload.predicate, 'room.message');
+    assert.equal(recordPayload.deduped, false);
+
+    const readResult = await callTool(server, 'limen_room_read', {
+      room: 'artemis:slice-a1-1',
+    });
+    assert.equal(readResult.isError, undefined);
+    const readPayload = parseToolText(readResult as {
+      readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
+    }) as {
+      count: number;
+      events: Array<{ value: string; sender: string; predicate: string }>;
+    };
+    assert.equal(readPayload.count, 1);
+    assert.equal(readPayload.events[0].value, 'mcp handler roundtrip');
+    assert.equal(readPayload.events[0].sender, 'codex');
+    assert.equal(readPayload.events[0].predicate, 'room.message');
   });
 });
