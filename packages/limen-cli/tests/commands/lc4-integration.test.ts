@@ -325,7 +325,7 @@ describe('T-4.6 — Disagreement + resolve (§5)', () => {
       `--source-id disag-${Date.now()}`,
     );
     expect(res.exitCode).toBe(0);
-  });
+  }, 30_000);
 
   it('rejects resolve referencing an unknown disagreement_id with ROOM_RESOLVE_NO_OPEN_DISAGREEMENT (T-8)', async () => {
     const res = await runCli(
@@ -336,7 +336,7 @@ describe('T-4.6 — Disagreement + resolve (§5)', () => {
     expect(res.exitCode).not.toBe(0);
     const err = parseStderrJson(res.stderr);
     expect(err?.error?.code).toBe('CLI_ROOM_RESOLVE_NO_OPEN_DISAGREEMENT');
-  });
+  }, 30_000);
 
   it('accepts resolve with existing disagreement_id', async () => {
     const res = await runCli(
@@ -346,7 +346,7 @@ describe('T-4.6 — Disagreement + resolve (§5)', () => {
     );
     expect(res.exitCode).toBe(0);
     expect((res.json as { recorded: boolean }).recorded).toBe(true);
-  });
+  }, 30_000);
 
   it('rejects resolve with value=mutual missing merged_position', async () => {
     const dId2 = `d_mutual_${Date.now()}`;

@@ -100,6 +100,8 @@ describe('room coordination helpers', () => {
     assert.equal(roomPredicate('participant'), 'room.participant');
     assert.equal(roomPredicate('blocker'), 'room.blocker');
     assert.equal(roomPredicate('disagreement'), 'room.disagreement');
+    assert.equal(roomPredicate('resolve'), 'room.resolve');
+    assert.equal(roomPredicate('mode'), 'room.mode');
   });
 });
 
@@ -132,34 +134,73 @@ describe('room coordination record/read', () => {
     assert.deepEqual(metadata.mentions, ['claude-code']);
   });
 
-  it('records structured room events without inventing a fixed FSM', async () => {
+  it('records blocker metadata at top level and rejects illegal reopen after RESOLVED', async () => {
     const limen = await createTestEngine();
-    const result = recordRoomEvent(
+    const open = recordRoomEvent(
       limen,
       {
         room: 'artemis_slice-a1-1',
         sender: 'codex',
         kind: 'blocker',
-        value: 'WAITING_ON_claude-code',
+        value: 'OPEN',
         detailsJson: JSON.stringify({
-          blockerId: 'lc2-schema',
-          summary: 'Need ratified payload contract',
+          blocker_id: 'lc2-schema',
+          reason: 'Need ratified payload contract',
         }),
       },
       'stdio',
     );
+    assert.equal('isError' in open, false);
 
-    assert.equal('isError' in result, false);
+    const resolved = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis_slice-a1-1',
+        sender: 'femi',
+        kind: 'blocker',
+        value: 'RESOLVED',
+        detailsJson: JSON.stringify({
+          blocker_id: 'lc2-schema',
+          reason: 'Approved',
+          prior_state: 'OPEN',
+        }),
+      },
+      'http',
+    );
+    assert.equal('isError' in resolved, false);
+
     const recall = limen.recall('entity:room:artemis_slice-a1-1', 'room.blocker');
     assert.ok(recall.ok);
-    assert.equal(recall.value.length, 1);
-    assert.equal(recall.value[0].value, 'WAITING_ON_claude-code');
-    const metadata = JSON.parse(recall.value[0].reasoning!);
+    assert.equal(recall.value.length, 2);
+    const openClaim = recall.value.find((belief) => belief.value === 'OPEN');
+    assert.ok(openClaim);
+    const metadata = JSON.parse(openClaim.reasoning!);
+    assert.equal(metadata.schema_version, 'coord-v1.0');
     assert.equal(metadata.kind, 'blocker');
-    assert.deepEqual(metadata.details, {
-      blockerId: 'lc2-schema',
-      summary: 'Need ratified payload contract',
-    });
+    assert.equal(metadata.blocker_id, 'lc2-schema');
+    assert.equal(metadata.reason, 'Need ratified payload contract');
+    assert.equal(typeof metadata.source_id, 'string');
+    assert.equal(metadata.transport, 'stdio');
+
+    const illegalReopen = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis_slice-a1-1',
+        sender: 'claude-code',
+        kind: 'blocker',
+        value: 'OPEN',
+        detailsJson: JSON.stringify({
+          blocker_id: 'lc2-schema',
+          reason: 'Attempting reopen',
+        }),
+      },
+      'http',
+    );
+    assert.equal('isError' in illegalReopen, true);
+    const illegalPayload = parseToolText(illegalReopen as {
+      readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
+    }) as { error: string };
+    assert.equal(illegalPayload.error, 'ROOM_BLOCKER_ILLEGAL_TRANSITION');
   });
 
   it('reads room events in chronological order across room.* predicates', async () => {
@@ -171,8 +212,8 @@ describe('room coordination record/read', () => {
         room: 'artemis_slice-a1-1',
         sender: 'codex',
         kind: 'participant',
-        value: 'engineer',
-        detailsJson: JSON.stringify({ participant: 'codex', trust: 'probationary' }),
+        value: 'member',
+        detailsJson: JSON.stringify({ participant_id: 'codex', trust_level: 'probationary' }),
       },
       'http',
     );
@@ -197,7 +238,13 @@ describe('room coordination record/read', () => {
         sender: 'codex',
         kind: 'disagreement',
         value: 'predicate namespace',
-        detailsJson: JSON.stringify({ positions: ['coordination.*', 'room.*'] }),
+        detailsJson: JSON.stringify({
+          disagreement_id: 'd-room-read',
+          positions: [
+            { by: 'claude-code', stance: 'coordination.*' },
+            { by: 'codex', stance: 'room.*' },
+          ],
+        }),
       },
       'http',
     );
@@ -207,13 +254,90 @@ describe('room coordination record/read', () => {
     assert.equal('isError' in read, false);
     const payload = parseToolText(read) as {
       count: number;
-      events: Array<{ kind: string; sender: string }>;
+      events: Array<{ kind: string; sender: string; participant_id?: string; disagreement_id?: string; disagreement_state?: string }>;
     };
     assert.equal(payload.count, 3);
     assert.deepEqual(
       payload.events.map((event) => event.kind),
       ['participant', 'message', 'disagreement'],
     );
+    assert.equal(payload.events[0].participant_id, 'codex');
+    assert.equal(payload.events[2].disagreement_id, 'd-room-read');
+    assert.equal(payload.events[2].disagreement_state, 'OPEN');
+  });
+
+  it('records resolve and mode events under the ratified v4 contract', async () => {
+    const limen = await createTestEngine();
+
+    const disagreement = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis_slice-a1-1',
+        sender: 'claude-code',
+        kind: 'disagreement',
+        value: 'FSM shape',
+        detailsJson: JSON.stringify({
+          disagreement_id: 'd-resolve-1',
+          positions: [
+            { by: 'claude-code', stance: 'A' },
+            { by: 'codex', stance: 'B' },
+          ],
+        }),
+      },
+      'stdio',
+    );
+    assert.equal('isError' in disagreement, false);
+
+    const resolve = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis_slice-a1-1',
+        sender: 'femi',
+        kind: 'resolve',
+        value: 'mutual',
+        detailsJson: JSON.stringify({
+          disagreement_id: 'd-resolve-1',
+          resolver: 'femi',
+          rationale: 'Merged the strongest parts of both positions',
+          merged_position: 'A+B',
+        }),
+      },
+      'http',
+    );
+    assert.equal('isError' in resolve, false);
+
+    const mode = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis_slice-a1-1',
+        sender: 'femi',
+        kind: 'mode',
+        value: 'debate',
+      },
+      'http',
+    );
+    assert.equal('isError' in mode, false);
+
+    const readResolve = readRoomEvents(limen, { room: 'artemis_slice-a1-1', kind: 'resolve' });
+    assert.equal('isError' in readResolve, false);
+    const resolvePayload = parseToolText(readResolve) as {
+      count: number;
+      events: Array<{ value: string; disagreement_id?: string; disagreement_state?: string; merged_position?: string }>;
+    };
+    assert.equal(resolvePayload.count, 1);
+    assert.equal(resolvePayload.events[0].value, 'mutual');
+    assert.equal(resolvePayload.events[0].disagreement_id, 'd-resolve-1');
+    assert.equal(resolvePayload.events[0].disagreement_state, 'RESOLVED_mutual');
+    assert.equal(resolvePayload.events[0].merged_position, 'A+B');
+
+    const readMode = readRoomEvents(limen, { room: 'artemis_slice-a1-1', kind: 'mode' });
+    assert.equal('isError' in readMode, false);
+    const modePayload = parseToolText(readMode) as {
+      count: number;
+      events: Array<{ value: string }>;
+    };
+    assert.equal(modePayload.count, 1);
+    assert.equal(modePayload.events[0].value, 'debate');
   });
 
   it('best-effort de-duplicates matching source ids within subject + predicate history', async () => {
