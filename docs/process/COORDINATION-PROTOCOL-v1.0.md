@@ -1,14 +1,29 @@
 # COORDINATION-PROTOCOL-v1.0 — Multi-Participant Room Coordination
 
 **Program:** LIMEN-COORD-v1.0
-**Status:** DRAFT v2 — POST-BREAKER-1; BREAKER-REVIEW-PENDING (pass 2)
+**Status:** DRAFT v4 — POST-BREAKER-3; BREAKER-REVIEW-PENDING (round 4)
 **Slice:** LC.1 (of LC.1 / LC.2 / LC.3 / LC.4)
 **Date:** 2026-04-18
 **Authors:** claude-code (Builder), codex (Breaker-of-record)
 **Ratifying Authority:** Femi (SolisHQ)
 **Engineering Standard:** 9-step Engineering-Flow Mandate, Zero-Residual Law.
 
-**v2 changelog (2026-04-18, post-Breaker pass 1):**
+**v4 changelog (2026-04-18, post-Breaker round 3):**
+- F-LC1-R3-001 (HIGH): §3.3 idempotency algorithm rewritten for universality — `source_id` applies to every kind, dedup query scoped to `(subject, same predicate)`. Prior v3 text suggested message-only scope, which would let an implementation skip dedup on blocker/resolve/participant/mode while claiming conformance.
+- F-LC1-R3-002 (MEDIUM): C-12 harmonized with §8.5/C-19 — rate-limit key is `(transport, sender)` coarse best-effort everywhere in the document. v3's "per-sender" phrasing is retired.
+- F-LC3-R2-004 (HIGH): §1.4 rewritten as an explicit envelope contract — snake_case everywhere; predicate-specific fields MUST live at top level of reasoning (no `details` tunnel); per-kind mandatory-fields table covers blocker/disagreement/resolve/participant.
+- F-LC3-R2-005 (HIGH): §4 + §5 obligations cross-referenced to the §1.4 mandatory-fields table — implementations now have an explicit surface to validate against (blocker_id projection, disagreement_id existence check, participant_id+trust_level metadata).
+- F-LC3-R2-006 (MEDIUM): §8.5 rate-limit requirement restated as an obligation on every tool-layer append path (not an optional best-effort deferred to operators).
+- F-LC3-R2-007 (MEDIUM): §9.1 CLI `isRoomPredicate` obligation tightened — enumerated set only, not prefix. Prefix-based matching silently blesses unratified predicates; enumerated set is the only conformant form.
+- D-LC1-R3-001 (drift): status header + end-note aligned to the same lifecycle state.
+
+**v3 changelog (2026-04-18, post-Breaker round 2):**
+- F-LC1-R2-001 (HIGH): §2.3/§2.4/§8.6/C-9/T-9 aligned on descriptive-only participant scope; no tool-layer role gating in v1.0 (deferred to v1.1 D-6).
+- F-LC1-R2-002 (HIGH): §5.3 bullet 3 rewritten to reference CONFLICTED state per §5.4 — no more last-write-wins contradiction.
+- F-LC1-R2-003 (MEDIUM): §2.2 naming examples switched to underscore forms (no colons).
+- F-LC1-R2-004 (MEDIUM): §2.1 "authenticated identity" + §7.2 "recover the real actor" softened to v1.0 truthful forensic language + D-6 pointer.
+
+**v2 changelog (2026-04-18, post-Breaker round 1):**
 - F-LC1-001 (HIGH): §1.2 dropped non-bijective colon-to-underscore normalization. Room ids are now bijective: input == persisted. Colons are no longer accepted in human-facing form.
 - F-LC1-002 (CRITICAL): §2.3 + §7 + Part 13 — participant authorization is DECLARATIVE in v1.0, not cryptographically authenticated. Role elevation via self-published claim is explicitly a known v1.0 limit; server-authenticated principal is deferred to v1.1 as D-6.
 - F-LC1-003 (HIGH): §5.3/§5.4 — truthful concurrent-writer resolve race caveat added.
@@ -139,29 +154,83 @@ Rationale for the `room.*` family (versus a mixed `room.message` + `coordination
 - Exact analogue of the existing `a2a.*` family pattern, so CLI `isRoomPredicate()` mirrors `isA2aPredicate()` (LC.3 obligation).
 - Predicate namespace aligns with subject namespace (`entity:room:*`), reducing cognitive surface.
 
-### 1.4 Value and reasoning conventions
+### 1.4 Value and reasoning envelope contract (v4 — mandatory per-kind top-level fields)
 
 Each coordination predicate has a typed `value` and a structured JSON `reasoning` metadata envelope. Reasoning is a JSON string (see Limen `BeliefView.reasoning`).
 
-**Reasoning envelope** (common to all `room.*` predicates):
+**Naming convention:** ALL keys in the reasoning envelope are `snake_case`. Implementations that emit `camelCase` (`sourceId`, `roomId`) are non-conformant — F-LC3-R2-004 closure.
+
+**Placement rule:** predicate-specific fields live at the TOP LEVEL of the reasoning envelope, NOT nested under a `details` / `payload` / generic-tunnel key. A `details` key is forbidden in v4 for conformant emitters. This closes the cross-implementation drift where LC.3 wrote `reasoning.details.disagreement_id` while readers looked for `reasoning.disagreement_id`.
+
+**Common fields (mandatory on every `room.*` append):**
+
+| Field             | Type                                | Mandatory | Notes |
+| ----------------- | ----------------------------------- | --------- | ----- |
+| `schema_version`  | string — literal `"coord-v1.0"`     | YES       | Non-matching → unknown-envelope error. |
+| `sender`          | string, agent-name regex            | YES       | Self-declared; not authenticated in v1.0 (§7.2). |
+| `timestamp`       | ISO-8601 string                     | YES       | Caller wall-clock; Limen `validAt` is authoritative for ordering (§3.2). |
+| `transport`       | `stdio` / `http` / `cli`            | YES       | **Server-injected.** Any client-supplied value MUST be overwritten server-side before `limen.remember`. |
+| `source_id`       | string (UUID recommended)           | YES       | Caller-supplied idempotency key on EVERY append of EVERY kind. See §3.3. |
+| `human_room_id`   | string                              | optional  | Present if the caller wants to preserve a richer human label that failed §1.2 validation and had to be sanitized upstream; does not drive any projection. |
+| `extensions`      | object                              | optional  | Single quarantine key for non-ratified caller payloads. Implementations MUST NOT base any projection or validation on fields inside `extensions`. |
+
+**Per-kind MANDATORY top-level fields (F-LC3-R2-005 closure):**
+
+`room.message`:
+- `value`: message text, 1–2000 chars (§3.4).
+- `mentions`: array of agent names, optional (§3.5).
+- `in_reply_to`: claim-id of prior message in this room, optional.
+
+`room.blocker`:
+- `value`: one of `OPEN` | `RESOLVED` | `WAITING_ON_<agent>` (§4.3).
+- `blocker_id`: MANDATORY — stable id distinguishing concurrent blockers in the same room. Projection (§4.4) is per-`blocker_id`.
+- `reason`: string, 1–500 chars, MANDATORY — short human description.
+- `prior_state`: string, optional — present when transitioning (for audit).
+- `prior_claim_id`: UUID, optional — `claimId` of the immediately-prior `room.blocker` claim for the same `blocker_id`.
+
+`room.disagreement`:
+- `value`: topic, 1–500 chars (§5.1).
+- `disagreement_id`: MANDATORY — stable id referenced by subsequent `room.resolve`.
+- `positions`: array of objects `{"by": "<agent>", "stance": "<text>"}`, length ≥ 2, MANDATORY.
+
+`room.resolve`:
+- `value`: resolution, one of `mutual` | `withdrawn` | `escalate:<agent>` | `<winning-agent>` (§5.3).
+- `disagreement_id`: MANDATORY — MUST reference an existing `room.disagreement` claim in the same room. Tool layer MUST query and reject if no such disagreement exists (error: `ROOM_RESOLVE_NO_OPEN_DISAGREEMENT`).
+- `resolver`: agent name, MANDATORY.
+- `rationale`: string, 1–1000 chars, MANDATORY.
+- `merged_position`: string, present iff `value == "mutual"`, forbidden otherwise.
+
+`room.participant`:
+- `value`: role, one of `founder` | `member` | `observer` | `removed` | `archived` (§2.3).
+- `participant_id`: agent name, MANDATORY — the agent whose role this claim describes (may differ from `sender`).
+- `trust_level`: one of `untrusted` | `probationary` | `trusted` | `admin`, optional in v1.0 (recorded for audit; not enforced at tool layer per §2.3 descriptive-only).
+
+`room.mode`:
+- `value`: mode, one of `open` | `directed` | `debate` | `verify` (§6.1).
+- (No additional top-level fields required.)
+
+**Value-field vs reasoning-field separation:**
+The claim's `value` field carries the primary typed outcome (enum / text); all structural metadata (IDs, positions, reason, rationale) lives at top level in `reasoning`. Readers MUST parse typed fields from `reasoning` top-level, not from `value` or `reasoning.details`.
+
+**Transport injection (tamper-proof):**
+`transport` is established by the MCP server per-connection (`stdio` for local Claude Code, `http` for remote agents, `cli` for Limen CLI entry). Server-layer code MUST overwrite any client-supplied `transport` field before calling `limen.remember` — never trust the client-supplied value.
+
+**Conformance example for `room.blocker`:**
 
 ```json
 {
   "schema_version": "coord-v1.0",
-  "sender": "<agent-or-human-name>",
-  "timestamp": "<ISO-8601>",
-  "transport": "<stdio|http|cli>",
-  "source_id": "<caller-supplied idempotency key, UUID recommended>",
-  "human_room_id": "<optional: non-normalized human id>",
-  "...predicate-specific fields..."
+  "sender": "codex",
+  "timestamp": "2026-04-18T10:00:00Z",
+  "transport": "http",
+  "source_id": "b1c2d3e4-5678-4abc-9def-0123456789ab",
+  "blocker_id": "sl-a1-1:review-pending",
+  "reason": "Awaiting breaker-of-record ACK on v4 envelope",
+  "prior_state": "OPEN",
+  "prior_claim_id": "a1b2c3d4-..."
 }
 ```
-
-- `schema_version` is mandatory. `coord-v1.0` is the only currently valid value.
-- `sender` is self-declared. It is NOT a trust anchor (see §8).
-- `timestamp` is the caller's wall-clock at event creation; MAY differ from Limen's `validAt`.
-- `transport` is server-injected by the MCP server per-connection (`stdio` or `http`). For CLI-authored events, `cli` is used. Transport is the tamper-proof identity anchor.
-- `source_id` is mandatory for idempotency enforcement (see §4.3).
+Claim `value` would be `WAITING_ON_claude-code` alongside this reasoning.
 
 ### 1.5 Immutability
 
@@ -246,13 +315,17 @@ The protocol uses Limen's existing agent trust levels (see `packages/limen-mcp/s
 
 Messages in a room are ordered by `validAt` ascending, ties broken by monotonically-increasing `claim-id`. Implementations MUST NOT assume wall-clock monotonicity across different senders; use Limen's `validAt` as authoritative.
 
-### 3.3 Idempotency (best-effort query-before-append)
+### 3.3 Idempotency (best-effort query-before-append, universal across kinds)
 
-Every `room_append`-style tool call MUST accept a caller-supplied `source_id`. The tool layer implements idempotency via:
+Every `room.*` append of every kind (`message`, `blocker`, `disagreement`, `resolve`, `participant`, `mode`) MUST carry a `source_id` in the reasoning envelope (see §1.4 common-fields table). The tool layer enforces idempotency uniformly across kinds:
 
-1. Query recent `room.message` claims for the room where `reasoning.source_id == <incoming source_id>`.
-2. If a match is found, return the existing claim's id (idempotent hit).
-3. Otherwise, `limen.remember(...)` with the new source_id.
+1. Query recent claims where `subject == entity:room:<normalized_id>` AND `predicate == <same predicate as the incoming append>` AND `reasoning.source_id == <incoming source_id>`.
+2. If a match is found, return the existing claim's id (idempotent hit). No new append.
+3. Otherwise, call `limen.remember(subject, predicate, value, { reasoning })`.
+
+Note: the dedup query is scoped to `(subject, predicate)` — the SAME predicate as the incoming append — so a `source_id` reused across two DIFFERENT kinds produces two distinct claims (by design; the implementation cannot tell which kind the caller "really" meant when the id collides).
+
+(F-LC1-R3-001 closure: v3 text specifically mentioned "recent `room.message` claims" in step 1, which let an implementation dedupe messages only and skip dedup on blocker/resolve/participant/mode while remaining "conformant" with C-4. v4 makes the universality explicit.)
 
 **Truthful boundary:** this is BEST-EFFORT idempotency. Under concurrent writers (two stdio sessions posting simultaneously with the same source_id), a TOCTOU race exists between query and append. The protocol does NOT promise exactly-once semantics. It promises: (a) single-writer idempotency is guaranteed; (b) concurrent-writer duplicate detection is best-effort. Implementations MUST NOT claim exactly-once.
 
@@ -482,7 +555,7 @@ A sophisticated writer can bypass per-(transport, sender) rate-limits by rotatin
 
 The Limen CLI's bare-recall postprocessor (`packages/limen-cli/src/commands/belief-postprocess.ts`) excludes `a2a.*` predicates from knowledge views (see FP-10 and F-BR4-007 in that file). LC.3 MUST extend this pattern:
 
-- Add `isRoomPredicate(predicate: string): boolean` returning `true` iff the predicate matches `^room\.(message|blocker|disagreement|resolve|participant|mode)$`.
+- Add `isRoomPredicate(predicate: string): boolean` returning `true` **iff** the predicate matches exactly one of the enumerated ratified values: `room.message`, `room.blocker`, `room.disagreement`, `room.resolve`, `room.participant`, `room.mode`. Prefix-based matching (`startsWith('room.')`) is non-conformant (F-LC3-R2-007 closure) because it silently blesses future `room.<x>` predicates that this protocol has not ratified.
 - Wire `isRoomPredicate` into the `shouldInclude` / `filterForBareRecall` code path analogously to `isA2aPredicate`.
 - The filter symmetry rule from F-BR4-007 applies: if the user explicitly queries `--predicate room.*`, CLI MUST include room claims. Only bare recall excludes them.
 
@@ -545,7 +618,7 @@ Any LIMEN-COORD-v1.0 conformant implementation MUST satisfy:
 | C-9     | Surface participant role labels in UI; do NOT enforce as access control (descriptive-only in v1.0 per §2.3) | §2.3 |
 | C-10    | Document idempotency as best-effort, not exactly-once | §3.3 |
 | C-11    | Document `debate`/`verify` modes as provisional | §6.2 |
-| C-12    | Rate-limit appends per-sender | §8.5 |
+| C-12    | Rate-limit appends with the `(transport, sender)` coarse best-effort key (F-LC1-R3-002 closure — supersedes the v3 per-sender-only phrasing) | §8.5 |
 | C-13    | Agent must be registered in Limen before becoming participant | §7.3 |
 | C-14    | CLI implementations MUST add `isRoomPredicate` analogue | §9.1 |
 | C-15    | Reject room ids containing `:` (v2 bijective rule) | §1.2 |
@@ -553,7 +626,11 @@ Any LIMEN-COORD-v1.0 conformant implementation MUST satisfy:
 | C-17    | Disagreement projection uses three states (OPEN / RESOLVED_* / CONFLICTED); no silent last-write-wins | §5.4 |
 | C-18    | Archive convention: role=archived SHOULD be published by a current-founder; archiving sender MUST be displayed to users for operational review | §2.1 |
 | C-19    | Rate-limit key MUST be documented as `(transport, sender)` coarse best-effort | §8.5 |
-| C-20    | Before starting/resuming a slice, perform an A2A sweep of `#general`, `#engineering`, and the relevant DM; pause on actionable updates | §0.5, §9.4 |
+| C-20    | Reasoning envelope uses strict snake_case; camelCase keys (e.g. `sourceId`) are non-conformant (v4 F-LC3-R2-004) | §1.4 |
+| C-21    | Predicate-specific fields (blocker_id, disagreement_id, participant_id, etc.) live at the TOP LEVEL of reasoning, never under a `details`/`payload` key (v4 F-LC3-R2-004) | §1.4 |
+| C-22    | `isRoomPredicate` MUST match the enumerated 6-member set exactly; prefix-wide `startsWith('room.')` matching is non-conformant (v4 F-LC3-R2-007) | §9.1 |
+| C-23    | Tool-layer MUST enforce per-kind semantic checks at append time: blocker_id projection + illegal-transition rejection; disagreement_id existence check on resolve; participant_id/role validation (v4 F-LC3-R2-005) | §1.4, §4, §5 |
+| C-24    | Before starting/resuming a slice, perform an A2A sweep of `#general`, `#engineering`, and the relevant DM; pause on actionable updates (F-LC1-R4-001 closure: previously mis-numbered as a second C-20) | §0.5, §9.4 |
 
 Non-conformance with any C-rule is a protocol defect, not an acceptable variance.
 
@@ -632,4 +709,4 @@ All signatures are captured as Limen claims with subject `entity:program:limen-c
 
 ---
 
-*End of COORDINATION-PROTOCOL-v1.0 — DRAFT v1 — BREAKER-REVIEW-PENDING.*
+*End of COORDINATION-PROTOCOL-v1.0 — DRAFT v4 — BREAKER-REVIEW-PENDING (round 4).*

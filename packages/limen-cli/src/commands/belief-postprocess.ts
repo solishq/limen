@@ -131,6 +131,32 @@ export function isA2aPredicate(predicate: string): boolean {
 }
 
 /**
+ * LIMEN-COORD-v1.0 §9.1 / C-22 — predicate-family discipline for room.* events.
+ *
+ * Coordination claims are infrastructure, not user-asserted knowledge, and
+ * are excluded from bare `limen recall` for the same reason `a2a.*` is
+ * excluded. F-LC3-R2-007 closure (v4): this check matches the ENUMERATED
+ * ratified set only — NOT `startsWith('room.')` — so unratified future
+ * `room.<x>` predicates are not silently blessed by the CLI before the
+ * protocol ratifies them.
+ *
+ * Symmetric with `shouldIncludeRoom` below (same F-BR4-007 asymmetry
+ * discipline as the a2a side).
+ */
+const ROOM_PREDICATES_RATIFIED = new Set([
+  'room.message',
+  'room.blocker',
+  'room.disagreement',
+  'room.resolve',
+  'room.participant',
+  'room.mode',
+]);
+
+export function isRoomPredicate(predicate: string): boolean {
+  return ROOM_PREDICATES_RATIFIED.has(predicate);
+}
+
+/**
  * F-BR4-006 + F-BR5-005: Per-invocation cache for dispute recomputation.
  * Keyed by counterpart claimId → status (including the 'unknown' sentinel
  * for lookups that failed transiently). Scoped to one processBeliefs
@@ -290,8 +316,10 @@ function recomputeDisputed(
   relationshipsTruncated: boolean,
   cache: CounterpartStatusCache,
 ): DisputeRecomputeResult {
-  // FP-10b: A2A event-log entries are never disputes, regardless of edges.
+  // FP-10b / LIMEN-COORD-v1.0 §9.1: A2A and room.* event-log entries are
+  // never disputes, regardless of edges.
   if (isA2aPredicate(belief.predicate)) return { disputed: false, uncertain: false };
+  if (isRoomPredicate(belief.predicate)) return { disputed: false, uncertain: false };
   // If the engine didn't flag disputed AND we have no contradicts edges,
   // short-circuit: nothing to recompute.
   if (!belief.disputed) return { disputed: false, uncertain: false };
@@ -365,6 +393,22 @@ export function shouldIncludeA2a(userPredicate: string | undefined): boolean {
 }
 
 /**
+ * LIMEN-COORD-v1.0 §9.1 — inclusion rule for `room.*` claims in CLI
+ * queries, symmetric with `shouldIncludeA2a`.
+ *
+ * Bare recall (no `--predicate`) excludes `room.*`. When the user
+ * explicitly filters for `room.*` or a specific room predicate
+ * (e.g. `room.message`, `room.blocker`), they are included. This
+ * preserves the F-BR4-007 symmetry discipline: the include check and
+ * the exclude filter share `isRoomPredicate`.
+ */
+export function shouldIncludeRoom(userPredicate: string | undefined): boolean {
+  if (userPredicate === undefined) return false;
+  if (userPredicate === 'room.*') return true;
+  return isRoomPredicate(userPredicate);
+}
+
+/**
  * Apply all belief-level CLI corrections. Callers pass the raw engine beliefs
  * plus the context flags that govern filtering.
  *
@@ -377,18 +421,33 @@ export function shouldIncludeA2a(userPredicate: string | undefined): boolean {
  * @param beliefs Raw engine BeliefView array
  * @param userPredicate The --predicate flag the user passed (for FP-10a)
  * @param now Current timestamp in ms (for FP-03 freshness)
+ * @param options.skipA2aFilter F-BR6-001: when true, bypass a2a predicate
+ *   filtering entirely. Search results must never be silently dropped
+ *   because the index-based score zip depends on 1:1 correspondence
+ *   between the input array and the output array.
  */
 export function processBeliefs(
   limen: Limen,
   beliefs: readonly BeliefView[],
   userPredicate: string | undefined,
   now: number,
+  options?: { readonly skipA2aFilter?: boolean },
 ): ProcessedBelief[] {
-  const includeA2a = shouldIncludeA2a(userPredicate);
-  // F-BR4-007: symmetric filter with shouldIncludeA2a — both use
-  // isA2aPredicate. A future a2a.event or a2a.ack claim is automatically
-  // excluded from bare recall without further code changes.
-  const filtered = includeA2a ? beliefs : beliefs.filter((b) => !isA2aPredicate(b.predicate));
+  // F-BR6-001: search passes skipA2aFilter=true because the engine already
+  // matched these claims against the user's query — dropping them would break
+  // the index-based score zip in search.ts. The same flag governs room.*
+  // filtering so search results include coordination claims on request.
+  const includeA2a = options?.skipA2aFilter === true || shouldIncludeA2a(userPredicate);
+  const includeRoom = options?.skipA2aFilter === true || shouldIncludeRoom(userPredicate);
+  // F-BR4-007 / LIMEN-COORD-v1.0 §9.1: symmetric filters with
+  // shouldIncludeA2a and shouldIncludeRoom. A future a2a.event or
+  // room.modeChange predicate is automatically handled by the
+  // isA2aPredicate / isRoomPredicate prefix checks.
+  const filtered = beliefs.filter((b) => {
+    if (!includeA2a && isA2aPredicate(b.predicate)) return false;
+    if (!includeRoom && isRoomPredicate(b.predicate)) return false;
+    return true;
+  });
 
   // F-BR4-004 / F-BR4-006: Fetch relationship edges in batches keyed by
   // (subject, predicate). Most recall calls touch 1-2 distinct (s, p)
@@ -408,6 +467,7 @@ export function processBeliefs(
   for (const b of filtered) {
     if (!b.disputed) continue;
     if (isA2aPredicate(b.predicate)) continue;
+    if (isRoomPredicate(b.predicate)) continue;
     groupKeys.add(`${b.subject}\u0000${b.predicate}`);
   }
   for (const key of groupKeys) {
@@ -493,5 +553,7 @@ export function processBeliefs(
 export const __TEST_ONLY__ = Object.freeze({
   round4,
   isA2aPredicate,
+  isRoomPredicate,
+  shouldIncludeRoom,
   computeTimeFreshness,
 });
