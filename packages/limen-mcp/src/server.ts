@@ -51,6 +51,7 @@ import { registerContextTools } from './tools/context.js';
 import { registerCognitiveTools } from './tools/cognitive.js';
 import { registerSearchTools } from './tools/search.js';
 import { registerLearningTools } from './tools/learning.js';
+import { registerRoomCoordinationTools } from './tools/room-coordination.js';
 import { registerHealthResource } from './resources/health.js';
 
 async function main(): Promise<void> {
@@ -86,6 +87,7 @@ async function main(): Promise<void> {
 
   // Register learning tools (Amendment 25 — F-15: pass adapter for governance)
   registerLearningTools(server, limen, adapter);
+  registerRoomCoordinationTools(server, limen);
 
   // Register resources
   registerHealthResource(server, limen);

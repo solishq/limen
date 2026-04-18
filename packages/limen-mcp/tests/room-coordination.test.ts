@@ -1,0 +1,265 @@
+import { describe, it, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomBytes } from 'node:crypto';
+import { createLimen } from '../../../src/api/index.js';
+import type { Limen } from '../../../src/api/index.js';
+import {
+  normalizeRoomId,
+  roomSubject,
+  roomPredicate,
+  recordRoomEvent,
+  readRoomEvents,
+} from '../src/tools/room-coordination.js';
+
+function makeTempDir(): string {
+  return mkdtempSync(join(tmpdir(), 'limen-mcp-room-'));
+}
+
+function makeKey(): Buffer {
+  return randomBytes(32);
+}
+
+const dirsToClean: string[] = [];
+const instancesToShutdown: Limen[] = [];
+
+afterEach(async () => {
+  for (const instance of instancesToShutdown) {
+    try { await instance.shutdown(); } catch { /* best effort */ }
+  }
+  instancesToShutdown.length = 0;
+  for (const dir of dirsToClean) {
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+  }
+  dirsToClean.length = 0;
+});
+
+async function createTestEngine(): Promise<Limen> {
+  const dir = makeTempDir();
+  dirsToClean.push(dir);
+  const limen = await createLimen({ dataDir: dir, masterKey: makeKey(), providers: [] });
+  instancesToShutdown.push(limen);
+  return limen;
+}
+
+function parseToolText(result: {
+  readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
+}): unknown {
+  return JSON.parse(result.content[0].text);
+}
+
+describe('room coordination helpers', () => {
+  it('normalizes colon-separated room ids into a persisted single segment', () => {
+    assert.equal(normalizeRoomId('artemis:slice-a1-1'), 'artemis_slice-a1-1');
+    assert.equal(roomSubject('artemis:slice-a1-1'), 'entity:room:artemis_slice-a1-1');
+  });
+
+  it('rejects invalid room ids', () => {
+    assert.equal(normalizeRoomId('artemis/slice-a1-1'), null);
+    assert.equal(normalizeRoomId('bad room'), null);
+    assert.equal(roomSubject('bad room'), null);
+  });
+
+  it('maps event kinds to verified room predicates', () => {
+    assert.equal(roomPredicate('message'), 'room.message');
+    assert.equal(roomPredicate('participant'), 'room.participant');
+    assert.equal(roomPredicate('blocker'), 'room.blocker');
+    assert.equal(roomPredicate('disagreement'), 'room.disagreement');
+  });
+});
+
+describe('room coordination record/read', () => {
+  it('records a room message under room.message', async () => {
+    const limen = await createTestEngine();
+    const result = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis:slice-a1-1',
+        sender: 'codex',
+        kind: 'message',
+        value: 'reviewing room coordination seam',
+        mentions: 'claude-code',
+      },
+      'http',
+    );
+
+    assert.equal('isError' in result, false);
+    const payload = parseToolText(result);
+    assert.equal((payload as { predicate: string }).predicate, 'room.message');
+
+    const recall = limen.recall('entity:room:artemis_slice-a1-1', 'room.message');
+    assert.ok(recall.ok);
+    assert.equal(recall.value.length, 1);
+    assert.equal(recall.value[0].value, 'reviewing room coordination seam');
+    const metadata = JSON.parse(recall.value[0].reasoning!);
+    assert.equal(metadata.sender, 'codex');
+    assert.equal(metadata.transport, 'http');
+    assert.deepEqual(metadata.mentions, ['claude-code']);
+  });
+
+  it('records structured room events without inventing a fixed FSM', async () => {
+    const limen = await createTestEngine();
+    const result = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis:slice-a1-1',
+        sender: 'codex',
+        kind: 'blocker',
+        value: 'WAITING_ON_claude-code',
+        detailsJson: JSON.stringify({
+          blockerId: 'lc2-schema',
+          summary: 'Need ratified payload contract',
+        }),
+      },
+      'stdio',
+    );
+
+    assert.equal('isError' in result, false);
+    const recall = limen.recall('entity:room:artemis_slice-a1-1', 'room.blocker');
+    assert.ok(recall.ok);
+    assert.equal(recall.value.length, 1);
+    assert.equal(recall.value[0].value, 'WAITING_ON_claude-code');
+    const metadata = JSON.parse(recall.value[0].reasoning!);
+    assert.equal(metadata.kind, 'blocker');
+    assert.deepEqual(metadata.details, {
+      blockerId: 'lc2-schema',
+      summary: 'Need ratified payload contract',
+    });
+  });
+
+  it('reads room events in chronological order across room.* predicates', async () => {
+    const limen = await createTestEngine();
+
+    const first = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis:slice-a1-1',
+        sender: 'codex',
+        kind: 'participant',
+        value: 'engineer',
+        detailsJson: JSON.stringify({ participant: 'codex', trust: 'probationary' }),
+      },
+      'http',
+    );
+    assert.equal('isError' in first, false);
+
+    const second = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis:slice-a1-1',
+        sender: 'claude-code',
+        kind: 'message',
+        value: 'protocol draft inbound',
+      },
+      'stdio',
+    );
+    assert.equal('isError' in second, false);
+
+    const third = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis:slice-a1-1',
+        sender: 'codex',
+        kind: 'disagreement',
+        value: 'predicate namespace',
+        detailsJson: JSON.stringify({ positions: ['coordination.*', 'room.*'] }),
+      },
+      'http',
+    );
+    assert.equal('isError' in third, false);
+
+    const read = readRoomEvents(limen, { room: 'artemis:slice-a1-1' });
+    assert.equal('isError' in read, false);
+    const payload = parseToolText(read) as {
+      count: number;
+      events: Array<{ kind: string; sender: string }>;
+    };
+    assert.equal(payload.count, 3);
+    assert.deepEqual(
+      payload.events.map((event) => event.kind),
+      ['participant', 'message', 'disagreement'],
+    );
+  });
+
+  it('best-effort de-duplicates matching source ids within subject + predicate history', async () => {
+    const limen = await createTestEngine();
+
+    const first = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis:slice-a1-1',
+        sender: 'codex',
+        kind: 'message',
+        value: 'same logical event',
+        sourceId: 'source-001',
+      },
+      'http',
+    );
+    assert.equal('isError' in first, false);
+    const firstPayload = parseToolText(first) as { claimId: string };
+
+    const second = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis:slice-a1-1',
+        sender: 'codex',
+        kind: 'message',
+        value: 'same logical event but retried',
+        sourceId: 'source-001',
+      },
+      'http',
+    );
+    assert.equal('isError' in second, false);
+    const secondPayload = parseToolText(second) as { claimId: string; deduped: boolean };
+
+    assert.equal(secondPayload.deduped, true);
+    assert.equal(secondPayload.claimId, firstPayload.claimId);
+
+    const recall = limen.recall('entity:room:artemis_slice-a1-1', 'room.message');
+    assert.ok(recall.ok);
+    assert.equal(recall.value.length, 1);
+  });
+
+  it('rejects malformed room ids at the tool boundary', async () => {
+    const limen = await createTestEngine();
+    const result = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis/slice-a1-1',
+        sender: 'codex',
+        kind: 'message',
+        value: 'bad room id',
+      },
+      'http',
+    );
+
+    assert.equal('isError' in result, true);
+    const payload = parseToolText(result as {
+      readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
+    }) as { error: string };
+    assert.equal(payload.error, 'ROOM_INVALID_ID');
+  });
+
+  it('rejects malformed detailsJson at the tool boundary', async () => {
+    const limen = await createTestEngine();
+    const result = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis:slice-a1-1',
+        sender: 'codex',
+        kind: 'blocker',
+        value: 'OPEN',
+        detailsJson: '{"unterminated"',
+      },
+      'http',
+    );
+
+    assert.equal('isError' in result, true);
+    const payload = parseToolText(result as {
+      readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
+    }) as { error: string };
+    assert.equal(payload.error, 'ROOM_INVALID_DETAILS_JSON');
+  });
+});
