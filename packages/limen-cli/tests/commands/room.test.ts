@@ -19,12 +19,15 @@ import { describe, it, expect } from 'vitest';
 import { __TEST_ONLY__ } from '../../src/commands/room.js';
 
 const {
+  compareByValidAtThenClaimId,
+  fetchRoomClaims,
   validateValueForKind,
   validateDetailsFieldsForKind,
   findExistingBySourceId,
   checkRateLimit,
   projectBlockerState,
   publishMessage,
+  ENGINE_CLAIM_QUERY_MAX_LIMIT,
   RATE_LIMIT_CEILING,
   RATE_LIMIT_WINDOW_MS,
 } = __TEST_ONLY__;
@@ -446,10 +449,16 @@ function stubLimen(recallResponse: {
 
 // ── Blocker FSM projection + illegal-transition (F-LC3-R3-002 closure) ─
 
-function makeBlockerClaim(blockerId: string, value: string, ageMs: number, now: number) {
+function makeBlockerClaim(
+  blockerId: string,
+  value: string,
+  ageMs: number,
+  now: number,
+  claimId?: string,
+) {
   const ts = new Date(now - ageMs).toISOString();
   return {
-    claimId: `c-${Math.random()}`,
+    claimId: claimId ?? `c-${Math.random()}`,
     subject: 'entity:room:demo',
     predicate: 'room.blocker',
     value,
@@ -512,6 +521,124 @@ describe('projectBlockerState — v4 §4.4 most-recent-claim-wins', () => {
       remember: () => ({ ok: true, value: { claimId: 'new' } }),
     };
     expect(projectBlockerState(limen, subject, 'b-1')).toBeNull();
+  });
+
+  it('breaks validAt ties by claimId so later claims win deterministically', () => {
+    const ts = new Date(now - 10_000).toISOString();
+    const limen = {
+      recall: () => ({ ok: true, value: [] }),
+      remember: () => ({ ok: true, value: { claimId: 'new' } }),
+      claims: {
+        queryClaims: () => ({
+          ok: true,
+          value: {
+            claims: [
+              {
+                claim: {
+                  id: 'c-0002',
+                  subject,
+                  predicate: 'room.blocker',
+                  object: { value: 'OPEN' },
+                  validAt: ts,
+                  reasoning: JSON.stringify({
+                    schema_version: 'coord-v1.0',
+                    sender: 'codex',
+                    timestamp: ts,
+                    transport: 'http',
+                    blocker_id: 'b-1',
+                    reason: 'latest',
+                  }),
+                },
+              },
+              {
+                claim: {
+                  id: 'c-0001',
+                  subject,
+                  predicate: 'room.blocker',
+                  object: { value: 'RESOLVED' },
+                  validAt: ts,
+                  reasoning: JSON.stringify({
+                    schema_version: 'coord-v1.0',
+                    sender: 'codex',
+                    timestamp: ts,
+                    transport: 'http',
+                    blocker_id: 'b-1',
+                    reason: 'older',
+                  }),
+                },
+              },
+            ],
+            hasMore: false,
+          },
+        }),
+      },
+    };
+    expect(projectBlockerState(limen, subject, 'b-1')).toBe('OPEN');
+  });
+});
+
+describe('compareByValidAtThenClaimId — protocol ordering', () => {
+  it('orders equal validAt values by claimId ascending', () => {
+    const ts = '2026-04-18T12:00:00.000Z';
+    const ordered = [
+      { validAt: ts, claimId: 'claim-0002' },
+      { validAt: ts, claimId: 'claim-0001' },
+      { validAt: '2026-04-18T12:00:01.000Z', claimId: 'claim-0000' },
+    ].sort(compareByValidAtThenClaimId);
+    expect(ordered.map((item) => item.claimId)).toEqual([
+      'claim-0001',
+      'claim-0002',
+      'claim-0000',
+    ]);
+  });
+});
+
+describe('fetchRoomClaims — paginated queryClaims boundary', () => {
+  it('pages queryClaims in 200-claim chunks instead of issuing LIMIT_EXCEEDED reads', () => {
+    const subject = 'entity:room:demo';
+    const predicate = 'room.message';
+    const calls: Array<{ limit?: number; offset?: number }> = [];
+    const limen = {
+      recall: () => {
+        throw new Error('fallback recall should not be used when claims.queryClaims exists');
+      },
+      remember: () => ({ ok: true, value: { claimId: 'new' } }),
+      claims: {
+        queryClaims: (input: { limit?: number; offset?: number }) => {
+          calls.push({ limit: input.limit, offset: input.offset });
+          const offset = input.offset ?? 0;
+          const size = offset === 0 ? ENGINE_CLAIM_QUERY_MAX_LIMIT : 50;
+          return {
+            ok: true,
+            value: {
+              claims: Array.from({ length: size }, (_, index) => {
+                const n = offset + index;
+                return {
+                  claim: {
+                    id: `claim-${n.toString().padStart(4, '0')}`,
+                    subject,
+                    predicate,
+                    object: { value: `message-${n}` },
+                    validAt: `2026-04-18T12:${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}.000Z`,
+                    reasoning: null,
+                  },
+                };
+              }),
+              hasMore: offset === 0,
+            },
+          };
+        },
+      },
+    };
+
+    const result = fetchRoomClaims(limen, subject, predicate, { limit: 250 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(250);
+    expect(calls).toEqual([
+      { limit: ENGINE_CLAIM_QUERY_MAX_LIMIT, offset: 0 },
+      { limit: 50, offset: ENGINE_CLAIM_QUERY_MAX_LIMIT },
+    ]);
   });
 });
 
@@ -586,6 +713,67 @@ describe('validateDetailsFieldsForKind — blocker illegal-transition (F-LC3-R3-
     expect(validateDetailsFieldsForKind('blocker', 'OPEN', goodFields, limen, subject)).toBeNull();
     expect(validateDetailsFieldsForKind('blocker', 'RESOLVED', goodFields, limen, subject)).toBeNull();
     expect(validateDetailsFieldsForKind('blocker', 'WAITING_ON_femi', goodFields, limen, subject)).toBeNull();
+  });
+});
+
+describe('validateDetailsFieldsForKind — resolve disagreement lookup pagination', () => {
+  it('accepts a resolve when the disagreement exists beyond the first 200 claims', () => {
+    const subject = 'entity:room:demo';
+    const wantedId = 'dg-250';
+    const limen = {
+      recall: () => ({ ok: false, error: { code: 'LIMIT_EXCEEDED', message: 'should not be used' } }),
+      remember: () => ({ ok: true, value: { claimId: 'new' } }),
+      claims: {
+        queryClaims: (input: { offset?: number; limit?: number }) => {
+          const offset = input.offset ?? 0;
+          const size = offset === 0 ? ENGINE_CLAIM_QUERY_MAX_LIMIT : 60;
+          return {
+            ok: true,
+            value: {
+              claims: Array.from({ length: size }, (_, index) => {
+                const n = offset + index;
+                const disagreementId = n === 250 ? wantedId : `dg-${n}`;
+                return {
+                  claim: {
+                    id: `claim-${n.toString().padStart(4, '0')}`,
+                    subject,
+                    predicate: 'room.disagreement',
+                    object: { value: `topic-${n}` },
+                    validAt: `2026-04-18T12:${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}.000Z`,
+                    reasoning: JSON.stringify({
+                      schema_version: 'coord-v1.0',
+                      sender: 'codex',
+                      timestamp: '2026-04-18T12:00:00.000Z',
+                      transport: 'cli',
+                      disagreement_id: disagreementId,
+                      positions: [
+                        { by: 'codex', stance: 'A' },
+                        { by: 'claude-code', stance: 'B' },
+                      ],
+                    }),
+                  },
+                };
+              }),
+              hasMore: offset === 0,
+            },
+          };
+        },
+      },
+    };
+
+    const err = validateDetailsFieldsForKind(
+      'resolve',
+      'mutual',
+      {
+        disagreement_id: wantedId,
+        resolver: 'femi',
+        rationale: 'merged',
+        merged_position: 'combined',
+      },
+      limen,
+      subject,
+    );
+    expect(err).toBeNull();
   });
 });
 

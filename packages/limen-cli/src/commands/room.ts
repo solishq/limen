@@ -52,6 +52,33 @@ interface LimenRememberResult {
   readonly error?: { readonly code: string; readonly message: string };
 }
 
+interface LimenQueryClaimsResult {
+  readonly ok: boolean;
+  readonly value?: {
+    readonly claims: readonly {
+      readonly claim: {
+        readonly id: string;
+        readonly subject: string;
+        readonly predicate: string;
+        readonly object: { readonly value: unknown };
+        readonly validAt: string;
+        readonly reasoning: string | null;
+      };
+    }[];
+    readonly hasMore: boolean;
+  };
+  readonly error?: { readonly code: string; readonly message: string };
+}
+
+interface RoomStoredClaim {
+  readonly claimId: string;
+  readonly subject: string;
+  readonly predicate: string;
+  readonly value: string;
+  readonly validAt: string;
+  readonly reasoning: string | null;
+}
+
 interface LimenCompat {
   recall(
     subject: string,
@@ -64,7 +91,23 @@ interface LimenCompat {
     value: string,
     options?: { readonly confidence?: number; readonly reasoning?: string },
   ): LimenRememberResult;
+  readonly claims?: {
+    queryClaims(input: {
+      readonly subject?: string | null;
+      readonly predicate?: string | null;
+      readonly status?: 'active' | 'retracted' | null;
+      readonly validAtFrom?: string | null;
+      readonly limit?: number;
+      readonly offset?: number;
+    }): LimenQueryClaimsResult;
+  };
 }
+
+/**
+ * Engine-enforced ceiling on a single queryClaims()/recall() call. Kept
+ * in sync with CLAIM_QUERY_MAX_LIMIT = 200 in the engine.
+ */
+const ENGINE_CLAIM_QUERY_MAX_LIMIT = 200;
 
 /** Default sender when `--as` is not provided. Prefers USER, then LOGNAME, then "cli-user". */
 function defaultSender(): string {
@@ -99,6 +142,91 @@ function toRenderRecord(belief: NonNullable<LimenRecallResult['value']>[number])
     // LIMEN-COORD-v1.0 §7.2: render transport next to sender whenever they diverge.
     senderMatchesTransport: transport === 'cli' || transport === 'stdio' || transport === 'http',
   };
+}
+
+function compareByValidAtThenClaimId<T extends { readonly validAt: string; readonly claimId: string }>(
+  a: T,
+  b: T,
+): number {
+  const validAtOrder = a.validAt.localeCompare(b.validAt);
+  if (validAtOrder !== 0) return validAtOrder;
+  return a.claimId.localeCompare(b.claimId);
+}
+
+function fetchRoomClaims(
+  limen: LimenCompat,
+  subject: string,
+  predicate: string,
+  options?: {
+    readonly limit?: number;
+    readonly validAtFrom?: string;
+  },
+): { ok: true; value: RoomStoredClaim[] } | { ok: false; error: { code: string; message: string } } {
+  const normalizedLimit = options?.limit !== undefined
+    ? Math.max(0, Math.trunc(options.limit))
+    : undefined;
+  if (normalizedLimit === 0) {
+    return { ok: true, value: [] };
+  }
+
+  if (limen.claims !== undefined) {
+    const collected: RoomStoredClaim[] = [];
+    let offset = 0;
+
+    while (normalizedLimit === undefined || collected.length < normalizedLimit) {
+      const pageLimit = normalizedLimit === undefined
+        ? ENGINE_CLAIM_QUERY_MAX_LIMIT
+        : Math.min(ENGINE_CLAIM_QUERY_MAX_LIMIT, normalizedLimit - collected.length);
+      const page = limen.claims.queryClaims({
+        subject,
+        predicate,
+        status: 'active',
+        validAtFrom: options?.validAtFrom ?? null,
+        limit: pageLimit,
+        offset,
+      });
+      if (!page.ok) {
+        return {
+          ok: false,
+          error: {
+            code: page.error?.code ?? 'CLI_ROOM_QUERY_FAILED',
+            message: page.error?.message ?? 'Failed to query room claims',
+          },
+        };
+      }
+      const items = page.value?.claims ?? [];
+      for (const item of items) {
+        if (typeof item.claim.object.value !== 'string') continue;
+        collected.push({
+          claimId: item.claim.id,
+          subject: item.claim.subject,
+          predicate: item.claim.predicate,
+          value: item.claim.object.value,
+          validAt: item.claim.validAt,
+          reasoning: item.claim.reasoning,
+        });
+      }
+      if (page.value?.hasMore !== true || items.length === 0) break;
+      offset += items.length;
+    }
+
+    return { ok: true, value: collected };
+  }
+
+  const recallLimit = normalizedLimit === undefined
+    ? ENGINE_CLAIM_QUERY_MAX_LIMIT
+    : Math.min(normalizedLimit, ENGINE_CLAIM_QUERY_MAX_LIMIT);
+  const recalled = limen.recall(subject, predicate, { limit: recallLimit });
+  if (!recalled.ok) {
+    return {
+      ok: false,
+      error: {
+        code: recalled.error?.code ?? 'CLI_ROOM_READ_FAILED',
+        message: recalled.error?.message ?? 'Failed to read room claims',
+      },
+    };
+  }
+  return { ok: true, value: [...(recalled.value ?? [])] };
 }
 
 /** Format a single claim for terminal display. Plain text; no ANSI. */
@@ -219,16 +347,16 @@ function createJoinCommand(): Command {
             const limenCompat = limen as unknown as LimenCompat;
 
             // 1. Historical render.
-            const historyRes = limenCompat.recall(subject, 'room.*', { limit: historyLimit });
+            const historyRes = fetchRoomClaims(limenCompat, subject, 'room.*', { limit: historyLimit });
             if (!historyRes.ok) {
               throw new CliError(
-                historyRes.error?.code ?? 'CLI_ROOM_READ_FAILED',
-                historyRes.error?.message ?? 'Failed to read room history',
+                historyRes.error.code,
+                historyRes.error.message,
               );
             }
             const history = (historyRes.value ?? [])
               .map(toRenderRecord)
-              .sort((a, b) => a.validAt.localeCompare(b.validAt));
+              .sort(compareByValidAtThenClaimId);
 
             // Header + history are written to stdout as human-readable
             // text. The structured JSON audit trail lives in Limen
@@ -268,17 +396,19 @@ function createJoinCommand(): Command {
             process.on('SIGTERM', shutdown);
 
             const pollTimer = setInterval(() => {
-              const res = limenCompat.recall(subject, 'room.*', { limit: 200 });
+              const res = fetchRoomClaims(limenCompat, subject, 'room.*', {
+                validAtFrom: lastValidAt.length > 0 ? lastValidAt : undefined,
+              });
               if (!res.ok) {
                 process.stderr.write(
-                  `# poll error: ${res.error?.code ?? 'UNKNOWN'}: ${res.error?.message ?? ''}\n`,
+                  `# poll error: ${res.error.code}: ${res.error.message}\n`,
                 );
                 return;
               }
               const fresh = (res.value ?? [])
                 .map(toRenderRecord)
                 .filter((r) => !seenClaimIds.has(r.claimId))
-                .sort((a, b) => a.validAt.localeCompare(b.validAt));
+                .sort(compareByValidAtThenClaimId);
               for (const r of fresh) {
                 seenClaimIds.add(r.claimId);
                 if (r.validAt > lastValidAt) lastValidAt = r.validAt;
@@ -336,15 +466,14 @@ function createJoinCommand(): Command {
           },
         );
       } catch (err) {
-        if (err instanceof CliError) {
-          writeError(err);
-          process.exitCode = 1;
-          return;
-        }
-        writeError(new CliError(
-          'CLI_UNEXPECTED',
-          err instanceof Error ? err.message : String(err),
-        ));
+        // LIMEN-COORD-v1.0 v4 error-propagation fix: `writeError` already
+        // recovers the code from CliError OR any Error with a string
+        // `code` property. Using it directly preserves the thrown code
+        // even when an `instanceof CliError` check fails at module
+        // boundaries (e.g. errors thrown inside `withEngine`). Previously
+        // the instanceof fallthrough rewrapped every structured error
+        // into `CLI_UNEXPECTED`, hiding the real code.
+        writeError(err);
         process.exitCode = 1;
       }
     });
@@ -453,16 +582,15 @@ function projectBlockerState(
   subject: string,
   blockerId: string,
 ): string | null {
-  const res = limen.recall(subject, 'room.blocker', { limit: 500 });
+  const res = fetchRoomClaims(limen, subject, 'room.blocker');
   if (!res.ok || !res.value) return null;
-  // recall returns chronological-ish; we pick the latest by validAt.
-  let latest: { validAt: string; value: string } | null = null;
+  let latest: { validAt: string; claimId: string; value: string } | null = null;
   for (const b of res.value) {
     const meta = parseRoomMetadata(b.reasoning);
     if (meta === null) continue;
     if ((meta as Record<string, unknown>).blocker_id !== blockerId) continue;
-    if (latest === null || b.validAt > latest.validAt) {
-      latest = { validAt: b.validAt, value: b.value };
+    if (latest === null || compareByValidAtThenClaimId(b, latest) > 0) {
+      latest = { validAt: b.validAt, claimId: b.claimId, value: b.value };
     }
   }
   return latest ? latest.value : null;
@@ -598,7 +726,7 @@ function validateDetailsFieldsForKind(
       // C-23: tool-layer semantic check — disagreement_id must refer to
       // an existing open disagreement in the same room.
       if (limen && subject) {
-        const existing = limen.recall(subject, 'room.disagreement', { limit: 500 });
+        const existing = fetchRoomClaims(limen, subject, 'room.disagreement');
         if (existing.ok) {
           const found = (existing.value ?? []).some((b) => {
             const meta = parseRoomMetadata(b.reasoning);
@@ -671,7 +799,7 @@ function checkRateLimit(
   sender: string,
   nowMs: number = Date.now(),
 ): { code: string; message: string } | null {
-  const res = limen.recall(subject, 'room.*', { limit: 200 });
+  const res = limen.recall(subject, 'room.*', { limit: ENGINE_CLAIM_QUERY_MAX_LIMIT });
   if (!res.ok || !res.value) return null;  // Transient store error: pass through; audit review.
   const cutoff = nowMs - RATE_LIMIT_WINDOW_MS;
   let count = 0;
@@ -716,7 +844,7 @@ function findExistingBySourceId(
   predicate: string,
   sourceId: string,
 ): string | null {
-  const res = limen.recall(subject, predicate, { limit: 200 });
+  const res = limen.recall(subject, predicate, { limit: ENGINE_CLAIM_QUERY_MAX_LIMIT });
   if (!res.ok || !res.value) return null;
   for (const belief of res.value) {
     const meta = parseRoomMetadata(belief.reasoning);
@@ -909,15 +1037,14 @@ function createRecordCommand(): Command {
 
         writeResult(result);
       } catch (err) {
-        if (err instanceof CliError) {
-          writeError(err);
-          process.exitCode = 1;
-          return;
-        }
-        writeError(new CliError(
-          'CLI_UNEXPECTED',
-          err instanceof Error ? err.message : String(err),
-        ));
+        // LIMEN-COORD-v1.0 v4 error-propagation fix: `writeError` already
+        // recovers the code from CliError OR any Error with a string
+        // `code` property. Using it directly preserves the thrown code
+        // even when an `instanceof CliError` check fails at module
+        // boundaries (e.g. errors thrown inside `withEngine`). Previously
+        // the instanceof fallthrough rewrapped every structured error
+        // into `CLI_UNEXPECTED`, hiding the real code.
+        writeError(err);
         process.exitCode = 1;
       }
     });
@@ -972,16 +1099,16 @@ function createReadCommand(): Command {
         const result = await withEngine(
           async (limen): Promise<{ room: string; normalizedRoomId: string; count: number; events: RenderRecord[] }> => {
             const lc = limen as unknown as LimenCompat;
-            const res = lc.recall(subject, predicate, { limit });
+            const res = fetchRoomClaims(lc, subject, predicate, { limit });
             if (!res.ok) {
               throw new CliError(
-                res.error?.code ?? 'CLI_ROOM_READ_FAILED',
-                res.error?.message ?? 'Failed to read room events',
+                res.error.code,
+                res.error.message,
               );
             }
             const events = (res.value ?? [])
               .map(toRenderRecord)
-              .sort((a, b) => a.validAt.localeCompare(b.validAt));
+              .sort(compareByValidAtThenClaimId);
             return {
               room: roomId,
               normalizedRoomId: normalized,
@@ -994,15 +1121,14 @@ function createReadCommand(): Command {
 
         writeResult(result);
       } catch (err) {
-        if (err instanceof CliError) {
-          writeError(err);
-          process.exitCode = 1;
-          return;
-        }
-        writeError(new CliError(
-          'CLI_UNEXPECTED',
-          err instanceof Error ? err.message : String(err),
-        ));
+        // LIMEN-COORD-v1.0 v4 error-propagation fix: `writeError` already
+        // recovers the code from CliError OR any Error with a string
+        // `code` property. Using it directly preserves the thrown code
+        // even when an `instanceof CliError` check fails at module
+        // boundaries (e.g. errors thrown inside `withEngine`). Previously
+        // the instanceof fallthrough rewrapped every structured error
+        // into `CLI_UNEXPECTED`, hiding the real code.
+        writeError(err);
         process.exitCode = 1;
       }
     });
@@ -1020,6 +1146,8 @@ export function createRoomCommand(): Command {
 export const __TEST_ONLY__ = Object.freeze({
   defaultSender,
   toRenderRecord,
+  compareByValidAtThenClaimId,
+  fetchRoomClaims,
   formatRender,
   validateValueForKind,
   validateDetailsFieldsForKind,
@@ -1027,6 +1155,7 @@ export const __TEST_ONLY__ = Object.freeze({
   checkRateLimit,
   projectBlockerState,
   publishMessage,
+  ENGINE_CLAIM_QUERY_MAX_LIMIT,
   RATE_LIMIT_WINDOW_MS,
   RATE_LIMIT_CEILING,
 });
