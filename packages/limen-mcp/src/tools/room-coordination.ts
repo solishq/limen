@@ -38,8 +38,7 @@ interface ParsedRoomMetadata {
   readonly details?: unknown;
 }
 
-const ROOM_ID_INPUT_RE = /^[a-zA-Z0-9:_-]{1,64}$/;
-const ROOM_ID_PERSISTED_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+const ROOM_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const AGENT_NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const MAX_REASONING_LENGTH = 1000;
 
@@ -93,10 +92,8 @@ function parseMentions(raw: string | undefined): string[] | null {
 }
 
 export function normalizeRoomId(room: string): string | null {
-  if (!ROOM_ID_INPUT_RE.test(room)) return null;
-  const normalized = room.replace(/:/g, '_');
-  if (!ROOM_ID_PERSISTED_RE.test(normalized)) return null;
-  return normalized;
+  if (!ROOM_ID_RE.test(room)) return null;
+  return room;
 }
 
 export function roomSubject(room: string): string | null {
@@ -151,7 +148,7 @@ export function recordRoomEvent(
   if (normalizedRoomId === null) {
     return mcpError(
       'ROOM_INVALID_ID',
-      'Room must be 1-64 chars using only alphanumeric, hyphens, underscores, and colons',
+      'Room must be 1-64 chars using only alphanumeric, hyphens, and underscores',
     );
   }
 
@@ -250,7 +247,7 @@ export function readRoomEvents(
   if (normalizedRoomId === null) {
     return mcpError(
       'ROOM_INVALID_ID',
-      'Room must be 1-64 chars using only alphanumeric, hyphens, underscores, and colons',
+      'Room must be 1-64 chars using only alphanumeric, hyphens, and underscores',
     );
   }
 
@@ -306,7 +303,7 @@ export function registerRoomCoordinationTools(
     'limen_room_record',
     'Record an append-only coordination event in a Limen room. Events are stored as governed claims under the room.* predicate family.',
     {
-      room: z.string().min(1).max(64).describe('Human-facing room id, e.g. "artemis:slice-a1-1"'),
+      room: z.string().min(1).max(64).describe('Room id, e.g. "artemis_slice-a1-1"'),
       sender: z.string().min(1).max(64).describe('Your agent name (self-declared)'),
       kind: z.enum(['message', 'participant', 'blocker', 'disagreement']).describe('Room event kind'),
       value: z.string().min(1).max(2000).describe('Primary event value. For message: text. For blocker: state. For disagreement: topic. For participant: role.'),
@@ -321,7 +318,7 @@ export function registerRoomCoordinationTools(
     'limen_room_read',
     'Read append-only room events in chronological order from a Limen room.',
     {
-      room: z.string().min(1).max(64).describe('Human-facing room id, e.g. "artemis:slice-a1-1"'),
+      room: z.string().min(1).max(64).describe('Room id, e.g. "artemis_slice-a1-1"'),
       kind: z.enum(['message', 'participant', 'blocker', 'disagreement']).optional().describe('Optional room event kind filter'),
       limit: z.number().min(1).max(200).optional().describe('Maximum number of events to return (default 50)'),
     },

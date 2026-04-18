@@ -83,12 +83,13 @@ async function callTool(server: McpServer, name: string, args: Record<string, un
 }
 
 describe('room coordination helpers', () => {
-  it('normalizes colon-separated room ids into a persisted single segment', () => {
-    assert.equal(normalizeRoomId('artemis:slice-a1-1'), 'artemis_slice-a1-1');
-    assert.equal(roomSubject('artemis:slice-a1-1'), 'entity:room:artemis_slice-a1-1');
+  it('accepts bijective v2 room ids without transforming them', () => {
+    assert.equal(normalizeRoomId('artemis_slice-a1-1'), 'artemis_slice-a1-1');
+    assert.equal(roomSubject('artemis_slice-a1-1'), 'entity:room:artemis_slice-a1-1');
   });
 
   it('rejects invalid room ids', () => {
+    assert.equal(normalizeRoomId('artemis:slice-a1-1'), null);
     assert.equal(normalizeRoomId('artemis/slice-a1-1'), null);
     assert.equal(normalizeRoomId('bad room'), null);
     assert.equal(roomSubject('bad room'), null);
@@ -108,7 +109,7 @@ describe('room coordination record/read', () => {
     const result = recordRoomEvent(
       limen,
       {
-        room: 'artemis:slice-a1-1',
+        room: 'artemis_slice-a1-1',
         sender: 'codex',
         kind: 'message',
         value: 'reviewing room coordination seam',
@@ -136,7 +137,7 @@ describe('room coordination record/read', () => {
     const result = recordRoomEvent(
       limen,
       {
-        room: 'artemis:slice-a1-1',
+        room: 'artemis_slice-a1-1',
         sender: 'codex',
         kind: 'blocker',
         value: 'WAITING_ON_claude-code',
@@ -167,7 +168,7 @@ describe('room coordination record/read', () => {
     const first = recordRoomEvent(
       limen,
       {
-        room: 'artemis:slice-a1-1',
+        room: 'artemis_slice-a1-1',
         sender: 'codex',
         kind: 'participant',
         value: 'engineer',
@@ -180,7 +181,7 @@ describe('room coordination record/read', () => {
     const second = recordRoomEvent(
       limen,
       {
-        room: 'artemis:slice-a1-1',
+        room: 'artemis_slice-a1-1',
         sender: 'claude-code',
         kind: 'message',
         value: 'protocol draft inbound',
@@ -192,7 +193,7 @@ describe('room coordination record/read', () => {
     const third = recordRoomEvent(
       limen,
       {
-        room: 'artemis:slice-a1-1',
+        room: 'artemis_slice-a1-1',
         sender: 'codex',
         kind: 'disagreement',
         value: 'predicate namespace',
@@ -202,7 +203,7 @@ describe('room coordination record/read', () => {
     );
     assert.equal('isError' in third, false);
 
-    const read = readRoomEvents(limen, { room: 'artemis:slice-a1-1' });
+    const read = readRoomEvents(limen, { room: 'artemis_slice-a1-1' });
     assert.equal('isError' in read, false);
     const payload = parseToolText(read) as {
       count: number;
@@ -221,7 +222,7 @@ describe('room coordination record/read', () => {
     const first = recordRoomEvent(
       limen,
       {
-        room: 'artemis:slice-a1-1',
+        room: 'artemis_slice-a1-1',
         sender: 'codex',
         kind: 'message',
         value: 'same logical event',
@@ -235,7 +236,7 @@ describe('room coordination record/read', () => {
     const second = recordRoomEvent(
       limen,
       {
-        room: 'artemis:slice-a1-1',
+        room: 'artemis_slice-a1-1',
         sender: 'codex',
         kind: 'message',
         value: 'same logical event but retried',
@@ -256,7 +257,24 @@ describe('room coordination record/read', () => {
 
   it('rejects malformed room ids at the tool boundary', async () => {
     const limen = await createTestEngine();
-    const result = recordRoomEvent(
+    const colonResult = recordRoomEvent(
+      limen,
+      {
+        room: 'artemis:slice-a1-1',
+        sender: 'codex',
+        kind: 'message',
+        value: 'v1-style room id should now fail',
+      },
+      'http',
+    );
+
+    assert.equal('isError' in colonResult, true);
+    const colonPayload = parseToolText(colonResult as {
+      readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
+    }) as { error: string };
+    assert.equal(colonPayload.error, 'ROOM_INVALID_ID');
+
+    const slashResult = recordRoomEvent(
       limen,
       {
         room: 'artemis/slice-a1-1',
@@ -267,11 +285,11 @@ describe('room coordination record/read', () => {
       'http',
     );
 
-    assert.equal('isError' in result, true);
-    const payload = parseToolText(result as {
+    assert.equal('isError' in slashResult, true);
+    const slashPayload = parseToolText(slashResult as {
       readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
     }) as { error: string };
-    assert.equal(payload.error, 'ROOM_INVALID_ID');
+    assert.equal(slashPayload.error, 'ROOM_INVALID_ID');
   });
 
   it('rejects malformed detailsJson at the tool boundary', async () => {
@@ -279,7 +297,7 @@ describe('room coordination record/read', () => {
     const result = recordRoomEvent(
       limen,
       {
-        room: 'artemis:slice-a1-1',
+        room: 'artemis_slice-a1-1',
         sender: 'codex',
         kind: 'blocker',
         value: 'OPEN',
@@ -313,7 +331,7 @@ describe('room coordination MCP handlers', () => {
     const server = createRoomServer(limen);
 
     const recordResult = await callTool(server, 'limen_room_record', {
-      room: 'artemis:slice-a1-1',
+      room: 'artemis_slice-a1-1',
       sender: 'codex',
       kind: 'message',
       value: 'mcp handler roundtrip',
@@ -327,7 +345,7 @@ describe('room coordination MCP handlers', () => {
     assert.equal(recordPayload.deduped, false);
 
     const readResult = await callTool(server, 'limen_room_read', {
-      room: 'artemis:slice-a1-1',
+      room: 'artemis_slice-a1-1',
     });
     assert.equal(readResult.isError, undefined);
     const readPayload = parseToolText(readResult as {
