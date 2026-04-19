@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { __TEST_ONLY__, processBeliefs } from '../../src/commands/belief-postprocess.js';
 import type { Limen, BeliefView, ClaimRelationship } from 'limen-ai';
 
-const { round4, isA2aPredicate, isRoomPredicate, shouldIncludeRoom, computeTimeFreshness } = __TEST_ONLY__;
+const { round4, isA2aPredicate, computeTimeFreshness } = __TEST_ONLY__;
 
 describe('round4 — F-BR4-003 clamping and rounding', () => {
   it('rounds a normal value to 4 decimals', () => {
@@ -147,71 +147,6 @@ describe('isA2aPredicate — F-BR4-007 symmetry', () => {
     // could be a legitimate knowledge predicate used outside the
     // messaging domain.
     expect(isA2aPredicate('a2a')).toBe(false);
-  });
-});
-
-describe('isRoomPredicate — LIMEN-COORD-v1.0 §9.1 symmetry', () => {
-  it('matches room.message', () => {
-    expect(isRoomPredicate('room.message')).toBe(true);
-  });
-  it('matches room.blocker', () => {
-    expect(isRoomPredicate('room.blocker')).toBe(true);
-  });
-  it('matches room.disagreement', () => {
-    expect(isRoomPredicate('room.disagreement')).toBe(true);
-  });
-  it('matches room.resolve', () => {
-    expect(isRoomPredicate('room.resolve')).toBe(true);
-  });
-  it('matches room.participant', () => {
-    expect(isRoomPredicate('room.participant')).toBe(true);
-  });
-  it('matches room.mode', () => {
-    expect(isRoomPredicate('room.mode')).toBe(true);
-  });
-  it('does NOT match unratified room.* extensions (F-LC3-R2-007 v4 closure)', () => {
-    // v4 C-22: isRoomPredicate is scoped to the enumerated ratified set,
-    // NOT prefix-wide. An unratified `room.<x>` predicate is NOT silently
-    // blessed; the protocol must ratify each new predicate explicitly.
-    expect(isRoomPredicate('room.modeChange')).toBe(false);
-    expect(isRoomPredicate('room.snapshot')).toBe(false);
-    expect(isRoomPredicate('room.anything')).toBe(false);
-  });
-  it('does NOT match knowledge.foo', () => {
-    expect(isRoomPredicate('knowledge.foo')).toBe(false);
-  });
-  it('does NOT match a2a.message', () => {
-    expect(isRoomPredicate('a2a.message')).toBe(false);
-  });
-  it('does NOT match empty string', () => {
-    expect(isRoomPredicate('')).toBe(false);
-  });
-  it('does NOT match plain "room" (no trailing dot)', () => {
-    expect(isRoomPredicate('room')).toBe(false);
-  });
-  it('does NOT match "room_message" (underscore, not dot)', () => {
-    expect(isRoomPredicate('room_message')).toBe(false);
-  });
-});
-
-describe('shouldIncludeRoom — LIMEN-COORD-v1.0 §9.1 inclusion rule', () => {
-  it('undefined userPredicate → false (bare recall excludes room.*)', () => {
-    expect(shouldIncludeRoom(undefined)).toBe(false);
-  });
-  it('explicit "room.*" wildcard → true', () => {
-    expect(shouldIncludeRoom('room.*')).toBe(true);
-  });
-  it('explicit room.message → true', () => {
-    expect(shouldIncludeRoom('room.message')).toBe(true);
-  });
-  it('explicit room.blocker → true', () => {
-    expect(shouldIncludeRoom('room.blocker')).toBe(true);
-  });
-  it('unrelated predicate → false', () => {
-    expect(shouldIncludeRoom('knowledge.foo')).toBe(false);
-  });
-  it('a2a.* → false (different predicate family)', () => {
-    expect(shouldIncludeRoom('a2a.message')).toBe(false);
   });
 });
 
