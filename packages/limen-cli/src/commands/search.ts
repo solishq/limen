@@ -98,7 +98,9 @@ export function createSearchCommand(): Command {
             //   disagree on the `disputed` flag for the same claim after
             //   a retraction removed the contradicting counterpart.
             const rawBeliefs = searchResult.value.map((r) => r.belief);
-            const processed = processBeliefs(limen, rawBeliefs, undefined, Date.now());
+            // F-BR6-001: skipA2aFilter=true because search must never silently
+            // drop results the engine matched — doing so breaks score zip.
+            const processed = processBeliefs(limen, rawBeliefs, undefined, Date.now(), { skipA2aFilter: true });
             // Re-associate processed beliefs with their search scores.
             // processBeliefs preserves input order and does NOT reorder,
             // so index-based zip is safe.

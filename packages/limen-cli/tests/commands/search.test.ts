@@ -155,6 +155,11 @@ beforeAll(async () => {
   await runCli(
     'remember --subject "entity:test:context-001" --predicate "test.context" --value "context generation target"',
   );
+  // F-BR6-001: seed an a2a.message claim so we can verify search does NOT
+  // silently drop it (which would break the index-based score zip).
+  await runCli(
+    'remember --subject "entity:a2a:search-test" --predicate "a2a.message" --value "the lazy deploy fox unique marker fbr6"',
+  );
 });
 
 // =====================================================================
@@ -615,5 +620,69 @@ describe('FP-06 search disputed status matches recall after retraction', () => {
 
     // The key assertion: search and recall AGREE on disputed status
     expect(searchMatch!.belief.disputed).toBe(recallMatch!.disputed);
+  });
+});
+
+// =====================================================================
+// F-BR6-001: a2a claims must NOT be silently dropped from search results
+// =====================================================================
+
+describe('F-BR6-001 search does not drop a2a claims', () => {
+  it('DC-CLI-066: search returns a2a.message claims with correct score alignment', { timeout: 30000 }, async () => {
+    // The a2a.message claim "the lazy deploy fox unique marker fbr6" was seeded
+    // in beforeAll. Also search for "lazy" which matches BOTH an a2a claim and
+    // a regular claim. If processBeliefs silently drops the a2a claim, the
+    // score zip would assign the wrong score to the surviving belief.
+
+    // Search for the unique marker to guarantee the a2a claim is in results
+    const result = await runCli('search --query "lazy deploy fox unique marker fbr6"');
+    expect(result.exitCode).toBe(0);
+    const results = result.json as Array<{
+      belief: { claimId: string; predicate: string; value: string };
+      score: number;
+    }>;
+
+    // The a2a claim MUST appear in results — search should not filter it
+    const a2aResult = results.find((r) => r.belief.predicate === 'a2a.message');
+    expect(a2aResult).toBeDefined();
+    expect(a2aResult!.belief.value).toContain('lazy deploy fox unique marker fbr6');
+
+    // Score must be a valid positive number — not NaN, not misaligned.
+    expect(typeof a2aResult!.score).toBe('number');
+    expect(Number.isNaN(a2aResult!.score)).toBe(false);
+    expect(a2aResult!.score).toBeGreaterThan(0);
+  });
+
+  it('DC-CLI-067: search with mixed a2a and regular results preserves score alignment', { timeout: 30000 }, async () => {
+    // Search for "lazy" which matches both a regular claim ("a lazy cat...")
+    // and the a2a claim ("the lazy deploy fox..."). Both must appear with
+    // their own correct scores, not swapped.
+    const result = await runCli('search --query "lazy"');
+    expect(result.exitCode).toBe(0);
+    const results = result.json as Array<{
+      belief: { claimId: string; predicate: string; value: string };
+      score: number;
+    }>;
+
+    // Must have at least 2 results (the regular + the a2a claim)
+    expect(results.length).toBeGreaterThanOrEqual(2);
+
+    // Find the a2a and regular results
+    const a2aResult = results.find((r) => r.belief.predicate === 'a2a.message');
+    const regularResult = results.find((r) => r.belief.predicate === 'test.search');
+    expect(a2aResult).toBeDefined();
+    expect(regularResult).toBeDefined();
+
+    // Both must have valid scores
+    expect(a2aResult!.score).toBeGreaterThan(0);
+    expect(a2aResult!.score).toBeLessThanOrEqual(1);
+    expect(regularResult!.score).toBeGreaterThan(0);
+    expect(regularResult!.score).toBeLessThanOrEqual(1);
+
+    // Each result's belief content must match its own score's origin,
+    // not be swapped. The a2a claim contains "deploy fox" and the
+    // regular claim contains "cat" or "dog" — they must not be mixed.
+    expect(a2aResult!.belief.value).toContain('deploy');
+    expect(regularResult!.belief.value).not.toContain('deploy');
   });
 });
