@@ -628,7 +628,7 @@ describe('FP-06 search disputed status matches recall after retraction', () => {
 // =====================================================================
 
 describe('F-BR6-001 search does not drop a2a claims', () => {
-  it('DC-CLI-066: search returns a2a.message claims with correct score alignment', { timeout: 30000 }, async () => {
+  it('DC-CLI-106: search returns a2a.message claims with correct score alignment', { timeout: 30000 }, async () => {
     // The a2a.message claim "the lazy deploy fox unique marker fbr6" was seeded
     // in beforeAll. Also search for "lazy" which matches BOTH an a2a claim and
     // a regular claim. If processBeliefs silently drops the a2a claim, the
@@ -653,7 +653,7 @@ describe('F-BR6-001 search does not drop a2a claims', () => {
     expect(a2aResult!.score).toBeGreaterThan(0);
   });
 
-  it('DC-CLI-067: search with mixed a2a and regular results preserves score alignment', { timeout: 30000 }, async () => {
+  it('DC-CLI-107: search with mixed a2a and regular results preserves score alignment', { timeout: 30000 }, async () => {
     // Search for "lazy" which matches both a regular claim ("a lazy cat...")
     // and the a2a claim ("the lazy deploy fox..."). Both must appear with
     // their own correct scores, not swapped.
