@@ -631,10 +631,13 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
           [claimIdVal],
         );
         // Phase 4 I-P4-09: Bidirectional disputed check for 'contradicts'
-        // Both the asserting claim (from_claim_id) and contradicted claim (to_claim_id) are disputed
+        // Only count contradictions where the OTHER claim is still active (not retracted).
+        // v3.0.0 fix: previously counted retracted contradictors, leaving disputed=true after retraction.
         const disputedRow = conn.get<{ cnt: number }>(
-          `SELECT COUNT(*) as cnt FROM claim_relationships WHERE (to_claim_id = ? OR from_claim_id = ?) AND type = 'contradicts'`,
-          [claimIdVal, claimIdVal],
+          `SELECT COUNT(*) as cnt FROM claim_relationships cr
+           JOIN claim_assertions ca ON ca.id = CASE WHEN cr.from_claim_id = ? THEN cr.to_claim_id ELSE cr.from_claim_id END
+           WHERE (cr.to_claim_id = ? OR cr.from_claim_id = ?) AND cr.type = 'contradicts' AND ca.status = 'active'`,
+          [claimIdVal, claimIdVal, claimIdVal],
         );
 
         const item: ClaimQueryResultItem = {
@@ -848,9 +851,12 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
             [claim.id],
           );
           // Phase 4 I-P4-09: Bidirectional disputed check for 'contradicts'
+          // v3.0.0 fix: only count active contradictors (not retracted)
           const disputedRow = conn.get<{ cnt: number }>(
-            `SELECT COUNT(*) as cnt FROM claim_relationships WHERE (to_claim_id = ? OR from_claim_id = ?) AND type = 'contradicts'`,
-            [claim.id, claim.id],
+            `SELECT COUNT(*) as cnt FROM claim_relationships cr
+             JOIN claim_assertions ca ON ca.id = CASE WHEN cr.from_claim_id = ? THEN cr.to_claim_id ELSE cr.from_claim_id END
+             WHERE (cr.to_claim_id = ? OR cr.from_claim_id = ?) AND cr.type = 'contradicts' AND ca.status = 'active'`,
+            [claim.id, claim.id, claim.id],
           );
 
           const superseded = (supersededRow?.cnt ?? 0) > 0;
