@@ -1287,7 +1287,7 @@ export async function createLimen(
         [missionId],
       )?.tenant_id ?? null;
 
-      if (newState === 'PLANNING') {
+      if (newState === 'CREATED' || newState === 'PLANNING') {
         replayEngine.takeSnapshot(conn, missionId, tenantId, 'mission_start', kernel.time);
       } else if (newState === 'COMPLETED' || newState === 'FAILED' || newState === 'CANCELLED') {
         replayEngine.takeSnapshot(conn, missionId, tenantId, 'mission_end', kernel.time);

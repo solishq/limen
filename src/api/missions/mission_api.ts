@@ -111,6 +111,21 @@ export class MissionApiImpl implements MissionApi {
     const proposalResult = this.orchestration.proposeMission(ctx, input);
     const mission = unwrapResult(proposalResult);
 
+    // v3.0.0 WG-02: Emit mission.transitioned for CREATED state so replay engine
+    // can take a mission_start snapshot. proposeMission emits MISSION_CREATED via
+    // the orchestration event system but NOT through the kernel EventBus.
+    try {
+      this.events.emit(conn, ctx, {
+        type: 'mission.transitioned',
+        scope: 'mission',
+        propagation: 'local',
+        missionId: mission.missionId,
+        payload: { missionId: mission.missionId, fromState: null, newState: 'CREATED' },
+      });
+    } catch {
+      // Non-fatal: event emission failure must not break mission creation
+    }
+
     return this.buildMissionHandle(mission.missionId, 'CREATED', {
       allocated: mission.allocated.budget,
       consumed: 0,
