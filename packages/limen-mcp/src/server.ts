@@ -51,6 +51,7 @@ import { registerContextTools } from './tools/context.js';
 import { registerCognitiveTools } from './tools/cognitive.js';
 import { registerSearchTools } from './tools/search.js';
 import { registerLearningTools } from './tools/learning.js';
+import { registerA2AChatTools } from './tools/a2a-chat.js';
 import { registerHealthResource } from './resources/health.js';
 
 async function main(): Promise<void> {
@@ -86,6 +87,9 @@ async function main(): Promise<void> {
 
   // Register learning tools (Amendment 25 — F-15: pass adapter for governance)
   registerLearningTools(server, limen, adapter);
+
+  // Register A2A chat tools (direct-tool coordination channel — canonical per Femi directive 2026-04-19).
+  registerA2AChatTools(server, limen, 'stdio');
 
   // Register resources
   registerHealthResource(server, limen);

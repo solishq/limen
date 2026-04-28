@@ -345,7 +345,7 @@ function createRealObservationCollector(getConnection: () => DatabaseConnection)
  *
  * @param deps Optional overrides — caller-supplied deps take precedence over harness wiring.
  */
-export function createContextGovernor(deps?: Partial<CGPDeps>) {
+export function createContextGovernor(deps?: Partial<CGPDeps>, wmpConnectionRef?: { current: DatabaseConnection | null }) {
   // Connection factory for providers that need database access.
   // In production: deps.getConnection provides the connection.
   // In tests: the mock conn passed to admitContext is used via the pipeline.
@@ -369,7 +369,7 @@ export function createContextGovernor(deps?: Partial<CGPDeps>) {
 
   return createContextGovernorBase({
     ...deps,
-    wmpReader: deps?.wmpReader ?? createWmpInternalReader(),
+    wmpReader: deps?.wmpReader ?? createWmpInternalReader(wmpConnectionRef),
     ecbProvider: deps?.ecbProvider ?? createRealEcbProvider(),
     claimCollector: deps?.claimCollector ?? createRealClaimCandidateCollector(),
     observationCollector: deps?.observationCollector ?? createRealObservationCollector(getConnection),

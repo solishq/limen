@@ -17,7 +17,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { DatabaseConnection } from '../kernel/interfaces/database.js';
+import type { TenantScopedConnection } from '../kernel/tenant/tenant_scope.js';
 import type { OperationContext } from '../kernel/interfaces/common.js';
 import type { TimeProvider } from '../kernel/interfaces/time.js';
 import type { RetractClaimHandler } from '../claims/interfaces/claim_types.js';
@@ -32,7 +32,7 @@ import { resolveStability, type StabilityConfig } from './stability.js';
  * Injected from createLimen() at registration time.
  */
 export interface SelfHealingDeps {
-  readonly getConnection: () => DatabaseConnection;
+  readonly getConnection: () => TenantScopedConnection;
   readonly getContext: () => OperationContext;
   readonly retractClaim: RetractClaimHandler;
   readonly time: TimeProvider;
@@ -172,26 +172,35 @@ export function processSelfHealing(
         // and skips re-entry for this child.
         activeCascadeClaims.add(childId);
 
-        // Auto-retract with reason 'incorrect' (I-P12-04: CONSTITUTIONAL)
-        const retractResult = deps.retractClaim.execute(conn, ctx, {
-          claimId: childId as ClaimId,
-          reason: 'incorrect',
+        // C2: Wrap retract + consolidation_log INSERT in a transaction for atomicity per child.
+        // Inner retractClaim.execute() uses conn.transaction() internally, which becomes a
+        // savepoint inside this outer transaction (better-sqlite3 supports nesting).
+        const childResult = conn.transaction(() => {
+          // Auto-retract with reason 'incorrect' (I-P12-04: CONSTITUTIONAL)
+          const retractResult = deps.retractClaim.execute(conn, ctx, {
+            claimId: childId as ClaimId,
+            reason: 'incorrect',
+          });
+
+          if (retractResult.ok) {
+            // Log in consolidation_log (I-P12-05)
+            conn.run(
+              `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
+               VALUES (?, ?, 'self_heal', ?, ?, ?, ?)`,
+              [
+                randomUUID(), ctx.tenantId,
+                JSON.stringify([retractedClaimId]),
+                childId,
+                `Auto-retracted: effectiveConfidence ${effectiveConfidence.toFixed(4)} < threshold ${config.autoRetractThreshold}`,
+                time.nowISO(),
+              ],
+            );
+            return true;
+          }
+          return false;
         });
 
-        if (retractResult.ok) {
-          // Log in consolidation_log (I-P12-05)
-          conn.run(
-            `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
-             VALUES (?, ?, 'self_heal', ?, ?, ?, ?)`,
-            [
-              randomUUID(), ctx.tenantId,
-              JSON.stringify([retractedClaimId]),
-              childId,
-              `Auto-retracted: effectiveConfidence ${effectiveConfidence.toFixed(4)} < threshold ${config.autoRetractThreshold}`,
-              time.nowISO(),
-            ],
-          );
-
+        if (childResult) {
           events.push({
             retractedClaimId,
             derivedClaimId: childId,

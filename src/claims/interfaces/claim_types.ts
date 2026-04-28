@@ -758,6 +758,23 @@ export interface ClaimSystemDeps {
    * Takes precedence over static rbacActive when present.
    */
   readonly getRbacActive?: () => boolean;
+  /**
+   * v2.1.0: Per-instance rate limit counters (C-06 independent instances).
+   * When provided, used instead of module-level Map. When absent, a local Map is created.
+   */
+  readonly rateLimitCounters?: Map<string, import('../../kernel/interfaces/instance_context.js').RateLimitEntry>;
+  /**
+   * v2.1.0: Per-instance schema detection cache (C-06 independent instances).
+   * When provided, used instead of module-level cache. When absent, a local cache is created.
+   */
+  readonly schemaCache?: import('../../kernel/interfaces/instance_context.js').SchemaDetectionCache;
+  /**
+   * Phase 11+: Lazy getter for vector store (embedding cleanup on retraction).
+   * Getter pattern because vectorStore is initialized after ClaimSystem.
+   * When a claim is retracted, its vector embedding is stale and must be deleted.
+   * I-P11-30: Tombstone/retraction deletes embedding.
+   */
+  readonly getVectorStore?: () => import('../../vector/vector_store.js').VectorStore | null;
 }
 
 /**
@@ -779,7 +796,7 @@ export interface WmpPreEmissionCapture {
  */
 export interface WmpCaptureResult {
   /** Boundary event ID referencing the WMP snapshot */
-  readonly captureId: string;
+  readonly captureId: string | null;
   /**
    * WMP sourcing status per WMP §10.2:
    * 'not_verified': v1 default for tasks with initialized WMP
@@ -1046,8 +1063,8 @@ export const CCP_EVENTS = {
 /** CF-05, PSD-5: Maximum hops for evidence-path grounding (default, configurable per tenant/mission) */
 export const CLAIM_GROUNDING_MAX_HOPS = 3;
 
-/** FM-CCP-01: Maximum claims per mission */
-export const CLAIM_PER_MISSION_LIMIT = 500;
+/** FM-CCP-01: Maximum claims per mission (raised 2026-04-22 by founder directive for long-running A2A-heavy orchestration missions) */
+export const CLAIM_PER_MISSION_LIMIT = 5000;
 
 /** FM-CCP-01: Maximum claims per artifact (SC-4 amendment) */
 export const CLAIM_PER_ARTIFACT_LIMIT = 50;

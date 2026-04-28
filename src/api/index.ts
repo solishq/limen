@@ -39,6 +39,8 @@ import { createStringEncryption } from '../kernel/crypto/crypto_engine.js';
 import { createSubstrate as realCreateSubstrate, getPhase2Migrations } from '../substrate/index.js';
 import { createOrchestration as realCreateOrchestration, getPhase3Migrations } from '../orchestration/index.js';
 import { getPhase4BMigrations } from '../orchestration/migration/004_tenant_isolation.js';
+import type { TenantScopedConnection } from '../kernel/tenant/tenant_scope.js';
+import { createTenantScopedConnection } from '../kernel/tenant/tenant_scope.js';
 import { getPhase4D2ImmutabilityMigrations } from '../orchestration/migration/005_immutability_triggers.js';
 import { getPhase4D4TombstoneMigrations } from '../orchestration/migration/006_audit_tombstone.js';
 import type {
@@ -48,6 +50,9 @@ import type {
 } from './interfaces/api.js';
 
 import { randomUUID } from 'node:crypto';
+import { applyPermissionGateway, getAllGatewayPermissions } from './gateway/permission_gateway.js';
+export type { MethodPermission } from './gateway/permission_gateway.js';
+export { PERMISSION_MAP, getAllGatewayPermissions } from './gateway/permission_gateway.js';
 import { LimenError, ensureLimenError } from './errors/limen_error.js';
 import { resolveDefaults } from './defaults.js';
 import { buildOperationContext } from './enforcement/rbac_guard.js';
@@ -129,7 +134,7 @@ import { getVectorSearchMigrations, createVec0Table } from './migration/035_vect
 import { createVectorStore } from '../vector/vector_store.js';
 import { createEmbeddingQueue } from '../vector/embedding_queue.js';
 import { hybridRank } from '../vector/hybrid_ranker.js';
-import { checkDuplicate as checkDuplicateImpl } from '../vector/duplicate_detector.js';
+import { checkDuplicate as checkDuplicateImpl, distanceToSimilarity } from '../vector/duplicate_detector.js';
 import { DEFAULT_VECTOR_CONFIG } from '../vector/vector_types.js';
 import type { EmbeddingStats, DuplicateCheckResult } from '../vector/vector_types.js';
 import type { VectorStore } from '../vector/vector_store.js';
@@ -143,6 +148,16 @@ import { getCognitiveEngineMigrations } from './migration/036_cognitive_engine.j
 import { processSelfHealing, isInActiveCascade } from '../cognitive/self_healing.js';
 import { DEFAULT_SELF_HEALING_CONFIG } from '../cognitive/cognitive_types.js';
 import type { SelfHealingConfig } from '../cognitive/cognitive_types.js';
+import { computeDecayFactor, computeAgeMs } from '../cognitive/decay.js';
+import { computeCascadePenalty } from '../cognitive/cascade.js';
+import { resolveStability } from '../cognitive/stability.js';
+import { classifyFreshness } from '../cognitive/freshness.js';
+
+// Phase 5 fix: FTS5 retraction guard migration (v46)
+import { getFts5RetractionGuardMigrations } from './migration/037_fts5_retraction_guard.js';
+
+// Phase 13A: Sync Foundation migration (v47)
+import { getSyncFoundationMigrations } from './migration/037_sync_foundation.js';
 
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
@@ -185,6 +200,29 @@ import type { LimenEventName, LimenEventHandler } from '../plugins/plugin_types.
 import type { ExportOptions, LimenExportDocument, ImportOptions } from '../exchange/exchange_types.js';
 
 // ============================================================================
+// Vector Search Hydration Helpers (Task 4: compute real values instead of hardcoding)
+// ============================================================================
+
+/** Check if a claim is superseded by querying the relationship graph. */
+function vectorHydrateSuperseded(conn: DatabaseConnection, claimId: string): boolean {
+  const row = conn.get<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM claim_relationships WHERE to_claim_id = ? AND type = 'supersedes'`,
+    [claimId],
+  );
+  return (row?.cnt ?? 0) > 0;
+}
+
+/** Check if a claim is disputed (bidirectional 'contradicts' check, per I-P4-09). */
+function vectorHydrateDisputed(conn: DatabaseConnection, claimId: string): boolean {
+  const row = conn.get<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM claim_relationships WHERE (to_claim_id = ? OR from_claim_id = ?) AND type = 'contradicts'`,
+    [claimId, claimId],
+  );
+  return (row?.cnt ?? 0) > 0;
+}
+
+
+// ============================================================================
 // Re-export public types (convenience for consumers)
 // ============================================================================
 
@@ -220,6 +258,7 @@ export type {
   BackpressureConfig,
   ClaimApi, ClaimCreateInput, AssertClaimOutput,
   RelationshipCreateInput, RelateClaimsOutput,
+  ClaimRelationship, RelationshipType,
   ClaimQueryInput, ClaimQueryResult, RetractClaimInput,
   CognitiveConfig, RememberOptions, RememberResult,
   RecallOptions, BeliefView, ReflectEntry, ReflectResult,
@@ -461,6 +500,8 @@ function buildOrchestrationAdapter(
       ...getGovernanceSuiteMigrations(),                       // v43: Phase 10 governance suite
       ...getVectorSearchMigrations(),                          // v44: Phase 11 vector search
       ...getCognitiveEngineMigrations(),                         // v45: Phase 12 cognitive engine
+      ...getFts5RetractionGuardMigrations(),                      // v46: Phase 5 fix — FTS5 retraction guard
+      ...getSyncFoundationMigrations(),                            // v47: Phase 13A sync foundation
     ]);
     if (!phase4Governance.ok) {
       conn.close();
@@ -538,6 +579,10 @@ export async function createLimen(
   // Throws INVALID_CONFIG with helpful message if no providers detected.
   const resolvedConfig: LimenConfig = config ?? resolveDefaults();
 
+  // Phase 8: Extract debug flag for error construction throughout the factory.
+  // When true, LimenError preserves original stack traces and messages.
+  const debug = resolvedConfig.debug === true;
+
   // CF-004: Default to production wiring when deps not provided.
   // S3.3: Consumers call createLimen(config) — no internal imports needed.
   // R4C-004: Track orchestration connection for shutdown cleanup.
@@ -603,6 +648,16 @@ export async function createLimen(
     // Phase 4 §4.5, C.8: Thread requireRbac to kernel RBAC engine.
     // I-P4-10: Default false when undefined.
     ...(resolvedConfig.requireRbac ? { requireRbac: true } : {}),
+    // H12-FIX: Thread rate limiting config overrides to kernel rate limiter.
+    // exactOptionalPropertyTypes: only include defined values.
+    ...(resolvedConfig.rateLimiting ? {
+      rateLimiting: {
+        ...(resolvedConfig.rateLimiting.apiCallsPerMinute !== undefined
+          ? { apiCallsPerMinute: resolvedConfig.rateLimiting.apiCallsPerMinute } : {}),
+        ...(resolvedConfig.rateLimiting.emitEventPerMinute !== undefined
+          ? { emitEventPerMinute: resolvedConfig.rateLimiting.emitEventPerMinute } : {}),
+      },
+    } : {}),
   });
 
   if (!kernelResult.ok) {
@@ -635,7 +690,7 @@ export async function createLimen(
   } catch (err) {
     // R4C-005: Cleanup kernel on substrate construction failure
     try { destroyKernel(kernel); } catch { /* ignore cleanup errors */ }
-    throw ensureLimenError(err);
+    throw ensureLimenError(err, debug);
   }
 
   // ── Step 3.5: Create GovernanceSystem early for TransitionEnforcer (P0-A) ──
@@ -663,7 +718,7 @@ export async function createLimen(
   } catch (err) {
     // R4C-005: Cleanup kernel on orchestration construction failure
     try { destroyKernel(kernel); } catch { /* ignore cleanup errors */ }
-    throw ensureLimenError(err);
+    throw ensureLimenError(err, debug);
   }
 
   // ── Step 4.5a: Mission Recovery (Sprint 4, I-18) ──
@@ -715,6 +770,9 @@ export async function createLimen(
         ...getSecurityHardeningMigrations(),
         ...getGovernanceSuiteMigrations(),
         ...getVectorSearchMigrations(),
+        ...getCognitiveEngineMigrations(),
+        ...getFts5RetractionGuardMigrations(),
+        ...getSyncFoundationMigrations(),
       ]);
       if (recoveryMigResult.ok) {
         // P0-A: Pass transition service to recovery for governance-enforced transitions.
@@ -861,6 +919,9 @@ export async function createLimen(
       }));
     },
     getRbacActive: () => kernel.rbac.isActive(),
+    // Phase 11+: Lazy getter for vector store — initialized after createClaimSystem.
+    // I-P11-30: Retraction deletes stale embedding.
+    getVectorStore: () => vectorStore,
   });
 
   // WMP working memory system (closure-local — DC-P4-406, C-SEC-05)
@@ -879,7 +940,15 @@ export async function createLimen(
   // DatabaseLifecycle.open() returns a connection. We store it from kernel creation.
   // The kernel manages its own connection internally.
   let activeConn: DatabaseConnection | null = null;
-  const getConnection = (): DatabaseConnection => {
+  // DX-CRITICAL-FIX: Shutdown idempotency guard.
+  // Prevents double-shutdown and post-shutdown connection access.
+  let isShutDown = false;
+
+  const getConnection = (): TenantScopedConnection => {
+    // DX-CRITICAL-FIX: Reject connection requests after shutdown
+    if (isShutDown) {
+      throw new LimenError('ENGINE_SHUTDOWN', 'Limen has been shut down. Create a new instance.');
+    }
     if (!activeConn) {
       // Open a connection via the database lifecycle
       const openResult = kernel.database.open({
@@ -891,7 +960,10 @@ export async function createLimen(
       }
       activeConn = openResult.value;
     }
-    return activeConn;
+    // Wrap raw connection with tenant scope.
+    // In single-tenant mode (tenantId=null), createTenantScopedConnection returns a pass-through.
+    // TenantScopedConnection extends DatabaseConnection — backward compatible for all callers.
+    return createTenantScopedConnection(activeConn, getContext().tenantId);
   };
 
   // Build default operation context for single-user mode
@@ -906,6 +978,8 @@ export async function createLimen(
     'classify_claims', 'manage_classification_rules',
     'manage_protected_predicates',
     'request_erasure', 'export_compliance',
+    // v2.1.0: Include all gateway permissions so single-user mode has full access
+    ...getAllGatewayPermissions(),
   ]);
 
   // Library-mode agent identity: set via setDefaultAgent() after agent registration.
@@ -943,6 +1017,8 @@ export async function createLimen(
       // Timer errors do not propagate. Expiry will retry next tick.
     }
   }, 30_000);
+  // M6-FIX: unref() so this timer does not keep the Node.js process alive
+  checkpointExpiryTimer.unref();
 
   // CF-033 OP-01: Periodic WAL checkpoint timer.
   // PASSIVE checkpoint every 5 minutes to bound WAL file growth.
@@ -955,6 +1031,8 @@ export async function createLimen(
       // Checkpoint failure is non-fatal. WAL will be replayed on next open.
     }
   }, 300_000); // 5 minutes
+  // M6-FIX: unref() so this timer does not keep the Node.js process alive
+  walCheckpointTimer.unref();
 
   // Determine default model from providers config
   const defaultModel = resolvedConfig.providers?.[0]?.models[0] ?? 'default';
@@ -1086,7 +1164,7 @@ export async function createLimen(
     log({ level: 'info', category: 'init', message: 'sqlite-vec not available, vector features disabled', context: { error: vecErr instanceof Error ? vecErr.message : String(vecErr) } });
   }
 
-  vectorStore = createVectorStore(vectorAvailable, vectorDimensions);
+  vectorStore = createVectorStore(vectorAvailable, vectorDimensions, kernel.time);
   embeddingQueue = createEmbeddingQueue();
 
   // Phase 11: Background embedding interval (if configured)
@@ -1106,6 +1184,8 @@ export async function createLimen(
         // Background embedding errors are non-fatal
       }
     }, vectorConfig.embeddingInterval);
+    // M6-FIX: unref() so this timer does not keep the Node.js process alive
+    embeddingTimer.unref();
   }
 
   // Phase 5 + Phase 12: Create CognitiveNamespace for limen.cognitive
@@ -1181,7 +1261,7 @@ export async function createLimen(
   }
 
   // Phase 8: Read package version for export metadata
-  const limenVersion = '1.4.0'; // Matches package.json
+  const limenVersion = '2.0.0'; // Matches package.json
 
   // Build the Limen object
   const engine: Limen = {
@@ -1238,13 +1318,13 @@ export async function createLimen(
                 if (innerIterator?.return) {
                   return innerIterator.return();
                 }
-                return { value: undefined as unknown as StreamChunk, done: true };
+                return { value: undefined!, done: true };
               },
               async throw(err: Error): Promise<IteratorResult<StreamChunk>> {
                 if (innerIterator?.throw) {
                   return innerIterator.throw(err);
                 }
-                return { value: undefined as unknown as StreamChunk, done: true };
+                return { value: undefined!, done: true };
               },
             };
           },
@@ -1256,7 +1336,7 @@ export async function createLimen(
           metadata: metadataPromise,
         };
       } catch (error) {
-        const limeError = ensureLimenError(error);
+        const limeError = ensureLimenError(error, debug);
         return {
           text: Promise.reject(limeError),
           stream: (async function* (): AsyncGenerator<StreamChunk> {
@@ -1401,8 +1481,11 @@ export async function createLimen(
         const conn = getConnection();
         const ctx = getContext();
         return conn.transaction(() => {
-          conn.run(`DELETE FROM governance_classification_rules WHERE id = ? ${ctx.tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL'}`,
+          const result = conn.run(`DELETE FROM governance_classification_rules WHERE id = ? ${ctx.tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL'}`,
             ctx.tenantId !== null ? [ruleId, ctx.tenantId] : [ruleId]);
+          if (result.changes === 0) {
+            return { ok: false as const, error: { code: 'NOT_FOUND' as const, message: `Classification rule '${ruleId}' not found.`, spec: 'P10' } };
+          }
           kernel.audit.append(conn, {
             tenantId: ctx.tenantId,
             actorType: 'system',
@@ -1576,26 +1659,45 @@ export async function createLimen(
             [kr.claimId],
           );
           if (!claimRow) continue;
+
+          // C3/C4/C6/H7/H8: Proper hydration with decay, cascade penalty, stability, freshness
+          const claimPredicate = claimRow['predicate'] as string;
+          const claimConfidence = claimRow['confidence'] as number;
+          const claimValidAt = claimRow['valid_at'] as string;
+          const claimId = claimRow['id'] as string;
+          const nowMs = kernel.time.nowMs(); // C6: TimeProvider instead of Date.now()
+          const stabilityDays = resolveStability(claimPredicate, config?.cognitive?.stability); // H7: proper stability resolution
+          const ageMs = computeAgeMs(claimValidAt, nowMs);
+          const decayFactor = computeDecayFactor(ageMs, stabilityDays);
+          const cascadePenalty = computeCascadePenalty(conn, claimId); // C4: cascade penalty included
+          const effConf = claimConfidence * decayFactor * cascadePenalty;
+          const lastAccessMs = claimRow['last_accessed_at'] ? Date.parse(claimRow['last_accessed_at'] as string) : null;
+          const freshness = classifyFreshness(
+            lastAccessMs && Number.isFinite(lastAccessMs) ? lastAccessMs : null,
+            nowMs,
+            config?.cognitive?.freshness, // H8: freshness thresholds passed
+          );
+
           results.push({
             belief: {
               claimId: claimRow['id'] as ClaimId,
               subject: claimRow['subject'] as string,
-              predicate: claimRow['predicate'] as string,
-              value: claimRow['object_value'] ? JSON.parse(claimRow['object_value'] as string) : '',
-              confidence: claimRow['confidence'] as number,
-              validAt: claimRow['valid_at'] as string,
+              predicate: claimPredicate,
+              value: String(claimRow['object_value'] ?? ''),
+              confidence: claimConfidence,
+              validAt: claimValidAt,
               createdAt: claimRow['created_at'] as string,
-              superseded: false,
-              disputed: false,
-              effectiveConfidence: claimRow['confidence'] as number,
-              freshness: 'fresh' as const,
-              stability: (claimRow['stability'] ?? 90) as number,
+              superseded: vectorHydrateSuperseded(conn, claimRow['id'] as string),
+              disputed: vectorHydrateDisputed(conn, claimRow['id'] as string),
+              effectiveConfidence: effConf, // C4: includes decay * cascadePenalty
+              freshness, // H8: properly classified
+              stability: stabilityDays, // H7: resolveStability instead of hardcoded 90
               lastAccessedAt: (claimRow['last_accessed_at'] ?? null) as string | null,
               accessCount: (claimRow['access_count'] ?? 0) as number,
               reasoning: (claimRow['reasoning'] ?? null) as string | null,
             },
             relevance: -kr.distance, // Negate distance for consistency with FTS5 convention
-            score: 1 / (1 + kr.distance), // Convert distance to similarity-like score
+            score: distanceToSimilarity(kr.distance), // C3: correct L2→cosine formula from duplicate_detector
           });
         }
         return { ok: true as const, value: results };
@@ -1643,20 +1745,39 @@ export async function createLimen(
               [hs.claimId],
             );
             if (!claimRow) continue;
+
+            // C3/C4/C6/H7/H8: Proper hydration with decay, cascade penalty, stability, freshness
+            const hClaimPredicate = claimRow['predicate'] as string;
+            const hClaimConfidence = claimRow['confidence'] as number;
+            const hClaimValidAt = claimRow['valid_at'] as string;
+            const hClaimId = claimRow['id'] as string;
+            const hNowMs = kernel.time.nowMs(); // C6: TimeProvider instead of Date.now()
+            const hStabilityDays = resolveStability(hClaimPredicate, config?.cognitive?.stability); // H7: proper stability
+            const hAgeMs = computeAgeMs(hClaimValidAt, hNowMs);
+            const hDecayFactor = computeDecayFactor(hAgeMs, hStabilityDays);
+            const hCascadePenalty = computeCascadePenalty(conn, hClaimId); // C4: cascade penalty
+            const hEffConf = hClaimConfidence * hDecayFactor * hCascadePenalty;
+            const hLastAccessMs = claimRow['last_accessed_at'] ? Date.parse(claimRow['last_accessed_at'] as string) : null;
+            const hFreshness = classifyFreshness(
+              hLastAccessMs && Number.isFinite(hLastAccessMs) ? hLastAccessMs : null,
+              hNowMs,
+              config?.cognitive?.freshness, // H8: freshness thresholds passed
+            );
+
             results.push({
               belief: {
                 claimId: claimRow['id'] as ClaimId,
                 subject: claimRow['subject'] as string,
-                predicate: claimRow['predicate'] as string,
-                value: claimRow['object_value'] ? JSON.parse(claimRow['object_value'] as string) : '',
-                confidence: claimRow['confidence'] as number,
-                validAt: claimRow['valid_at'] as string,
+                predicate: hClaimPredicate,
+                value: String(claimRow['object_value'] ?? ''),
+                confidence: hClaimConfidence,
+                validAt: hClaimValidAt,
                 createdAt: claimRow['created_at'] as string,
-                superseded: false,
-                disputed: false,
-                effectiveConfidence: claimRow['confidence'] as number,
-                freshness: 'fresh' as const,
-                stability: (claimRow['stability'] ?? 90) as number,
+                superseded: vectorHydrateSuperseded(conn, claimRow['id'] as string),
+                disputed: vectorHydrateDisputed(conn, claimRow['id'] as string),
+                effectiveConfidence: hEffConf, // C4: includes decay * cascadePenalty
+                freshness: hFreshness, // H8: properly classified
+                stability: hStabilityDays, // H7: resolveStability instead of hardcoded 90
                 lastAccessedAt: (claimRow['last_accessed_at'] ?? null) as string | null,
                 accessCount: (claimRow['access_count'] ?? 0) as number,
                 reasoning: (claimRow['reasoning'] ?? null) as string | null,
@@ -1768,6 +1889,9 @@ export async function createLimen(
     // Modifies closure-captured defaultAgentId — safe after deep freeze
     // because the function reference is frozen, not the captured variable.
     setDefaultAgent(agentId: import('../kernel/interfaces/index.js').AgentId) {
+      if (!agentId || typeof agentId !== 'string' || agentId.trim().length === 0) {
+        throw new LimenError('INVALID_INPUT', 'setDefaultAgent requires a non-empty agentId string');
+      }
       defaultAgentId = agentId;
     },
 
@@ -1828,6 +1952,11 @@ export async function createLimen(
             };
           },
           missionId: convenienceMissionId ?? 'mission:convenience' as MissionId,
+          // Phase 3: Provide transaction wrapper for all-or-nothing import semantics
+          withTransaction: <T>(fn: () => T): T => {
+            const conn = getConnection();
+            return conn.transaction(fn);
+          },
         },
         document,
         options,
@@ -1838,6 +1967,10 @@ export async function createLimen(
     // CF-011: Each step wrapped in try/catch so that one failure
     // does not prevent subsequent cleanup. Errors are collected.
     async shutdown(): Promise<void> {
+      // DX-CRITICAL-FIX: Idempotent shutdown — second call is a no-op
+      if (isShutDown) return;
+      isShutDown = true;
+
       log({ level: 'info', category: 'shutdown', message: 'Limen shutdown starting' });
       const shutdownErrors: Error[] = [];
 
@@ -1944,7 +2077,7 @@ export async function createLimen(
       // but all steps have completed their cleanup attempt.
       if (shutdownErrors.length > 0) {
         log({ level: 'error', category: 'shutdown', message: 'Shutdown completed with errors', context: { errorCount: shutdownErrors.length, firstError: shutdownErrors[0]!.message } });
-        throw ensureLimenError(shutdownErrors[0]!);
+        throw ensureLimenError(shutdownErrors[0]!, debug);
       }
       log({ level: 'info', category: 'shutdown', message: 'Limen shutdown complete' });
     },
@@ -1961,6 +2094,18 @@ export async function createLimen(
     connect: (a, b, t) => engine.connect(a, b, t as 'supports' | 'contradicts' | 'supersedes' | 'derived_from'),
   };
   pluginRegistry.enableApi();
+
+  // ── Step 5.6: Permission Gateway (v2.1.0 Phase 2) ──
+  // Structural RBAC enforcement: wraps every public method with permission checks.
+  // MUST run before deepFreeze — gateway mutates method references on the engine.
+  // I-13 (authorization completeness), FPD-5 (RBAC before rate limit)
+  applyPermissionGateway(
+    engine as unknown as Record<string, unknown>,
+    kernel.rbac,
+    kernel.rateLimiter,
+    getContext,
+    getConnection,
+  );
 
   // ── Step 6: Deep freeze (C-07, FPD-4) ──
 

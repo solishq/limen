@@ -1,0 +1,51 @@
+{
+  "id": "LIMEN-J-011",
+  "name": "CLI Bulk Recall",
+  "statement": "A developer recalls beliefs for multiple subjects in a single command, receiving grouped results that reduce round-trips compared to individual recall calls.",
+  "audience": ["developer"],
+  "tier": 1,
+  "owner": "femi",
+  "authority": "product-authority",
+  "entrySurface": ["packages/limen-cli/README.md:100-120"],
+  "successCriteria": [
+    "limen recall-bulk --subjects 'entity:project:alpha,entity:user:bob' returns JSON array with one result set per subject",
+    "Each result set contains subject (string) and beliefs (array) fields",
+    "limen recall-bulk --subjects 'entity:test:x' --predicate 'test.*' filters by predicate",
+    "limen recall-bulk --subjects 'entity:test:x' --limit 5 limits results per subject",
+    "Failed subjects include an error field instead of crashing the entire call",
+    "All stdout is valid JSON, all errors go to stderr as JSON"
+  ],
+  "failureCriteria": [
+    "limen recall-bulk without --subjects produces non-JSON error or crashes",
+    "limen recall-bulk --subjects '' (empty) crashes instead of returning JSON error",
+    "limen recall-bulk --limit 'abc' crashes instead of returning JSON error",
+    "A single failed subject causes the entire command to fail",
+    "Any command outputs non-JSON to stdout"
+  ],
+  "recoveryRequired": true,
+  "recoverySurface": ["packages/limen-cli/README.md:35-37"],
+  "deterministicWitnesses": ["cold-start", "recovery"],
+  "exploratoryWitnesses": ["hostile"],
+  "distributionTargets": ["npm:limen-cli"],
+  "preconditions": [
+    "Node.js >= 22 installed",
+    "npm available",
+    "limen-cli installed globally",
+    "limen init completed (~/.limen/ exists with master key and config)"
+  ],
+  "stateModel": {
+    "startState": "limen-initialized",
+    "successState": "bulk-results-returned",
+    "failureStates": ["bulk-failed", "invalid-subjects", "invalid-limit", "invalid-confidence"],
+    "transitions": [
+      { "from": "limen-initialized", "action": "limen recall-bulk --subjects 'entity:a,entity:b'", "to": "bulk-results-returned" },
+      { "from": "limen-initialized", "action": "limen recall-bulk (missing --subjects)", "to": "invalid-subjects" },
+      { "from": "limen-initialized", "action": "limen recall-bulk --subjects ','", "to": "invalid-subjects" },
+      { "from": "limen-initialized", "action": "limen recall-bulk --subjects 'entity:x' --limit 'abc'", "to": "invalid-limit" },
+      { "from": "limen-initialized", "action": "engine error during bulk recall", "to": "bulk-failed" }
+    ]
+  },
+  "lifecycle": "proposed",
+  "createdAt": "2026-04-10T14:00:00Z",
+  "updatedAt": "2026-04-10T14:00:00Z"
+}

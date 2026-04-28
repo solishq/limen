@@ -138,6 +138,7 @@ async function withLimen(
     dataDir,
     masterKey: masterKey(),
     providers: [],
+    rateLimiting: { apiCallsPerMinute: 10000 }, // High limit for test throughput
     ...(opts.vector ? { vector: opts.vector } : {}),
   });
   try {

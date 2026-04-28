@@ -48,14 +48,17 @@ describe('Phase 4: Cascade retraction constants (CONSTITUTIONAL)', () => {
  * Create a mock database connection that returns controlled results
  * for cascade traversal queries.
  */
+import type { TenantScopedConnection } from '../../src/kernel/tenant/tenant_scope.js';
+
 function createMockConn(graph: {
   relationships: Array<{ from_claim_id: string; to_claim_id: string; type: string }>;
   claims: Array<{ id: string; status: string }>;
-}) {
-  return {
+}): TenantScopedConnection {
+  const conn = {
     dataDir: '/tmp/test',
     schemaVersion: 40,
     tenancyMode: 'single' as const,
+    tenantId: null,
     transaction: <T>(fn: () => T): T => fn(),
     run: () => ({ changes: 0, lastInsertRowid: 0 }),
     close: () => ({ ok: true as const, value: undefined }),
@@ -78,6 +81,8 @@ function createMockConn(graph: {
       return undefined;
     },
   };
+  // TenantScopedConnection requires .raw — in test, point back to self (single mode = no injection)
+  return { ...conn, raw: conn } as TenantScopedConnection;
 }
 
 describe('Phase 4: computeCascadePenalty (DC-P4-203, DC-P4-801, DC-P4-802)', () => {
@@ -196,5 +201,41 @@ describe('Phase 4: computeCascadePenalty (DC-P4-203, DC-P4-801, DC-P4-802)', () 
     });
     const penalty = computeCascadePenalty(conn, 'child');
     assert.strictEqual(penalty, 0.25);
+  });
+
+  it('S-005 fix: retracted parent also checks grandparents for deeper penalty', () => {
+    // S-005: Previously, when parent WAS retracted, its grandparents were NOT checked.
+    // Fix: always check grandparents regardless of parent status.
+    // child -> parent (retracted=0.5) -> grandparent (retracted=0.25)
+    // Worst penalty should be 0.25, not 0.5
+    const conn = createMockConn({
+      relationships: [
+        { from_claim_id: 'child', to_claim_id: 'parent', type: 'derived_from' },
+        { from_claim_id: 'parent', to_claim_id: 'grandparent', type: 'derived_from' },
+      ],
+      claims: [
+        { id: 'parent', status: 'retracted' },
+        { id: 'grandparent', status: 'retracted' },
+      ],
+    });
+    const penalty = computeCascadePenalty(conn, 'child');
+    // With S-005 fix: worst penalty is 0.25 (grandparent retracted at depth 2)
+    assert.strictEqual(penalty, CASCADE_SECOND_DEGREE_MULTIPLIER);
+  });
+
+  it('S-005 rejection: without fix, retracted parent would only yield 0.5', () => {
+    // Verifies the fix distinguishes between 0.5 (parent only) and 0.25 (grandparent too)
+    const connWithActiveGP = createMockConn({
+      relationships: [
+        { from_claim_id: 'child', to_claim_id: 'parent', type: 'derived_from' },
+        { from_claim_id: 'parent', to_claim_id: 'grandparent', type: 'derived_from' },
+      ],
+      claims: [
+        { id: 'parent', status: 'retracted' },
+        { id: 'grandparent', status: 'active' },
+      ],
+    });
+    // Grandparent active: penalty stays at 0.5 from retracted parent
+    assert.strictEqual(computeCascadePenalty(connWithActiveGP, 'child'), CASCADE_FIRST_DEGREE_MULTIPLIER);
   });
 });

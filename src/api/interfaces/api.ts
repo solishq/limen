@@ -65,6 +65,13 @@ import type {
   ConsentRecord, ConsentCreateInput,
 } from '../../security/security_types.js';
 
+// Phase 10: Governance classification types for consumer-facing GovernanceApi
+import type {
+  ErasureRequest, ErasureCertificate,
+  ComplianceExportOptions, Soc2AuditPackage,
+  ClassificationRule, ProtectedPredicateRule,
+} from '../../governance/classification/governance_types.js';
+
 // Phase 4: WMP input/output types for consumer-facing WorkingMemoryApi
 import type {
   WriteWorkingMemoryInput, WriteWorkingMemoryOutput,
@@ -79,6 +86,9 @@ export type {
   ClaimQueryInput, ClaimQueryResult,
   RetractClaimInput,
   SearchClaimInput, SearchClaimResult,
+  // F-BR4-004: CLI and other projection-layer consumers need the
+  // relationship type/shape to iterate contradicts edges on a belief.
+  ClaimRelationship, RelationshipType,
 } from '../../claims/interfaces/claim_types.js';
 
 export type {
@@ -162,6 +172,19 @@ export interface ClaimApi {
   retractClaim(input: RetractClaimInput): Result<void>;
   /** Phase 2: Full-text search over claim content using FTS5. Not a new system call. */
   searchClaims(input: SearchClaimInput): Result<SearchClaimResult>;
+  /**
+   * Read-only single-claim status lookup. Returns the claim's status
+   * ('active' | 'retracted') or 'not_found' if no claim with the given
+   * ID exists within the caller's tenant scope. Used by CLI and other
+   * projection-layer consumers to derive accurate dispute/supersession
+   * state from relationship edges without re-implementing the query.
+   *
+   * Permission: 'query_claims' (same as queryClaims — strictly narrower scope).
+   * Added 2026-04-11 to close F-BR4-004 (dispute projection required a
+   * bounded counterpart-status lookup the projection layer could not
+   * derive from queryClaims alone).
+   */
+  getClaimStatus(claimId: string): Result<'active' | 'retracted' | 'not_found'>;
 }
 
 // Sprint 7: Consumer-facing WorkingMemoryApi — no conn/ctx required (DC-P4-406, C-SEC-05)
@@ -174,19 +197,19 @@ export interface WorkingMemoryApi {
 // Phase 10: Consumer-facing GovernanceApi — no conn/ctx required
 export interface GovernanceApi {
   /** Phase 10 §10.4: Execute GDPR erasure with certificate generation. I-P10-20. */
-  erasure(request: import('../../governance/classification/governance_types.js').ErasureRequest): import('../../kernel/interfaces/common.js').Result<import('../../governance/classification/governance_types.js').ErasureCertificate>;
+  erasure(request: ErasureRequest): Result<ErasureCertificate>;
   /** Phase 10 §10.5: Generate SOC 2 audit export. I-P10-30. */
-  exportAudit(options: import('../../governance/classification/governance_types.js').ComplianceExportOptions): import('../../kernel/interfaces/common.js').Result<import('../../governance/classification/governance_types.js').Soc2AuditPackage>;
+  exportAudit(options: ComplianceExportOptions): Result<Soc2AuditPackage>;
   /** Phase 10 §10.2: Add classification rule. */
-  addRule(rule: Omit<import('../../governance/classification/governance_types.js').ClassificationRule, 'id' | 'createdAt'>): import('../../kernel/interfaces/common.js').Result<import('../../governance/classification/governance_types.js').ClassificationRule>;
+  addRule(rule: Omit<ClassificationRule, 'id' | 'createdAt'>): Result<ClassificationRule>;
   /** Phase 10 §10.2: Remove classification rule. */
-  removeRule(ruleId: string): import('../../kernel/interfaces/common.js').Result<void>;
+  removeRule(ruleId: string): Result<void>;
   /** Phase 10 §10.2: List all classification rules. */
-  listRules(): import('../../kernel/interfaces/common.js').Result<readonly import('../../governance/classification/governance_types.js').ClassificationRule[]>;
+  listRules(): Result<readonly ClassificationRule[]>;
   /** Phase 10 §10.3: Add protected predicate rule. */
-  protectPredicate(rule: Omit<import('../../governance/classification/governance_types.js').ProtectedPredicateRule, 'id' | 'createdAt'>): import('../../kernel/interfaces/common.js').Result<import('../../governance/classification/governance_types.js').ProtectedPredicateRule>;
+  protectPredicate(rule: Omit<ProtectedPredicateRule, 'id' | 'createdAt'>): Result<ProtectedPredicateRule>;
   /** Phase 10 §10.3: List protected predicate rules. */
-  listProtectedPredicates(): import('../../kernel/interfaces/common.js').Result<readonly import('../../governance/classification/governance_types.js').ProtectedPredicateRule[]>;
+  listProtectedPredicates(): Result<readonly ProtectedPredicateRule[]>;
 }
 
 // Phase 9: Consumer-facing ConsentApi — no conn/ctx required
@@ -331,7 +354,7 @@ export interface LimenConfig {
   /**
    * Phase 12: Self-healing configuration.
    * Controls automatic retraction of derived claims when parent claims are retracted.
-   * Default: enabled=true, threshold=0.1, maxDepth=5.
+   * Default: enabled=false, threshold=0.1, maxDepth=5.
    */
   readonly selfHealing?: import('../../cognitive/cognitive_types.js').SelfHealingConfig;
 
@@ -341,6 +364,14 @@ export interface LimenConfig {
    * I-P12-50: verify() returns result; caller decides what to do.
    */
   readonly verificationProvider?: import('../../cognitive/cognitive_types.js').VerificationProvider | null;
+
+  /**
+   * Phase 8: Debug mode.
+   * When true, preserves original JS stack traces and error messages in LimenError
+   * instead of redacting them. MUST be false in production — exposes internal details.
+   * Default: false.
+   */
+  readonly debug?: boolean;
 }
 
 /**
@@ -1462,6 +1493,9 @@ export interface DataApi {
 
   /** I-02: Selective purge. Permission: 'purge_data' */
   purge(filter: PurgeFilter): Promise<{ purged: number }>;
+
+  /** GDPR: Purge ALL data for a specific tenant across all tenant-scoped tables. Permission: 'purge_data' */
+  purgeByTenant(tenantId: string): Promise<{ purged: number }>;
 }
 
 // ============================================================================
@@ -1492,6 +1526,7 @@ export type LimenErrorCode =
   | 'PROVIDER_UNAVAILABLE'              // FM-06, I-16
   | 'SCHEMA_VALIDATION_FAILED'          // S28
   | 'ENGINE_UNHEALTHY'                  // S32.4
+  | 'ENGINE_SHUTDOWN'                    // Post-shutdown connection access
   | 'SESSION_NOT_FOUND'                 // S26
   | 'INVALID_CONFIG'                    // S3.3
   | 'INVALID_INPUT'                     // CF-019, CF-028 (input validation at API boundary)
@@ -1544,7 +1579,8 @@ export type LimenErrorCode =
   | 'MANIFEST_TRUST_VIOLATION'          // BC-100: Capability manifest trust tier violation
   | 'RESUME_TOKEN_INVALID'              // BC-138: Resume token invalid or consumed
   | 'RESUME_TOKEN_EXPIRED'              // BC-136: Resume token expired
-  | 'IDEMPOTENCY_CONFLICT';             // BC-133: Same idempotency key, different payload
+  | 'IDEMPOTENCY_CONFLICT'              // BC-133: Same idempotency key, different payload
+  | 'NOT_IMPLEMENTED';                   // Method stub not yet implemented
 
 // ============================================================================
 // §6.14: Backpressure Types (S36)

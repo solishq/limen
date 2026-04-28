@@ -18,7 +18,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { DatabaseConnection } from '../kernel/interfaces/database.js';
+import type { TenantScopedConnection } from '../kernel/tenant/tenant_scope.js';
 import type { OperationContext } from '../kernel/interfaces/common.js';
 import type { MissionId } from '../kernel/interfaces/index.js';
 import type { TimeProvider } from '../kernel/interfaces/time.js';
@@ -40,7 +40,7 @@ import { resolveStability, type StabilityConfig } from './stability.js';
  * Dependencies for the consolidation engine.
  */
 export interface ConsolidationDeps {
-  readonly getConnection: () => DatabaseConnection;
+  readonly getConnection: () => TenantScopedConnection;
   readonly getContext: () => OperationContext;
   readonly retractClaim: RetractClaimHandler;
   readonly relateClaims: RelateClaimsHandler;
@@ -55,7 +55,7 @@ export interface ConsolidationDeps {
  * Shared between merge winner selection and conflict resolution.
  */
 function computeEffectiveConfidence(
-  conn: DatabaseConnection,
+  conn: TenantScopedConnection,
   claimId: string,
   confidence: number,
   validAt: string,
@@ -117,7 +117,7 @@ export function consolidate(
  * I-P12-13: Every merge logged in consolidation_log.
  */
 function runMerge(
-  conn: DatabaseConnection,
+  conn: TenantScopedConnection,
   ctx: OperationContext,
   deps: ConsolidationDeps,
   opts: Required<ConsolidationOptions>,
@@ -225,44 +225,54 @@ function runMerge(
         loserId = winnerId === claim.id ? candidateClaim.id : claim.id;
       }
 
-      // Retract loser with reason 'superseded' (I-P12-11)
-      const retractResult = deps.retractClaim.execute(conn, ctx, {
-        claimId: loserId as ClaimId,
-        reason: 'superseded',
-      });
-
-      if (retractResult.ok) {
-        // Create 'supersedes' relationship from winner to loser (I-P12-12)
-        // Need a missionId — use the loser's source_mission_id or a synthetic one
-        const loserMission = conn.get<{ source_mission_id: string | null }>(
-          `SELECT source_mission_id FROM claim_assertions WHERE id = ?`,
-          [loserId],
-        );
-        const missionId = (loserMission?.source_mission_id ?? 'mission:consolidation') as MissionId;
-
-        deps.relateClaims.execute(conn, ctx, {
-          fromClaimId: winnerId as ClaimId,
-          toClaimId: loserId as ClaimId,
-          type: 'supersedes',
-          missionId,
+      // C2: Wrap retract + relate + consolidation_log in a single transaction for atomicity.
+      // Inner handlers (retractClaim, relateClaims) use conn.transaction() internally,
+      // which becomes savepoints inside this outer transaction (better-sqlite3 supports nesting).
+      const mergeResult = conn.transaction(() => {
+        // Retract loser with reason 'superseded' (I-P12-11)
+        const retractResult = deps.retractClaim.execute(conn, ctx, {
+          claimId: loserId as ClaimId,
+          reason: 'superseded',
         });
 
-        // Log in consolidation_log (I-P12-13)
-        const entry: ConsolidationLogEntry = {
-          id: randomUUID(),
-          operation: 'merge',
-          sourceClaimIds: [winnerId, loserId],
-          targetClaimId: winnerId,
-          reason: `Merged: similarity >= ${opts.mergeSimilarityThreshold}, winner EC=${ec1 > ec2 ? ec1.toFixed(4) : ec2.toFixed(4)}`,
-        };
+        if (retractResult.ok) {
+          // Create 'supersedes' relationship from winner to loser (I-P12-12)
+          // Need a missionId — use the loser's source_mission_id or a synthetic one
+          const loserMission = conn.get<{ source_mission_id: string | null }>(
+            `SELECT source_mission_id FROM claim_assertions WHERE id = ?`,
+            [loserId],
+          );
+          const missionId = (loserMission?.source_mission_id ?? 'mission:consolidation') as MissionId;
 
-        conn.run(
-          `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [entry.id, tenantId, entry.operation, JSON.stringify(entry.sourceClaimIds), entry.targetClaimId, entry.reason, nowISO],
-        );
+          deps.relateClaims.execute(conn, ctx, {
+            fromClaimId: winnerId as ClaimId,
+            toClaimId: loserId as ClaimId,
+            type: 'supersedes',
+            missionId,
+          });
 
-        log.push(entry);
+          // Log in consolidation_log (I-P12-13)
+          const entry: ConsolidationLogEntry = {
+            id: randomUUID(),
+            operation: 'merge',
+            sourceClaimIds: [winnerId, loserId],
+            targetClaimId: winnerId,
+            reason: `Merged: similarity >= ${opts.mergeSimilarityThreshold}, winner EC=${ec1 > ec2 ? ec1.toFixed(4) : ec2.toFixed(4)}`,
+          };
+
+          conn.run(
+            `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [entry.id, tenantId, entry.operation, JSON.stringify(entry.sourceClaimIds), entry.targetClaimId, entry.reason, nowISO],
+          );
+
+          return { ok: true as const, entry };
+        }
+        return { ok: false as const, entry: null };
+      });
+
+      if (mergeResult.ok && mergeResult.entry) {
+        log.push(mergeResult.entry);
         processed.add(loserId);
         merged++;
       }
@@ -280,7 +290,7 @@ function runMerge(
  * I-P12-15: Sets archived=1, never deletes.
  */
 function runArchive(
-  conn: DatabaseConnection,
+  conn: TenantScopedConnection,
   deps: ConsolidationDeps,
   opts: Required<ConsolidationOptions>,
   nowMs: number,
@@ -325,25 +335,30 @@ function runArchive(
     );
     if (ec >= opts.archiveMaxConfidence) continue;
 
-    // Archive: set archived=1 (I-P12-15: reversible, never deleted)
-    conn.run(
-      `UPDATE claim_assertions SET archived = 1 WHERE id = ?`,
-      [claim.id],
-    );
+    // C2: Wrap archive UPDATE + consolidation_log INSERT in a transaction for atomicity.
+    const entry: ConsolidationLogEntry = conn.transaction(() => {
+      // Archive: set archived=1 (I-P12-15: reversible, never deleted)
+      conn.run(
+        `UPDATE claim_assertions SET archived = 1 WHERE id = ?`,
+        [claim.id],
+      );
 
-    const entry: ConsolidationLogEntry = {
-      id: randomUUID(),
-      operation: 'archive',
-      sourceClaimIds: [claim.id],
-      targetClaimId: null,
-      reason: `Archived: stale, EC=${ec.toFixed(4)} < ${opts.archiveMaxConfidence}, access=${claim.access_count}`,
-    };
+      const logEntry: ConsolidationLogEntry = {
+        id: randomUUID(),
+        operation: 'archive',
+        sourceClaimIds: [claim.id],
+        targetClaimId: null,
+        reason: `Archived: stale, EC=${ec.toFixed(4)} < ${opts.archiveMaxConfidence}, access=${claim.access_count}`,
+      };
 
-    conn.run(
-      `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [entry.id, tenantId, entry.operation, JSON.stringify(entry.sourceClaimIds), entry.targetClaimId, entry.reason, nowISO],
-    );
+      conn.run(
+        `INSERT INTO consolidation_log (id, tenant_id, operation, source_claim_ids, target_claim_id, reason, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [logEntry.id, tenantId, logEntry.operation, JSON.stringify(logEntry.sourceClaimIds), logEntry.targetClaimId, logEntry.reason, nowISO],
+      );
+
+      return logEntry;
+    });
 
     log.push(entry);
     archived++;
@@ -358,7 +373,7 @@ function runArchive(
  * Stored in connection_suggestions as pending.
  */
 function runSuggestResolution(
-  conn: DatabaseConnection,
+  conn: TenantScopedConnection,
   deps: ConsolidationDeps,
   _opts: Required<ConsolidationOptions>,
   nowMs: number,

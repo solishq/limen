@@ -338,6 +338,58 @@ export class DataApiImpl implements DataApi {
 
       // Delete HITL approvals
       purged += conn.run('DELETE FROM hitl_approval_queue WHERE mission_id = ?', [mId]).changes;
+
+      // Delete governance runs (gov_runs has mission_id)
+      purged += conn.run('DELETE FROM gov_attempts WHERE mission_id = ?', [mId]).changes;
+      purged += conn.run('DELETE FROM gov_runs WHERE mission_id = ?', [mId]).changes;
+
+      // Delete working memory entries (via task_id join through core_tasks)
+      const wmTasks = conn.query<{ id: string }>(
+        'SELECT id FROM core_tasks WHERE mission_id = ?', [mId],
+      );
+      for (const task of wmTasks) {
+        purged += conn.run(
+          'DELETE FROM working_memory_entries WHERE task_id = ?', [task.id],
+        ).changes;
+      }
+
+      // Delete WMP boundary events (has mission_id directly)
+      // Note: wmp_boundary_events has immutability triggers (WMP-I6) that prevent DELETE.
+      // For purge operations, we drop and recreate the trigger within this transaction.
+      conn.run('DROP TRIGGER IF EXISTS trg_wmp_boundary_events_immutable_delete');
+      purged += conn.run('DELETE FROM wmp_boundary_events WHERE mission_id = ?', [mId]).changes;
+      conn.run(`CREATE TRIGGER IF NOT EXISTS trg_wmp_boundary_events_immutable_delete
+        BEFORE DELETE ON wmp_boundary_events
+        BEGIN
+          SELECT RAISE(ABORT, 'WMP-I6: Boundary events are immutable -- no DELETE permitted');
+        END`);
+
+      // Delete narrative snapshots (has mission_id directly)
+      purged += conn.run('DELETE FROM narrative_snapshots WHERE mission_id = ?', [mId]).changes;
+
+      // Delete claim importance (via claim_assertions.source_mission_id FK)
+      purged += conn.run(
+        `DELETE FROM claim_importance WHERE claim_id IN (
+          SELECT id FROM claim_assertions WHERE source_mission_id = ?
+        )`, [mId],
+      ).changes;
+
+      // Delete connection suggestions (via claim_assertions.source_mission_id FK)
+      purged += conn.run(
+        `DELETE FROM connection_suggestions WHERE from_claim_id IN (
+          SELECT id FROM claim_assertions WHERE source_mission_id = ?
+        ) OR to_claim_id IN (
+          SELECT id FROM claim_assertions WHERE source_mission_id = ?
+        )`, [mId, mId],
+      ).changes;
+
+      // Delete consolidation log entries (via source_claim_ids containing mission claims)
+      // consolidation_log.source_claim_ids is a JSON array — delete entries referencing mission claims
+      purged += conn.run(
+        `DELETE FROM consolidation_log WHERE target_claim_id IN (
+          SELECT id FROM claim_assertions WHERE source_mission_id = ?
+        )`, [mId],
+      ).changes;
     }
 
     // Delete missions (children first, then parent — reverse order for FK safety)
@@ -413,5 +465,187 @@ export class DataApiImpl implements DataApi {
     ).changes;
 
     return purged;
+  }
+
+  /**
+   * GDPR: Purge ALL data for a specific tenant across all tenant-scoped tables.
+   * Permission: 'purge_data'
+   *
+   * Deletes from all tables that have a tenant_id column, in FK dependency order.
+   * I-06: Audit log entries are NEVER purged (they are sanitized by the erasure engine instead).
+   * I-31: claim_relationships immutability triggers are temporarily dropped for the purge.
+   *
+   * This is the nuclear option for tenant offboarding / GDPR "right to be forgotten" at tenant scope.
+   */
+  async purgeByTenant(tenantId: string): Promise<{ purged: number }> {
+    const conn = this.getConnection();
+    const ctx = this.getContext();
+
+    requirePermission(this.rbac, ctx, 'purge_data');
+    requireRateLimit(this.rateLimiter, conn, ctx, 'api_calls');
+
+    if (!tenantId || tenantId.trim().length === 0) {
+      throw new LimenError('INVALID_INPUT', 'tenantId is required for purgeByTenant');
+    }
+
+    let totalPurged = 0;
+
+    conn.transaction(() => {
+      // ── Leaf tables first (children before parents in FK order) ──
+
+      // Task dependencies (via task FK)
+      const tasks = conn.query<{ id: string }>(
+        'SELECT id FROM core_tasks WHERE tenant_id = ?', [tenantId],
+      );
+      for (const task of tasks) {
+        totalPurged += conn.run(
+          'DELETE FROM core_task_dependencies WHERE from_task = ? OR to_task = ?',
+          [task.id, task.id],
+        ).changes;
+        // Working memory entries (keyed on task_id)
+        totalPurged += conn.run(
+          'DELETE FROM working_memory_entries WHERE task_id = ?', [task.id],
+        ).changes;
+      }
+
+      // Artifact dependencies
+      const artifacts = conn.query<{ id: string }>(
+        'SELECT id FROM core_artifacts WHERE tenant_id = ?', [tenantId],
+      );
+      for (const art of artifacts) {
+        totalPurged += conn.run(
+          'DELETE FROM core_artifact_dependencies WHERE artifact_id = ?', [art.id],
+        ).changes;
+      }
+      // Also dependencies where this tenant's missions are readers
+      const missions = conn.query<{ id: string }>(
+        'SELECT id FROM core_missions WHERE tenant_id = ?', [tenantId],
+      );
+      for (const m of missions) {
+        totalPurged += conn.run(
+          'DELETE FROM core_artifact_dependencies WHERE reading_mission_id = ?', [m.id],
+        ).changes;
+      }
+
+      // Conversation turns (child FK to core_conversations)
+      const convs = conn.query<{ id: string }>(
+        'SELECT id FROM core_conversations WHERE tenant_id = ?', [tenantId],
+      );
+      for (const conv of convs) {
+        totalPurged += conn.run(
+          'DELETE FROM core_conversation_turns WHERE conversation_id = ?', [conv.id],
+        ).changes;
+      }
+
+      // I-31: Temporarily drop immutability triggers on claim_relationships for GDPR purge.
+      // Safe: better-sqlite3 is synchronous/single-threaded — no concurrent exploit window.
+      conn.run('DROP TRIGGER IF EXISTS claim_relationships_no_delete');
+      conn.run('DROP TRIGGER IF EXISTS claim_relationships_no_update');
+
+      // Claim-related tables
+      totalPurged += conn.run('DELETE FROM claim_evidence WHERE claim_id IN (SELECT id FROM claim_assertions WHERE tenant_id = ?)', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM claim_relationships WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM claim_artifact_refs WHERE claim_id IN (SELECT id FROM claim_assertions WHERE tenant_id = ?)', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM claim_importance WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM connection_suggestions WHERE tenant_id = ?', [tenantId]).changes;
+
+      // Recreate I-31 triggers
+      conn.run(`CREATE TRIGGER IF NOT EXISTS claim_relationships_no_update
+        BEFORE UPDATE ON claim_relationships
+        BEGIN
+          SELECT RAISE(ABORT, 'I-31: Claim relationships are immutable. UPDATE is prohibited.');
+        END`);
+      conn.run(`CREATE TRIGGER IF NOT EXISTS claim_relationships_no_delete
+        BEFORE DELETE ON claim_relationships
+        BEGIN
+          SELECT RAISE(ABORT, 'I-31: Claim relationships are immutable. DELETE is prohibited.');
+        END`);
+
+      // Embedding tables
+      totalPurged += conn.run('DELETE FROM embedding_metadata WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM embedding_pending WHERE tenant_id = ?', [tenantId]).changes;
+
+      // Governance tables
+      totalPurged += conn.run('DELETE FROM gov_attempts WHERE mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM gov_runs WHERE tenant_id = ?', [tenantId]).changes;
+
+      // Drop WMP boundary event immutability trigger for purge
+      conn.run('DROP TRIGGER IF EXISTS trg_wmp_boundary_events_immutable_delete');
+      totalPurged += conn.run('DELETE FROM wmp_boundary_events WHERE mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
+      conn.run(`CREATE TRIGGER IF NOT EXISTS trg_wmp_boundary_events_immutable_delete
+        BEFORE DELETE ON wmp_boundary_events
+        BEGIN
+          SELECT RAISE(ABORT, 'WMP-I6: Boundary events are immutable -- no DELETE permitted');
+        END`);
+
+      // Core tables
+      totalPurged += conn.run('DELETE FROM core_tasks WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM core_task_graphs WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM core_artifacts WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM core_checkpoints WHERE mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM core_resources WHERE mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM core_mission_goals WHERE mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM core_mission_results WHERE mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM core_compaction_log WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM core_tree_counts WHERE root_mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM core_conversations WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM obs_events WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM meter_interaction_accounting WHERE mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM core_llm_request_log WHERE mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM core_task_queue WHERE mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM core_events_log WHERE mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM hitl_approval_queue WHERE mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
+
+      // Cognitive tables
+      totalPurged += conn.run('DELETE FROM narrative_snapshots WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM consolidation_log WHERE tenant_id = ?', [tenantId]).changes;
+
+      // Governance suite tables
+      totalPurged += conn.run('DELETE FROM governance_classification_rules WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM governance_protected_predicates WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM governance_erasure_certificates WHERE tenant_id = ?', [tenantId]).changes;
+
+      // Governance contracts/supervisor/eval/capabilities/handoffs
+      totalPurged += conn.run('DELETE FROM gov_mission_contracts WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM gov_supervisor_decisions WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM gov_suspension_records WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM gov_eval_cases WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM gov_capability_manifests WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM gov_handoffs WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM gov_idempotency_keys WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM gov_resume_tokens WHERE tenant_id = ?', [tenantId]).changes;
+
+      // Learning tables
+      totalPurged += conn.run('DELETE FROM learning_techniques WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM learning_outcomes WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM learning_applications WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM quarantine_entries WHERE tenant_id = ?', [tenantId]).changes;
+      totalPurged += conn.run('DELETE FROM transfer_requests WHERE tenant_id = ?', [tenantId]).changes;
+
+      // Consent records
+      totalPurged += conn.run('DELETE FROM governance_consent_records WHERE tenant_id = ?', [tenantId]).changes;
+
+      // Claims (after dependents are deleted)
+      totalPurged += conn.run('DELETE FROM claim_assertions WHERE tenant_id = ?', [tenantId]).changes;
+
+      // Missions (last — parent of many FK relationships)
+      totalPurged += conn.run('DELETE FROM core_missions WHERE tenant_id = ?', [tenantId]).changes;
+
+      // I-03: Audit the tenant purge operation (audit log itself is NOT purged)
+      this.kernel.audit.append(conn, {
+        tenantId: ctx.tenantId,
+        actorType: 'user',
+        actorId: ctx.userId as string ?? 'unknown',
+        operation: 'tenant_purge',
+        resourceType: 'tenant',
+        resourceId: tenantId,
+        detail: {
+          purgedTenantId: tenantId,
+          recordsPurged: totalPurged,
+        },
+      });
+    });
+
+    return { purged: totalPurged };
   }
 }

@@ -11,6 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseConnection } from '../../kernel/interfaces/database.js';
 import type { AgentId, KernelError, MissionId, Result, TaskId, TimeProvider } from '../../kernel/interfaces/index.js';
+import { propagateError } from '../../kernel/interfaces/index.js';
 
 import type {
   WmpEntryStore,
@@ -77,8 +78,10 @@ function err<T>(code: string, message: string, spec: string): Result<T> {
 }
 
 function errWithExtras<T>(code: string, message: string, spec: string, extras: Record<string, unknown>): Result<T> {
-  const error = { code, message, spec, ...extras };
-  return { ok: false, error: error as unknown as KernelError };
+  // KernelError requires code, message, spec — extras are additional diagnostic context.
+  // The spread satisfies all required fields; cast is safe because KernelError is a superset.
+  const base: { code: string; message: string; spec: string } = { code, message, spec };
+  return { ok: false, error: { ...base, ...extras } as KernelError };
 }
 
 function newId(): string {
@@ -88,15 +91,15 @@ function newId(): string {
 // Monotonic timestamp: guarantees strictly increasing values even within same millisecond.
 // Required for P2 eviction ordering (DC-WMP-801) — updatedAt must differ on rapid writes.
 // Hard Stop #7: uses injectable TimeProvider as the clock source.
-let _lastTimestamp = '';
-function monotonicNowISO(time: import('../../kernel/interfaces/time.js').TimeProvider): string {
+// v2.1.0: _lastTimestamp eliminated. Clock state now lives in InstanceContext.monotonicClock.
+function monotonicNowISO(time: import('../../kernel/interfaces/time.js').TimeProvider, clock: { lastTimestamp: string }): string {
   let ts = time.nowISO();
-  if (ts <= _lastTimestamp) {
-    const d = new Date(_lastTimestamp);
+  if (ts <= clock.lastTimestamp) {
+    const d = new Date(clock.lastTimestamp);
     d.setTime(d.getTime() + 1);
     ts = d.toISOString();
   }
-  _lastTimestamp = ts;
+  clock.lastTimestamp = ts;
   return ts;
 }
 
@@ -128,19 +131,19 @@ function lookupTask(conn: DatabaseConnection, taskId: TaskId): TaskRow | undefin
   );
 }
 
-// Module-level connection reference for WmpInternalReader (no conn param in interface).
-// Set by every SC handler call. WmpInternalReader uses this to read entries.
-let _connRef: DatabaseConnection | null = null;
+// v2.1.0: _connRef eliminated. Connection reference now lives in InstanceContext.wmpConnectionRef.
+// The wmpConnectionRef is threaded through factory functions below.
 
 // ============================================================================
 // Entry Store Implementation
 // ============================================================================
 
-export function createEntryStore(time?: TimeProvider): WmpEntryStore {
+export function createEntryStore(time?: TimeProvider, monotonicClockState?: { lastTimestamp: string }): WmpEntryStore {
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
+  const clockState = monotonicClockState ?? { lastTimestamp: '' };
   return Object.freeze({
     upsert(conn: DatabaseConnection, taskId: TaskId, key: string, value: string, sizeBytes: number): Result<WmpEntry> {
-      const now = monotonicNowISO(clock);
+      const now = monotonicNowISO(clock, clockState);
       const existing = conn.get<{ key: string; value: string; size_bytes: number; mutation_position: number; created_at: string; updated_at: string }>(
         'SELECT key, value, size_bytes, mutation_position, created_at, updated_at FROM working_memory_entries WHERE task_id = ? AND key = ?',
         [taskId, key],
@@ -280,12 +283,13 @@ export function createEntryStore(time?: TimeProvider): WmpEntryStore {
 // Boundary Store Implementation
 // ============================================================================
 
-export function createBoundaryStore(time?: TimeProvider): WmpBoundaryStore {
+export function createBoundaryStore(time?: TimeProvider, monotonicClockState?: { lastTimestamp: string }): WmpBoundaryStore {
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
+  const clockState = monotonicClockState ?? { lastTimestamp: '' };
   return Object.freeze({
     createBoundaryEvent(conn: DatabaseConnection, event: Omit<BoundaryEvent, 'eventId'>): Result<BoundaryEvent> {
       const eventId = newId() as BoundaryEventId;
-      const timestamp = event.timestamp || monotonicNowISO(clock);
+      const timestamp = event.timestamp || monotonicNowISO(clock, clockState);
       conn.run(
         'INSERT INTO wmp_boundary_events (event_id, task_id, mission_id, trigger, snapshot_content_id, linked_emission_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [eventId, event.taskId, event.missionId, event.trigger, event.snapshotContentId, event.linkedEmissionId ?? null, timestamp],
@@ -425,16 +429,18 @@ export function createBoundaryCaptureCoordinator(
   mutationCounter: WmpMutationCounter,
   eventSink: WmpEventSink = WMP_NULL_EVENT_SINK,
   time?: TimeProvider,
+  monotonicClockState?: { lastTimestamp: string },
 ): WmpBoundaryCaptureCoordinator {
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
+  const clockState = monotonicClockState ?? { lastTimestamp: '' };
 
   function captureSnapshot(conn: DatabaseConnection, taskId: TaskId): Result<SnapshotContent> {
     const nsResult = entryStore.getNamespaceState(conn, taskId);
-    if (!nsResult.ok) return nsResult as unknown as Result<SnapshotContent>;
+    if (!nsResult.ok) return propagateError<SnapshotContent>(nsResult);
     const namespaceState = nsResult.value;
 
     const counterResult = mutationCounter.current(conn, taskId);
-    if (!counterResult.ok) return counterResult as unknown as Result<SnapshotContent>;
+    if (!counterResult.ok) return propagateError<SnapshotContent>(counterResult);
     const highestMutationPosition = counterResult.value;
 
     // Attempt deduplication
@@ -453,7 +459,7 @@ export function createBoundaryCaptureCoordinator(
       entries = [];
     } else {
       const listResult = entryStore.listAll(conn, taskId);
-      if (!listResult.ok) return listResult as unknown as Result<SnapshotContent>;
+      if (!listResult.ok) return propagateError<SnapshotContent>(listResult);
       entries = listResult.value.map(e => ({
         key: e.key,
         value: e.value,
@@ -496,7 +502,7 @@ export function createBoundaryCaptureCoordinator(
           code: snapshotResult.error.code,
         });
       } catch { /* event emission failure is non-fatal per I-48 */ }
-      return snapshotResult as unknown as Result<BoundaryEvent>;
+      return propagateError<BoundaryEvent>(snapshotResult);
     }
     const snapshot = snapshotResult.value;
 
@@ -506,7 +512,7 @@ export function createBoundaryCaptureCoordinator(
       trigger,
       snapshotContentId: snapshot.contentId,
       linkedEmissionId,
-      timestamp: monotonicNowISO(clock),
+      timestamp: monotonicNowISO(clock, clockState),
     });
 
     if (eventResult.ok) {
@@ -567,17 +573,50 @@ export function createBoundaryCaptureCoordinator(
         // Calling UP from L1.5→L2 would violate layer boundaries.
         // CAS (WHERE id = ? AND state NOT IN terminal) is the L1-level defense.
         // This prevents TOCTOU races where another transaction already terminated the task.
-        const now = monotonicNowISO(clock);
+        //
+        // AUDIT NOTE (Phase 6 fix): This direct SQL UPDATE bypasses:
+        //   - OrchestrationTransitionService (L2 governance checks)
+        //   - core_audit_log hash-chain (I-03 audit trail)
+        //   - REVIEWING auto-trigger (S23 submit_result)
+        // The boundary event (captured in step 1) serves as L1.5-level audit.
+        // We record fromState in the event detail for traceability.
+        // TODO: Inject AuditTrail into coordinator to write core_audit_log entry.
+        const now = monotonicNowISO(clock, clockState);
         const terminalStates = ['COMPLETED', 'FAILED', 'CANCELLED'];
         const currentTask = conn.get<{ state: string }>(
           'SELECT state FROM core_tasks WHERE id = ?',
           [taskId],
         );
-        if (currentTask && terminalStates.includes(currentTask.state)) {
+
+        if (!currentTask) {
+          // Task not found — cannot transition phantom entity.
+          // Boundary snapshot already captured; return it.
+          return eventResult;
+        }
+
+        if (terminalStates.includes(currentTask.state)) {
           // Task already in terminal state — no-op for idempotency.
           // The boundary snapshot was already captured above, which is the primary concern.
           return eventResult;
         }
+
+        // Record the state transition in wmp_boundary_events for auditability.
+        // This is the L1.5-level audit record since we cannot call up to L2's audit trail.
+        const fromState = currentTask.state;
+        try {
+          conn.run(
+            `INSERT INTO wmp_boundary_events (event_id, task_id, mission_id, trigger_type, snapshot, created_at)
+             VALUES (?, ?, ?, 'state_transition', ?, ?)`,
+            [
+              `evt-st-${taskId}-${now}`,
+              taskId,
+              missionId,
+              JSON.stringify({ fromState, toState: terminalState, source: 'wmp_boundary_capture' }),
+              now,
+            ],
+          );
+        } catch { /* audit event failure is non-fatal — primary operation continues */ }
+
         conn.run(
           'UPDATE core_tasks SET state = ?, completed_at = ?, updated_at = ? WHERE id = ? AND state NOT IN (?, ?, ?)',
           [terminalState, now, now, taskId, ...terminalStates],
@@ -610,7 +649,9 @@ export function createWriteHandler(
   _mutationCounter: WmpMutationCounter,
   capacityPolicy: WmpCapacityPolicy,
   eventSink: WmpEventSink = WMP_NULL_EVENT_SINK,
+  wmpConnectionRef?: { current: DatabaseConnection | null },
 ): WriteWorkingMemoryHandler {
+  const connRef = wmpConnectionRef ?? { current: null };
   return Object.freeze({
     execute(
       conn: DatabaseConnection,
@@ -618,7 +659,7 @@ export function createWriteHandler(
       callerAgentId: AgentId,
       input: WriteWorkingMemoryInput,
     ): Result<WriteWorkingMemoryOutput> {
-      _connRef = conn;
+      connRef.current = conn;
 
       // 1. Scope check: callerTaskId must match input.taskId
       if (callerTaskId !== input.taskId) {
@@ -668,7 +709,7 @@ export function createWriteHandler(
 
       // 7. Capacity check (entry count and total bytes)
       const usageResult = entryStore.getUsage(conn, input.taskId);
-      if (!usageResult.ok) return usageResult as unknown as Result<WriteWorkingMemoryOutput>;
+      if (!usageResult.ok) return propagateError<WriteWorkingMemoryOutput>(usageResult);
       const usage = usageResult.value;
 
       // Check if this is a replacement (existing key)
@@ -703,7 +744,7 @@ export function createWriteHandler(
 
       // 8. Upsert the entry (includes mutation counter increment)
       const upsertResult = entryStore.upsert(conn, input.taskId, input.key, input.value, sizeBytes);
-      if (!upsertResult.ok) return upsertResult as unknown as Result<WriteWorkingMemoryOutput>;
+      if (!upsertResult.ok) return propagateError<WriteWorkingMemoryOutput>(upsertResult);
       const entry = upsertResult.value;
 
       // 9. Emit event (DC-WMP-X15, Binding 14 — transaction-coupled)
@@ -754,7 +795,9 @@ export function createWriteHandler(
 
 export function createReadHandler(
   entryStore: WmpEntryStore,
+  wmpConnectionRef?: { current: DatabaseConnection | null },
 ): ReadWorkingMemoryHandler {
+  const connRef = wmpConnectionRef ?? { current: null };
   return Object.freeze({
     execute(
       conn: DatabaseConnection,
@@ -762,7 +805,7 @@ export function createReadHandler(
       callerAgentId: AgentId,
       input: ReadWorkingMemoryInput,
     ): Result<ReadWorkingMemoryOutput> {
-      _connRef = conn;
+      connRef.current = conn;
 
       // 1. Scope check
       if (callerTaskId !== input.taskId) {
@@ -787,7 +830,7 @@ export function createReadHandler(
       if (input.key !== null) {
         // Specific key read
         const entryResult = entryStore.get(conn, input.taskId, input.key);
-        if (!entryResult.ok) return entryResult as unknown as Result<ReadWorkingMemoryOutput>;
+        if (!entryResult.ok) return propagateError<ReadWorkingMemoryOutput>(entryResult);
         const e = entryResult.value;
         return ok({
           key: e.key,
@@ -800,7 +843,7 @@ export function createReadHandler(
 
       // List all entries
       const listResult = entryStore.listAll(conn, input.taskId);
-      if (!listResult.ok) return listResult as unknown as Result<ReadWorkingMemoryOutput>;
+      if (!listResult.ok) return propagateError<ReadWorkingMemoryOutput>(listResult);
       const entries = listResult.value;
       const totalSizeBytes = entries.reduce((sum, e) => sum + e.sizeBytes, 0);
       return ok({
@@ -826,7 +869,9 @@ export function createDiscardHandler(
   entryStore: WmpEntryStore,
   mutationCounter: WmpMutationCounter,
   eventSink: WmpEventSink = WMP_NULL_EVENT_SINK,
+  wmpConnectionRef?: { current: DatabaseConnection | null },
 ): DiscardWorkingMemoryHandler {
+  const connRef = wmpConnectionRef ?? { current: null };
   return Object.freeze({
     execute(
       conn: DatabaseConnection,
@@ -834,7 +879,7 @@ export function createDiscardHandler(
       callerAgentId: AgentId,
       input: DiscardWorkingMemoryInput,
     ): Result<DiscardWorkingMemoryOutput> {
-      _connRef = conn;
+      connRef.current = conn;
 
       // 1. Scope check
       if (callerTaskId !== input.taskId) {
@@ -867,11 +912,11 @@ export function createDiscardHandler(
       if (input.key !== null) {
         // Specific key discard — advance counter AFTER success (WMP-I5: failed ops get no position, BPB-001)
         const discardResult = entryStore.discard(conn, input.taskId, input.key);
-        if (!discardResult.ok) return discardResult as unknown as Result<DiscardWorkingMemoryOutput>;
+        if (!discardResult.ok) return propagateError<DiscardWorkingMemoryOutput>(discardResult);
 
         // 4a. Advance mutation counter only after single-key discard succeeds
         const counterResult = mutationCounter.next(conn, input.taskId);
-        if (!counterResult.ok) return counterResult as unknown as Result<DiscardWorkingMemoryOutput>;
+        if (!counterResult.ok) return propagateError<DiscardWorkingMemoryOutput>(counterResult);
         const mutationPosition = counterResult.value;
 
         // 6. Emit event (DC-WMP-X15, Binding 14 — transaction-coupled)
@@ -892,11 +937,11 @@ export function createDiscardHandler(
 
       // Discard all — advance counter BEFORE discard (AMB-WMP-06: always a visible mutation)
       const counterResult = mutationCounter.next(conn, input.taskId);
-      if (!counterResult.ok) return counterResult as unknown as Result<DiscardWorkingMemoryOutput>;
+      if (!counterResult.ok) return propagateError<DiscardWorkingMemoryOutput>(counterResult);
       const mutationPosition = counterResult.value;
 
       const discardAllResult = entryStore.discardAll(conn, input.taskId);
-      if (!discardAllResult.ok) return discardAllResult as unknown as Result<DiscardWorkingMemoryOutput>;
+      if (!discardAllResult.ok) return propagateError<DiscardWorkingMemoryOutput>(discardAllResult);
 
       // Emit event for discard-all (DC-WMP-X15)
       try {
@@ -952,7 +997,7 @@ export function createTaskLifecycleHandler(
       // Entries survive suspension because writes/discards are rejected during suspension.
       // Verify by confirming entries are readable.
       const listResult = entryStore.listAll(conn, taskId);
-      if (!listResult.ok) return listResult as unknown as Result<void>;
+      if (!listResult.ok) return propagateError<void>(listResult);
 
       return ok(undefined);
     },
@@ -963,10 +1008,11 @@ export function createTaskLifecycleHandler(
 // Internal Reader Implementation (for CGP P2 — WmpInternalReader)
 // ============================================================================
 
-export function createInternalReader(): WmpInternalReader {
+export function createInternalReader(wmpConnectionRef?: { current: DatabaseConnection | null }): WmpInternalReader {
+  const connRef = wmpConnectionRef ?? { current: null };
   return Object.freeze({
     readLiveEntries(taskId: TaskId): Result<readonly WmpInternalEntry[]> {
-      const conn = _connRef;
+      const conn = connRef.current;
       if (!conn) return err('NO_CONNECTION', 'No database connection available', '§9.2');
 
       const rows = conn.query<{ key: string; value: string; size_bytes: number; created_at: string; updated_at: string; mutation_position: number }>(
@@ -998,11 +1044,12 @@ export function createPreEmissionCaptureImpl(
     capture(conn: DatabaseConnection, taskId: TaskId): Result<WmpCaptureResult> {
       // Check if WMP is initialized for this task
       const initResult = entryStore.isInitialized(conn, taskId);
-      if (!initResult.ok) return initResult as unknown as Result<WmpCaptureResult>;
+      if (!initResult.ok) return propagateError<WmpCaptureResult>(initResult);
 
       if (!initResult.value) {
         // Never-initialized — not_applicable (no snapshot needed)
-        return ok({ captureId: null, sourcingStatus: 'not_applicable' } as unknown as WmpCaptureResult);
+        // captureId is null for not_applicable (never-initialized WMP has no boundary event)
+        return ok<WmpCaptureResult>({ captureId: null, sourcingStatus: 'not_applicable' });
       }
 
       // Initialized — capture pre-emission snapshot
@@ -1016,7 +1063,7 @@ export function createPreEmissionCaptureImpl(
 
       const emissionId = newId() as SystemCallId;
       const captureResult = coordinator.capturePreEmission(conn, taskId, actualMissionId, emissionId);
-      if (!captureResult.ok) return captureResult as unknown as Result<WmpCaptureResult>;
+      if (!captureResult.ok) return propagateError<WmpCaptureResult>(captureResult);
 
       return ok({
         captureId: captureResult.value.eventId as string,

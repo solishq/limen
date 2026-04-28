@@ -22,12 +22,12 @@ describe('Test Database Harness', () => {
   it('createTestDatabase() creates database with all migrations applied', () => {
     const conn = createTestDatabase();
 
-    // Check schema version (should be 35 — includes replay pipeline migration)
+    // Check schema version (should be 47 — includes all migrations through sync_foundation)
     const version = conn.get<{ version: number }>(
       `SELECT MAX(version) as version FROM core_migrations WHERE status = 'applied'`
     );
     assert.ok(version, 'core_migrations table must exist');
-    assert.equal(version.version, 35, 'All 35 migrations must be applied');
+    assert.equal(version.version, 47, 'All 47 migrations must be applied');
 
     conn.close();
   });
@@ -163,7 +163,7 @@ describe('Test Database Harness', () => {
     const version = deps.conn.get<{ version: number }>(
       `SELECT MAX(version) as version FROM core_migrations WHERE status = 'applied'`
     );
-    assert.equal(version?.version, 35);
+    assert.equal(version?.version, 47);
 
     conn.close();
   });

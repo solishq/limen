@@ -19,26 +19,20 @@
  */
 
 import { randomUUID, createHash } from 'node:crypto';
-import type { OperationContext, Result } from '../../kernel/interfaces/common.js';
+import type { OperationContext, Result, TenantId } from '../../kernel/interfaces/common.js';
 import type { DatabaseConnection } from '../../kernel/interfaces/database.js';
-import type { AuditTrail } from '../../kernel/interfaces/audit.js';
+import type { AuditTrail, AuditCreateInput } from '../../kernel/interfaces/audit.js';
+import { computeEntryHash } from '../../kernel/audit/audit_trail.js';
 import type { TimeProvider } from '../../kernel/interfaces/time.js';
 import type { ClaimStore } from '../../claims/interfaces/claim_types.js';
 import type { ConsentRegistry } from '../../security/security_types.js';
 import type { ErasureRequest, ErasureCertificate } from '../classification/governance_types.js';
 import type { VectorStore } from '../../vector/vector_store.js';
+import { escapeLikeWildcards } from '../../kernel/sql_utils.js';
 
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/**
- * Escape SQL LIKE wildcard characters in user input.
- * F-E2E-008b: Prevents '%' and '_' in dataSubjectId from being interpreted as wildcards.
- */
-function escapeLikeWildcards(input: string): string {
-  return input.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-}
 
 function ok<T>(value: T): Result<T> {
   return { ok: true, value };
@@ -109,15 +103,25 @@ export function executeErasure(
     const fullUrn = request.dataSubjectId.startsWith('entity:')
       ? request.dataSubjectId
       : `entity:${request.dataSubjectId}`;
+    // F-E2E-002b: Exact match + child match (colon-delimited hierarchy).
+    // Matches 'entity:user:alice' and 'entity:user:alice:session:123'
+    // but NOT 'entity:user:aliceberg'.
+    // F-E2E-008b: Escape % and _ wildcards in user-provided subject before LIKE.
+    const escapedId = escapeLikeWildcards(request.dataSubjectId);
+    const escapedUrn = escapeLikeWildcards(fullUrn);
     const piiClaims = conn.query<Record<string, unknown>>(
       `SELECT id, subject FROM claim_assertions
        WHERE pii_detected = 1
-       AND (subject = ? OR subject = ?)
+       AND (subject = ? OR subject = ?
+            OR subject LIKE ? ESCAPE '\\' OR subject LIKE ? ESCAPE '\\')
        AND purged_at IS NULL
        ${tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL'}`,
       tenantId !== null
-        ? [request.dataSubjectId, fullUrn, tenantId]
-        : [request.dataSubjectId, fullUrn],
+        ? [request.dataSubjectId, fullUrn,
+           `${escapedId}:%`, `${escapedUrn}:%`,
+           tenantId]
+        : [request.dataSubjectId, fullUrn,
+           `${escapedId}:%`, `${escapedUrn}:%`],
     );
 
     if (piiClaims.length === 0) {
@@ -187,18 +191,31 @@ export function executeErasure(
     // 3b. Phase 11: Delete embeddings for tombstoned claims (I-P11-30, I-P11-31)
     // GDPR: embedding is a projection of claim content — must be deleted when content is tombstoned.
     if (deps.vectorStore) {
+      // Collect all claim IDs that were tombstoned in steps 2+3.
+      // Start with the directly-identified PII claims.
       const allTombstonedIds = piiClaims.map((r: Record<string, unknown>) => r['id'] as string);
-      // If cascade happened, we need to include cascaded claim IDs too
-      // The claimsTombstoned count includes cascaded — collect all tombstoned IDs
+      // If cascade happened, we need to include cascaded claim IDs too.
+      // F-P5-001 fix: Query by claim ID instead of subject, because tombstoned claims
+      // have subject=NULL (CCP-I10), so a WHERE subject=? query never matches them.
       if (request.includeRelated) {
-        // Re-query tombstoned claims (those we just tombstoned in steps 2+3)
+        // Re-query tombstoned claims by ID. The IDs from the cascade are already
+        // tracked in the tombstonedIds Set from step 3. But that Set is scoped
+        // inside the if(request.includeRelated) block above. Instead, query all
+        // claims in this tenant that were tombstoned (purged_at IS NOT NULL)
+        // and whose IDs we haven't already collected.
+        // Use the claim_assertions table with purged_at check, joining on id.
         const tombstonedNow = conn.query<Record<string, unknown>>(
-          `SELECT id FROM claim_assertions WHERE purged_at IS NOT NULL
-           AND (subject = ? OR subject = ?)
-           ${tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL'}`,
+          `SELECT ca.id FROM claim_assertions ca
+           WHERE ca.purged_at IS NOT NULL
+           AND ca.id IN (
+             SELECT cr.from_claim_id FROM claim_relationships cr
+             WHERE cr.type = 'derived_from'
+             AND cr.to_claim_id IN (${allTombstonedIds.map(() => '?').join(',')})
+           )
+           ${tenantId !== null ? 'AND ca.tenant_id = ?' : 'AND ca.tenant_id IS NULL'}`,
           tenantId !== null
-            ? [request.dataSubjectId, fullUrn, tenantId]
-            : [request.dataSubjectId, fullUrn],
+            ? [...allTombstonedIds, tenantId]
+            : [...allTombstonedIds],
         );
         for (const row of tombstonedNow) {
           const id = row['id'] as string;
@@ -208,6 +225,41 @@ export function executeErasure(
         }
       }
       deps.vectorStore.deleteBatch(conn, allTombstonedIds);
+    }
+
+    // 3c. GDPR: Delete claim_relationships involving tombstoned PII claims.
+    // I-31 triggers prevent DELETE on claim_relationships (append-only invariant).
+    // For GDPR erasure this must be overridden: relationships reference PII claim IDs
+    // which constitute personal data metadata. Strategy: temporarily drop the trigger,
+    // delete relationships, recreate it. Safe because better-sqlite3 is synchronous
+    // and single-threaded — no concurrent operation can exploit the window.
+    {
+      const tombstonedClaimIds = piiClaims.map((r: Record<string, unknown>) => r['id'] as string);
+
+      // Drop I-31 immutability triggers
+      conn.run('DROP TRIGGER IF EXISTS claim_relationships_no_delete');
+      conn.run('DROP TRIGGER IF EXISTS claim_relationships_no_update');
+
+      // Delete relationships where either endpoint is a tombstoned PII claim
+      for (const claimId of tombstonedClaimIds) {
+        const deleted = conn.run(
+          'DELETE FROM claim_relationships WHERE from_claim_id = ? OR to_claim_id = ?',
+          [claimId, claimId],
+        );
+        relationshipsCascaded += deleted.changes;
+      }
+
+      // Recreate I-31 triggers
+      conn.run(`CREATE TRIGGER IF NOT EXISTS claim_relationships_no_update
+        BEFORE UPDATE ON claim_relationships
+        BEGIN
+          SELECT RAISE(ABORT, 'I-31: Claim relationships are immutable. UPDATE is prohibited.');
+        END`);
+      conn.run(`CREATE TRIGGER IF NOT EXISTS claim_relationships_no_delete
+        BEFORE DELETE ON claim_relationships
+        BEGIN
+          SELECT RAISE(ABORT, 'I-31: Claim relationships are immutable. DELETE is prohibited.');
+        END`);
     }
 
     // 4. Tombstone audit entries (I-P10-23: chain integrity preserved via re-hash)
@@ -276,20 +328,19 @@ export function executeErasure(
           prevHash = predecessor?.current_hash ?? 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
         }
 
-        // Re-hash each entry to maintain chain integrity
+        // Re-hash each entry to maintain chain integrity using canonical computeEntryHash
+        const sha256Fn = (data: string): string => createHash('sha256').update(data).digest('hex');
         for (const entry of allSubsequent) {
-          const data = [
-            prevHash,
-            String(entry.seq_no),
-            entry.timestamp,
-            entry.actor_type,
-            entry.actor_id,
-            entry.operation,
-            entry.resource_type,
-            entry.resource_id,
-            entry.detail ? JSON.stringify(JSON.parse(entry.detail), entry.detail !== '{}' ? Object.keys(JSON.parse(entry.detail)).sort() : undefined) : '',
-          ].join('|');
-          const newHash = createHash('sha256').update(data).digest('hex');
+          const input: AuditCreateInput = {
+            tenantId: entry.tenant_id as TenantId | null,
+            actorType: entry.actor_type as AuditCreateInput['actorType'],
+            actorId: entry.actor_id,
+            operation: entry.operation,
+            resourceType: entry.resource_type,
+            resourceId: entry.resource_id,
+            ...(entry.detail ? { detail: JSON.parse(entry.detail) as Record<string, unknown> } : {}),
+          };
+          const newHash = computeEntryHash(sha256Fn, prevHash, input, entry.timestamp, entry.seq_no);
           conn.run(
             `UPDATE core_audit_log SET previous_hash = ?, current_hash = ? WHERE seq_no = ?`,
             [prevHash, newHash, entry.seq_no],
@@ -372,19 +423,19 @@ export function executeErasure(
           prevHash2 = predecessor2?.current_hash ?? 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
         }
 
+        // Re-hash using canonical computeEntryHash
+        const sha256Fn2 = (data: string): string => createHash('sha256').update(data).digest('hex');
         for (const entry of allSubsequent2) {
-          const data = [
-            prevHash2,
-            String(entry.seq_no),
-            entry.timestamp,
-            entry.actor_type,
-            entry.actor_id,
-            entry.operation,
-            entry.resource_type,
-            entry.resource_id,
-            entry.detail ? JSON.stringify(JSON.parse(entry.detail), entry.detail !== '{}' ? Object.keys(JSON.parse(entry.detail)).sort() : undefined) : '',
-          ].join('|');
-          const newHash = createHash('sha256').update(data).digest('hex');
+          const input: AuditCreateInput = {
+            tenantId: entry.tenant_id as TenantId | null,
+            actorType: entry.actor_type as AuditCreateInput['actorType'],
+            actorId: entry.actor_id,
+            operation: entry.operation,
+            resourceType: entry.resource_type,
+            resourceId: entry.resource_id,
+            ...(entry.detail ? { detail: JSON.parse(entry.detail) as Record<string, unknown> } : {}),
+          };
+          const newHash = computeEntryHash(sha256Fn2, prevHash2, input, entry.timestamp, entry.seq_no);
           conn.run(
             `UPDATE core_audit_log SET previous_hash = ?, current_hash = ? WHERE seq_no = ?`,
             [prevHash2, newHash, entry.seq_no],

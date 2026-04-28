@@ -81,8 +81,15 @@ export function scrubUrl(url: string): string {
 
 /**
  * Map Limen LlmContentBlock to Gemini part format.
+ * @param block - The content block to map
+ * @param toolUseIdToName - Lookup map from tool_use IDs to function names,
+ *   built from prior tool_use blocks in the conversation. Gemini's functionResponse
+ *   requires the function name, not the tool use ID.
  */
-function mapToGeminiPart(block: LlmContentBlock): Record<string, unknown> {
+function mapToGeminiPart(
+  block: LlmContentBlock,
+  toolUseIdToName: ReadonlyMap<string, string>,
+): Record<string, unknown> {
   switch (block.type) {
     case 'text':
       return { text: block.text };
@@ -100,13 +107,18 @@ function mapToGeminiPart(block: LlmContentBlock): Record<string, unknown> {
           args: block.input,
         },
       };
-    case 'tool_result':
+    case 'tool_result': {
+      // Gemini expects the function name in functionResponse, not the tool use ID.
+      // Look up the function name from prior tool_use blocks; fall back to toolUseId
+      // if the mapping is unavailable (defensive — should not happen in well-formed conversations).
+      const functionName = toolUseIdToName.get(block.toolUseId) ?? block.toolUseId;
       return {
         functionResponse: {
-          name: block.toolUseId, // Gemini expects the function name, but we use toolUseId as fallback
+          name: functionName,
           response: { content: block.content },
         },
       };
+    }
     default:
       return { text: '' };
   }
@@ -174,6 +186,20 @@ export function createGeminiAdapter(
     // Build contents array (Gemini format: contents[].parts[])
     const contents: Array<Record<string, unknown>> = [];
 
+    // Build tool_use ID → function name lookup for tool_result mapping.
+    // Gemini's functionResponse requires the function name, not the opaque tool use ID.
+    const toolUseIdToName = new Map<string, string>();
+    for (const msg of request.messages) {
+      if (typeof msg.content !== 'string') {
+        const blocks = msg.content as readonly LlmContentBlock[];
+        for (const block of blocks) {
+          if (block.type === 'tool_use') {
+            toolUseIdToName.set(block.id, block.name);
+          }
+        }
+      }
+    }
+
     for (const msg of request.messages) {
       if (msg.role === 'system') {
         // System messages handled via systemInstruction
@@ -186,7 +212,7 @@ export function createGeminiAdapter(
       } else {
         const blocks = msg.content as readonly LlmContentBlock[];
         for (const block of blocks) {
-          parts.push(mapToGeminiPart(block));
+          parts.push(mapToGeminiPart(block, toolUseIdToName));
         }
       }
 

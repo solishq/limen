@@ -20,7 +20,7 @@
 import type { Result, MissionId } from '../../kernel/interfaces/index.js';
 import type { TenantId } from '../../kernel/interfaces/index.js';
 import type { OperationContext } from '../../kernel/interfaces/common.js';
-import type { DatabaseConnection } from '../../kernel/interfaces/database.js';
+import type { TenantScopedConnection } from '../../kernel/tenant/tenant_scope.js';
 import type { TimeProvider } from '../../kernel/interfaces/time.js';
 import type { FreshnessThresholds } from '../../cognitive/freshness.js';
 import type { StabilityConfig } from '../../cognitive/stability.js';
@@ -82,7 +82,7 @@ export interface CognitiveNamespace {
  * Extended from Phase 5 with Phase 12 additions.
  */
 export interface CognitiveNamespaceDeps {
-  readonly getConnection: () => DatabaseConnection;
+  readonly getConnection: () => TenantScopedConnection;
   readonly getContext: () => OperationContext;
   readonly getTenantId: () => TenantId | null;
   readonly time: TimeProvider;

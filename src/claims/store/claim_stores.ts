@@ -29,6 +29,7 @@ import type {
   TenantId, AgentId, MissionId, TaskId, ArtifactId,
   OperationContext, Result,
 } from '../../kernel/interfaces/index.js';
+import { propagateError } from '../../kernel/interfaces/index.js';
 import type { CorrelationId, RunId } from '../../kernel/interfaces/governance_ids.js';
 import type {
   ClaimStore, ClaimEvidenceStore, ClaimRelationshipStore, ClaimArtifactRefStore,
@@ -58,6 +59,7 @@ import { analyzeQuery, sanitizeFts5Query } from '../../search/search_utils.js';
 import { computeAgeMs, computeEffectiveConfidence } from '../../cognitive/decay.js';
 import { computeCascadePenalty } from '../../cognitive/cascade.js';
 import { detectStructuralConflicts } from '../../cognitive/conflict.js';
+import type { TenantScopedConnection } from '../../kernel/tenant/tenant_scope.js';
 import { classifyFreshness } from '../../cognitive/freshness.js';
 import { resolveStability } from '../../cognitive/stability.js';
 import { scanClaimContent } from '../../security/claim_scanner.js';
@@ -67,40 +69,51 @@ import type { ContentScanResult } from '../../security/security_types.js';
 import { classify } from '../../governance/classification/classification_engine.js';
 import { checkPredicateGuard } from '../../governance/classification/predicate_guard.js';
 import { DEFAULT_CLASSIFICATION_RULES, CLASSIFICATION_LEVEL_ORDER } from '../../governance/classification/governance_types.js';
+import { escapeLikeWildcards } from '../../kernel/sql_utils.js';
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-/** Phase 9: Cached detection of v42 security columns on claim_assertions. */
-let _hasPiiDetectedCol: boolean | null = null;
-function hasPiiDetectedColumn(conn: DatabaseConnection): boolean {
-  if (_hasPiiDetectedCol !== null) return _hasPiiDetectedCol;
+import type { SchemaDetectionCache, RateLimitEntry } from '../../kernel/interfaces/instance_context.js';
+
+/** Phase 9: Cached detection of v42 security columns on claim_assertions.
+ * v2.1.0: Cache state moved from module-level to per-instance SchemaDetectionCache. */
+function hasPiiDetectedColumn(conn: DatabaseConnection, cache: SchemaDetectionCache): boolean {
+  if (cache.hasPiiDetectedCol !== null) return cache.hasPiiDetectedCol;
   try {
     const cols = conn.query<Record<string, unknown>>('PRAGMA table_info(claim_assertions)', []);
-    _hasPiiDetectedCol = cols.some(c => c['name'] === 'pii_detected');
+    cache.hasPiiDetectedCol = cols.some(c => c['name'] === 'pii_detected');
   } catch {
-    _hasPiiDetectedCol = false;
+    cache.hasPiiDetectedCol = false;
   }
-  return _hasPiiDetectedCol;
+  return cache.hasPiiDetectedCol;
 }
-/** Phase 10: Cached detection of v43 governance columns on claim_assertions. */
-let _hasClassificationCol: boolean | null = null;
-function hasClassificationColumn(conn: DatabaseConnection): boolean {
-  if (_hasClassificationCol !== null) return _hasClassificationCol;
+/** Phase 10: Cached detection of v43 governance columns on claim_assertions.
+ * v2.1.0: Cache state moved from module-level to per-instance SchemaDetectionCache. */
+function hasClassificationColumn(conn: DatabaseConnection, cache: SchemaDetectionCache): boolean {
+  if (cache.hasClassificationCol !== null) return cache.hasClassificationCol;
   try {
     const cols = conn.query<Record<string, unknown>>('PRAGMA table_info(claim_assertions)', []);
-    _hasClassificationCol = cols.some(c => c['name'] === 'classification');
+    cache.hasClassificationCol = cols.some(c => c['name'] === 'classification');
   } catch {
-    _hasClassificationCol = false;
+    cache.hasClassificationCol = false;
   }
-  return _hasClassificationCol;
+  return cache.hasClassificationCol;
 }
 
-/** Reset cache (for tests that create fresh databases). */
-export function resetSecurityColumnCache(): void {
-  _hasPiiDetectedCol = null;
-  _hasClassificationCol = null;
+/**
+ * Reset cache (for tests that create fresh databases).
+ * v2.1.0: Now accepts and resets a SchemaDetectionCache instance.
+ * If called without argument, creates a throwaway cache (backward compat).
+ */
+export function resetSecurityColumnCache(cache?: SchemaDetectionCache): void {
+  if (cache) {
+    cache.hasPiiDetectedCol = null;
+    cache.hasClassificationCol = null;
+  }
+  // When called without arg (legacy tests), no-op since there is no module-level state.
+  // Tests should migrate to creating fresh InstanceContext per test.
 }
 
 function ok<T>(value: T): Result<T> {
@@ -227,16 +240,16 @@ function isValidPredicateFilter(predicate: string): boolean {
   return isValidPredicate(predicate);
 }
 
-// Simple in-memory rate limiter per agent
-const rateLimitCounters = new Map<string, { count: number; windowStart: number }>();
+// v2.1.0: rateLimitCounters moved from module-level to per-instance Map.
+// Threaded through ClaimSystemDeps.rateLimitCounters.
 
-function checkRateLimit(agentId: string | null, time: import('../../kernel/interfaces/time.js').TimeProvider): boolean {
+function checkRateLimit(agentId: string | null, time: import('../../kernel/interfaces/time.js').TimeProvider, counters: Map<string, RateLimitEntry>): boolean {
   if (!agentId) return true;
   const now = time.nowMs();
   const key = agentId;
-  const entry = rateLimitCounters.get(key);
+  const entry = counters.get(key);
   if (!entry || now - entry.windowStart > 60_000) {
-    rateLimitCounters.set(key, { count: 1, windowStart: now });
+    counters.set(key, { count: 1, windowStart: now });
     return true;
   }
   entry.count++;
@@ -244,10 +257,6 @@ function checkRateLimit(agentId: string | null, time: import('../../kernel/inter
     return false;
   }
   return true;
-}
-
-function resetRateLimits(): void {
-  rateLimitCounters.clear();
 }
 
 // ============================================================================
@@ -493,22 +502,22 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
       // Exclude tombstoned claims from ALL queries
       conditions.push('c.purged_at IS NULL');
 
-      // Subject filter
+      // Subject filter (escape LIKE metacharacters in prefix to prevent injection)
       if (filters.subject !== undefined && filters.subject !== null) {
         if (filters.subject.endsWith('*')) {
-          conditions.push('c.subject LIKE ?');
-          params.push(filters.subject.slice(0, -1) + '%');
+          conditions.push("c.subject LIKE ? ESCAPE '\\'");
+          params.push(escapeLikeWildcards(filters.subject.slice(0, -1)) + '%');
         } else {
           conditions.push('c.subject = ?');
           params.push(filters.subject);
         }
       }
 
-      // Predicate filter
+      // Predicate filter (escape LIKE metacharacters in prefix to prevent injection)
       if (filters.predicate !== undefined && filters.predicate !== null) {
         if (filters.predicate.endsWith('*')) {
-          conditions.push('c.predicate LIKE ?');
-          params.push(filters.predicate.slice(0, -1) + '%');
+          conditions.push("c.predicate LIKE ? ESCAPE '\\'");
+          params.push(escapeLikeWildcards(filters.predicate.slice(0, -1)) + '%');
         } else {
           conditions.push('c.predicate = ?');
           params.push(filters.predicate);
@@ -602,7 +611,9 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
 
         // Phase 4 I-P4-05: Compose cascade penalty with decay
         // effective_confidence = confidence * decayFactor * cascadePenalty
-        const cascadePenalty = computeCascadePenalty(conn, claimIdVal);
+        // v2.1.0: conn is TenantScopedConnection at runtime (API layer wraps it).
+        // Type assertion needed because claim_stores interface accepts DatabaseConnection.
+        const cascadePenalty = computeCascadePenalty(conn as TenantScopedConnection, claimIdVal);
         const effConf = decayConf * cascadePenalty;
 
         // Phase 3: Two-phase minConfidence filter (Phase 2 -- TypeScript exact filter)
@@ -823,7 +834,8 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
           const decayConf = computeEffectiveConfidence(claim.confidence, ageMs, claim.stability);
 
           // Phase 4 I-P4-05: Compose cascade penalty with decay
-          const cascadePenalty = computeCascadePenalty(conn, claim.id as string);
+          // v2.1.0: conn is TenantScopedConnection at runtime (API layer wraps it).
+          const cascadePenalty = computeCascadePenalty(conn as TenantScopedConnection, claim.id as string);
           const effConf = decayConf * cascadePenalty;
 
           // Phase 3: score = -bm25() * effectiveConfidence (was * confidence)
@@ -1071,7 +1083,11 @@ function createGroundingValidatorImpl(
       visited.add(ref.id);
 
       // Retrieve the referenced claim
-      const targetClaim = stores.store.get(conn, ref.id as ClaimId, null);
+      // v2.1.0 FIX: Pass actual tenantId from scoped connection instead of null.
+      // TenantScopedConnection auto-injects tenant_id, but store.get() does manual
+      // scoping. Pass the tenant from the connection to maintain isolation.
+      const scopedTenantId = (conn as TenantScopedConnection).tenantId ?? null;
+      const targetClaim = stores.store.get(conn, ref.id as ClaimId, scopedTenantId);
       if (!targetClaim.ok) continue;
 
       if (checkRetracted && targetClaim.value.status === 'retracted') {
@@ -1200,6 +1216,10 @@ function createAssertClaimHandlerImpl(
     grounding: GroundingValidator;
   },
 ): AssertClaimHandler {
+  // v2.1.0: Capture per-instance state from deps (C-06 isolation)
+  const rlCounters = deps.rateLimitCounters ?? new Map<string, RateLimitEntry>();
+  const schemaDetectionCache = deps.schemaCache ?? { hasPiiDetectedCol: null, hasClassificationCol: null };
+
   return Object.freeze({
     execute(conn: DatabaseConnection, ctx: OperationContext, input: ClaimCreateInput): Result<AssertClaimOutput> {
       // F-S1-005: TOCTOU invariant — evidence validation (steps 10, 10b) and claim
@@ -1216,7 +1236,7 @@ function createAssertClaimHandlerImpl(
         }
 
         // 0a. Rate limit
-        if (!checkRateLimit(ctx.agentId, deps.time)) {
+        if (!checkRateLimit(ctx.agentId, deps.time, rlCounters)) {
           return err('RATE_LIMITED', 'Rate limit exceeded', 'SC-11');
         }
 
@@ -1252,12 +1272,18 @@ function createAssertClaimHandlerImpl(
 
         // 2. Validate subject URN
         if (!input.subject || !isValidSubjectURN(input.subject)) {
-          return err('INVALID_SUBJECT', `Invalid subject URN: ${input.subject}`, 'SC-11');
+          return err('INVALID_SUBJECT', `Invalid subject URN: "${input.subject}". Expected format: entity:<type>:<id> (e.g., entity:user:alice)`, 'SC-11');
+        }
+        if (input.subject.length > 256) {
+          return err('INVALID_INPUT', `Subject exceeds maximum length of 256 characters (got ${input.subject.length}).`, 'SC-11');
         }
 
         // 3. Validate predicate
         if (!input.predicate || !isValidPredicate(input.predicate)) {
-          return err('INVALID_PREDICATE', `Invalid predicate format: ${input.predicate}`, 'SC-11');
+          return err('INVALID_PREDICATE', `Invalid predicate format: "${input.predicate}". Expected: domain.property (e.g., preference.food)`, 'SC-11');
+        }
+        if (input.predicate.length > 128) {
+          return err('INVALID_INPUT', `Predicate exceeds maximum length of 128 characters (got ${input.predicate.length}).`, 'SC-11');
         }
         if (isReservedPredicate(input.predicate)) {
           return err('INVALID_PREDICATE', `Reserved predicate namespace: ${input.predicate}`, 'SC-11');
@@ -1287,6 +1313,11 @@ function createAssertClaimHandlerImpl(
         // 4. Validate object type
         if (!isValidObjectType(input.object.type, input.object.value)) {
           return err('INVALID_OBJECT_TYPE', `Object value does not match declared type ${input.object.type}`, 'SC-11');
+        }
+
+        // 4b. String value length limit (64KB max)
+        if (input.object.type === 'string' && typeof input.object.value === 'string' && input.object.value.length > 65536) {
+          return err('INVALID_INPUT', `String object value exceeds maximum length of 65536 characters (got ${input.object.value.length}).`, 'SC-11');
         }
 
         // 5. Validate confidence
@@ -1520,19 +1551,19 @@ function createAssertClaimHandlerImpl(
         if (deps.wmpCapture && input.taskId) {
           const captureResult = deps.wmpCapture.capture(conn, input.taskId);
           if (!captureResult.ok) return captureResult as Result<AssertClaimOutput>;
-          wmpCaptureId = captureResult.value.captureId;
+          wmpCaptureId = captureResult.value.captureId ?? undefined;
           wmpSourcingStatus = captureResult.value.sourcingStatus;
         }
 
         // 15. Create claim
         const createResult = stores.store.create(conn, ctx, input);
-        if (!createResult.ok) return createResult as unknown as Result<AssertClaimOutput>;
+        if (!createResult.ok) return propagateError<AssertClaimOutput>(createResult);
         const claim = createResult.value;
 
         // 15b. Phase 9: Write security scan columns (I-P9-01, I-P9-03: same transaction)
         if (contentScanResult) {
           // Check if v42 schema columns exist (module-level cached detection)
-          const hasSecCols = hasPiiDetectedColumn(conn);
+          const hasSecCols = hasPiiDetectedColumn(conn, schemaDetectionCache);
           if (hasSecCols) {
             const piiDetected = contentScanResult.pii.hasPii ? 1 : 0;
             const piiCategories = contentScanResult.pii.hasPii
@@ -1550,7 +1581,7 @@ function createAssertClaimHandlerImpl(
 
         // 15c. Phase 10: Auto-classification (I-P10-01, I-P10-02, I-P10-03: same transaction)
         {
-          const hasClassCols = hasClassificationColumn(conn);
+          const hasClassCols = hasClassificationColumn(conn, schemaDetectionCache);
           if (hasClassCols) {
             // F-P10-001 fix: Use dynamic getter when available (reads from DB at assertion time)
             const rules = deps.getClassificationRules
@@ -1582,7 +1613,7 @@ function createAssertClaimHandlerImpl(
         // 16. Create evidence rows
         if (input.evidenceRefs.length > 0) {
           const evResult = stores.evidence.createBatch(conn, claim.id, input.evidenceRefs);
-          if (!evResult.ok) return evResult as unknown as Result<AssertClaimOutput>;
+          if (!evResult.ok) return propagateError<AssertClaimOutput>(evResult);
         }
 
         // 17. Create artifact junction rows for artifact evidence
@@ -1601,8 +1632,9 @@ function createAssertClaimHandlerImpl(
         if (autoConflictEnabled) {
           // object_value is stored as JSON.stringify(input.object.value) in the DB
           const serializedValue = JSON.stringify(input.object.value);
+          // v2.1.0: conn is TenantScopedConnection at runtime (API layer wraps it).
           const conflicts = detectStructuralConflicts(
-            conn, claim.id, input.subject, input.predicate, serializedValue,
+            conn as TenantScopedConnection, claim.id, input.subject, input.predicate, serializedValue,
           );
           for (const existingId of conflicts.conflictingClaimIds) {
             // Create directional contradicts: new claim -> existing claim
@@ -1846,6 +1878,17 @@ function createRetractClaimHandlerImpl(
           });
         }
 
+        // 10. Phase 11+: Delete vector embedding for retracted claim (I-P11-30)
+        // Retracted claims must not appear in KNN results. Deleting the embedding
+        // is defense-in-depth — KNN post-filter already excludes status='retracted',
+        // but stale embeddings waste storage and slow vec0 scans.
+        if (deps.getVectorStore) {
+          const vs = deps.getVectorStore();
+          if (vs) {
+            vs.delete(conn, input.claimId as string);
+          }
+        }
+
         return ok(undefined);
       });
     },
@@ -1860,6 +1903,9 @@ function createRelateClaimsHandlerImpl(
   deps: ClaimSystemDeps,
   stores: { store: ClaimStore; relationships: ClaimRelationshipStore },
 ): RelateClaimsHandler {
+  // v2.1.0: Per-instance rate limit counters (C-06 isolation)
+  const rlCounters = deps.rateLimitCounters ?? new Map<string, RateLimitEntry>();
+
   return Object.freeze({
     execute(conn: DatabaseConnection, ctx: OperationContext, input: RelationshipCreateInput): Result<RelateClaimsOutput> {
       return conn.transaction(() => {
@@ -1871,7 +1917,7 @@ function createRelateClaimsHandlerImpl(
         }
 
         // 0a. Rate limit
-        if (!checkRateLimit(ctx.agentId, deps.time)) {
+        if (!checkRateLimit(ctx.agentId, deps.time, rlCounters)) {
           return err('RATE_LIMITED', 'Rate limit exceeded', 'SC-12');
         }
 
@@ -1937,7 +1983,7 @@ function createRelateClaimsHandlerImpl(
 
         // 10. Create relationship
         const createResult = stores.relationships.create(conn, ctx, input);
-        if (!createResult.ok) return createResult as unknown as Result<RelateClaimsOutput>;
+        if (!createResult.ok) return propagateError<RelateClaimsOutput>(createResult);
 
         // 11. Audit (I-03)
         deps.audit.append(conn, {
@@ -1996,6 +2042,9 @@ function createQueryClaimsHandlerImpl(
   deps: ClaimSystemDeps,
   stores: { store: ClaimStore; evidence: ClaimEvidenceStore; relationships: ClaimRelationshipStore },
 ): QueryClaimsHandler {
+  // v2.1.0: Per-instance rate limit counters (C-06 isolation)
+  const rlCounters = deps.rateLimitCounters ?? new Map<string, RateLimitEntry>();
+
   return Object.freeze({
     execute(conn: DatabaseConnection, ctx: OperationContext, input: ClaimQueryInput): Result<ClaimQueryResult> {
       // 0. Authorization
@@ -2004,7 +2053,7 @@ function createQueryClaimsHandlerImpl(
       }
 
       // 0a. Rate limit
-      if (!checkRateLimit(ctx.agentId, deps.time)) {
+      if (!checkRateLimit(ctx.agentId, deps.time, rlCounters)) {
         return err('RATE_LIMITED', 'Rate limit exceeded', 'SC-13');
       }
 
@@ -2068,8 +2117,7 @@ function createQueryClaimsHandlerImpl(
 // ============================================================================
 
 export function createClaimSystem(deps: ClaimSystemDeps): ClaimSystem {
-  // Reset rate limits per test run
-  resetRateLimits();
+  // v2.1.0: No module-level reset needed — rate limit counters are per-instance via deps.
 
   // Create stores
   const store = createClaimStoreImpl(deps);

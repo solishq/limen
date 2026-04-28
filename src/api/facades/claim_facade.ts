@@ -29,10 +29,12 @@ import type {
   ClaimQueryInput, ClaimQueryResult,
   RetractClaimInput,
   SearchClaimInput, SearchClaimResult,
+  ClaimId,
 } from '../../claims/interfaces/claim_types.js';
 
+// DC-P4-404: RBAC enforcement at facade level (I-13 authorization completeness).
+// Defense-in-depth: facade enforces RBAC even when called directly by orchestration.
 import { requirePermission } from '../enforcement/rbac_guard.js';
-import { requireRateLimit } from '../enforcement/rate_guard.js';
 
 // ============================================================================
 // RawClaimFacade — internal facade interface (conn, ctx, input)
@@ -52,6 +54,17 @@ export interface RawClaimFacade {
   retractClaim(conn: DatabaseConnection, ctx: OperationContext, input: RetractClaimInput): Result<void>;
   /** Phase 2: Full-text search. RBAC-gated, rate-limited. Not a new system call. */
   searchClaims(conn: DatabaseConnection, ctx: OperationContext, input: SearchClaimInput): Result<SearchClaimResult>;
+  /**
+   * F-BR4-004: Single-claim status lookup for projection-layer consumers
+   * (CLI dispute recomputation). Uses the same 'query_claims' permission
+   * as queryClaims since it is strictly narrower (returns only the
+   * status enum, no content, no relationships). Tenant-scoped.
+   */
+  getClaimStatus(
+    conn: DatabaseConnection,
+    ctx: OperationContext,
+    claimId: string,
+  ): Result<'active' | 'retracted' | 'not_found'>;
 }
 
 // ============================================================================
@@ -72,7 +85,7 @@ export interface RawClaimFacade {
 export function createRawClaimFacade(
   claimSystem: ClaimSystem,
   rbac: RbacEngine,
-  rateLimiter: RateLimiter,
+  _rateLimiter: RateLimiter,
 ): RawClaimFacade {
   return Object.freeze({
     /**
@@ -84,9 +97,7 @@ export function createRawClaimFacade(
       ctx: OperationContext,
       input: ClaimCreateInput,
     ): Result<AssertClaimOutput> {
-      requirePermission(rbac, ctx, 'create_mission');  // mission-scope permission
-      requireRateLimit(rateLimiter, conn, ctx, 'api_calls');
-
+      requirePermission(rbac, ctx, 'assert_claim');
       return claimSystem.assertClaim.execute(conn, ctx, input);
     },
 
@@ -99,9 +110,7 @@ export function createRawClaimFacade(
       ctx: OperationContext,
       input: RelationshipCreateInput,
     ): Result<RelateClaimsOutput> {
-      requirePermission(rbac, ctx, 'create_mission');
-      requireRateLimit(rateLimiter, conn, ctx, 'api_calls');
-
+      requirePermission(rbac, ctx, 'relate_claims');
       return claimSystem.relateClaims.execute(conn, ctx, input);
     },
 
@@ -114,9 +123,7 @@ export function createRawClaimFacade(
       ctx: OperationContext,
       input: ClaimQueryInput,
     ): Result<ClaimQueryResult> {
-      requirePermission(rbac, ctx, 'create_mission');
-      requireRateLimit(rateLimiter, conn, ctx, 'api_calls');
-
+      requirePermission(rbac, ctx, 'query_claims');
       return claimSystem.queryClaims.execute(conn, ctx, input);
     },
 
@@ -130,9 +137,7 @@ export function createRawClaimFacade(
       ctx: OperationContext,
       input: RetractClaimInput,
     ): Result<void> {
-      requirePermission(rbac, ctx, 'create_mission');
-      requireRateLimit(rateLimiter, conn, ctx, 'api_calls');
-
+      requirePermission(rbac, ctx, 'retract_claim');
       return claimSystem.retractClaim.execute(conn, ctx, input);
     },
 
@@ -145,10 +150,33 @@ export function createRawClaimFacade(
       ctx: OperationContext,
       input: SearchClaimInput,
     ): Result<SearchClaimResult> {
-      requirePermission(rbac, ctx, 'create_mission');
-      requireRateLimit(rateLimiter, conn, ctx, 'api_calls');
-
+      requirePermission(rbac, ctx, 'query_claims');
       return claimSystem.store.search(conn, ctx.tenantId, input);
+    },
+
+    /**
+     * F-BR4-004: Projection-layer status lookup.
+     * Returns the claim's current status ('active' | 'retracted') or
+     * 'not_found' when no claim with the given id exists within the
+     * caller's tenant scope. Uses the same 'query_claims' permission as
+     * queryClaims — strictly narrower scope (no content, no relationships,
+     * no evidence). Delegates to ClaimStore.get which already enforces
+     * tenant scoping.
+     */
+    getClaimStatus(
+      conn: DatabaseConnection,
+      ctx: OperationContext,
+      claimId: string,
+    ): Result<'active' | 'retracted' | 'not_found'> {
+      requirePermission(rbac, ctx, 'query_claims');
+      const result = claimSystem.store.get(conn, claimId as ClaimId, ctx.tenantId);
+      if (!result.ok) {
+        if (result.error.code === 'CLAIM_NOT_FOUND') {
+          return { ok: true, value: 'not_found' };
+        }
+        return { ok: false, error: result.error };
+      }
+      return { ok: true, value: result.value.status };
     },
   });
 }

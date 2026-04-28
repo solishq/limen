@@ -1,0 +1,79 @@
+{
+  "id": "LIMEN-J-007",
+  "name": "CLI Knowledge Operations",
+  "statement": "A developer stores knowledge, queries it back, searches for content, creates relationships between claims, and generates context summaries — all from the terminal using documented CLI commands.",
+  "audience": [
+    "developer"
+  ],
+  "tier": 1,
+  "owner": "femi",
+  "authority": "product-authority",
+  "entrySurface": [
+    "packages/limen-cli/README.md:40-80"
+  ],
+  "successCriteria": [
+    "limen remember --subject 'entity:test:demo' --predicate 'test.value' --value 'hello' returns JSON with claimId and confidence",
+    "limen recall --subject 'entity:test:demo' returns JSON array of beliefs including the remembered claim",
+    "limen recall with --minConfidence, --limit, and --includeSuperseded filters correctly",
+    "limen forget --claimId <id> returns JSON confirming retraction",
+    "limen forget --claimId <id> --reason incorrect uses the specified retraction reason",
+    "limen connect --from <id1> --to <id2> --type supports returns JSON confirming relationship",
+    "limen reflect --entries '[{\"category\":\"finding\",\"statement\":\"test\"}]' returns JSON with stored count and claimIds",
+    "limen reflect --file entries.json reads entries from file and processes them",
+    "All stdout is valid JSON, all errors go to stderr as JSON"
+  ],
+  "failureCriteria": [
+    "limen remember without --subject, --predicate, or --value produces non-JSON error or crashes",
+    "limen forget without --claimId produces non-JSON error or crashes",
+    "limen connect without --from, --to, or --type produces non-JSON error or crashes",
+    "limen reflect with invalid JSON in --entries crashes instead of returning JSON error",
+    "limen forget with nonexistent claimId crashes instead of returning JSON error",
+    "Any command outputs non-JSON to stdout"
+  ],
+  "recoveryRequired": true,
+  "recoverySurface": [
+    "packages/limen-cli/README.md:35-37"
+  ],
+  "deterministicWitnesses": [
+    "cold-start",
+    "recovery"
+  ],
+  "exploratoryWitnesses": [
+    "hostile"
+  ],
+  "distributionTargets": [
+    "npm:limen-cli"
+  ],
+  "preconditions": [
+    "Node.js >= 22 installed",
+    "npm available",
+    "limen-cli installed globally",
+    "limen init completed (~/.limen/ exists with master key and config)"
+  ],
+  "stateModel": {
+    "startState": "limen-initialized",
+    "successState": "knowledge-round-tripped",
+    "failureStates": [
+      "remember-failed",
+      "recall-failed",
+      "forget-failed",
+      "connect-failed",
+      "reflect-failed"
+    ],
+    "transitions": [
+      { "from": "limen-initialized", "action": "limen remember --subject entity:test:demo --predicate test.value --value hello", "to": "claim-stored" },
+      { "from": "limen-initialized", "action": "limen remember fails", "to": "remember-failed" },
+      { "from": "claim-stored", "action": "limen recall --subject entity:test:demo", "to": "claim-recalled" },
+      { "from": "claim-stored", "action": "limen recall fails", "to": "recall-failed" },
+      { "from": "claim-recalled", "action": "limen connect --from <id1> --to <id2> --type supports", "to": "claims-connected" },
+      { "from": "claim-recalled", "action": "limen connect fails", "to": "connect-failed" },
+      { "from": "claims-connected", "action": "limen reflect --entries '[{\"category\":\"finding\",\"statement\":\"test\"}]'", "to": "reflections-stored" },
+      { "from": "claims-connected", "action": "limen reflect fails", "to": "reflect-failed" },
+      { "from": "reflections-stored", "action": "limen forget --claimId <id>", "to": "knowledge-round-tripped" },
+      { "from": "reflections-stored", "action": "limen forget fails", "to": "forget-failed" }
+    ]
+  },
+  "lifecycle": "proposed",
+  "createdAt": "2026-04-10T12:00:00Z",
+  "updatedAt": "2026-04-10T12:00:00Z"
+}

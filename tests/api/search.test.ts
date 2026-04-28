@@ -64,6 +64,7 @@ async function createTestLimen(): Promise<Limen> {
       dataDir: dir,
       masterKey: makeKey(),
       providers: [],
+      rateLimiting: { apiCallsPerMinute: 10000 }, // High limit for test throughput
     }),
   );
 }

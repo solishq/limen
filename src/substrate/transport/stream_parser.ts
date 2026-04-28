@@ -41,10 +41,6 @@ class TransportStreamError extends Error {
   }
 }
 
-// ─── Text Decoder for Streaming ───
-
-const decoder = new TextDecoder();
-
 // ─── SSE Parser ───
 
 /**
@@ -73,6 +69,8 @@ export async function* parseSSEStream(
   signal?: AbortSignal,
   time?: TimeProvider,
 ): AsyncIterable<SSEEvent> {
+  // Each concurrent stream gets its own TextDecoder to avoid shared internal state corruption.
+  const decoder = new TextDecoder();
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   const reader = body.getReader();
   let eventCount = 0;
@@ -192,7 +190,7 @@ export async function* parseSSEStream(
             break;
           case 'retry': {
             const parsed = parseInt(value_str, 10);
-            if (!isNaN(parsed) && parsed >= 0) {
+            if (!Number.isNaN(parsed) && parsed >= 0) {
               currentRetry = parsed;
             }
             break;
@@ -262,6 +260,8 @@ export async function* parseNDJSONStream(
   signal?: AbortSignal,
   time?: TimeProvider,
 ): AsyncIterable<Record<string, unknown>> {
+  // Each concurrent stream gets its own TextDecoder to avoid shared internal state corruption.
+  const decoder = new TextDecoder();
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   const reader = body.getReader();
   let lastDataTime = clock.nowMs();

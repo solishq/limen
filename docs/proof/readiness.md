@@ -4,7 +4,7 @@
 > Every claim links to a proof document. Every non-proof boundary is explicit.
 >
 > Generated: 2026-03-24
-> Limen version: 3.3.0
+> Limen version: 3.3.0 (internal spec version; npm package: v2.0.0)
 
 ---
 

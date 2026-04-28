@@ -149,6 +149,11 @@ export interface ImportError {
  * CSV export columns (ordered).
  * CSV is a lossy projection — no evidence refs, no relationships.
  * DC-P8-105: Documented as lossy.
+ *
+ * P2-DATA-001: PII metadata columns (piiDetected, piiCategories, classification) are
+ * intentionally excluded from CSV export. CSV files are commonly opened in spreadsheet
+ * applications without access controls. PII metadata in CSV creates a data portability
+ * risk. Use JSON format for full-fidelity exports that include PII classification data.
  */
 export const CSV_COLUMNS = [
   'id', 'subject', 'predicate', 'objectType', 'objectValue',

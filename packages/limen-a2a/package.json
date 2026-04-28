@@ -37,7 +37,7 @@
     "test": "npx tsx --test tests/*.test.ts"
   },
   "dependencies": {
-    "limen-ai": "^1.0.0",
+    "limen-ai": "^2.0.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
