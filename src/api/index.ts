@@ -36,6 +36,7 @@ import type { TransitionEnforcer } from '../kernel/interfaces/lifecycle.js';
 // CF-004: Real factory functions for default wiring
 import { createKernel as realCreateKernel, destroyKernel as realDestroyKernel } from '../kernel/index.js';
 import { createStringEncryption } from '../kernel/crypto/crypto_engine.js';
+import { rotateKey } from '../kernel/crypto/key_rotation.js';
 import { createSubstrate as realCreateSubstrate, getPhase2Migrations } from '../substrate/index.js';
 import { createOrchestration as realCreateOrchestration, getPhase3Migrations } from '../orchestration/index.js';
 import { getPhase4BMigrations } from '../orchestration/migration/004_tenant_isolation.js';
@@ -126,7 +127,7 @@ import { createReplayEngine } from '../substrate/replay/replay_engine.js';
 import { getSecurityHardeningMigrations } from './migration/033_security_hardening.js';
 import { createConsentRegistry } from '../security/consent_registry.js';
 import { freezeSecurityPolicy } from '../security/security_types.js';
-import type { ConsentApi, GovernanceApi } from './interfaces/api.js';
+import type { ConsentApi, GovernanceApi, SecurityApi } from './interfaces/api.js';
 
 // Phase 10: Governance Suite migration (v43) + engines
 import { getGovernanceSuiteMigrations } from './migration/034_governance_suite.js';
@@ -289,7 +290,7 @@ export type {
   ImportOptions, ImportResult, ImportError, ImportDedup,
   ExchangeErrorCode,
   // Phase 9: Security and Consent types
-  ConsentApi, ConsentRecord, ConsentCreateInput, ConsentBasis, ConsentStatus,
+  ConsentApi, SecurityApi, ConsentRecord, ConsentCreateInput, ConsentBasis, ConsentStatus,
   SecurityPolicy, PiiCategory, PiiAction, SecurityErrorCode,
   ContentScanResult, PiiScanResult, InjectionScanResult,
   // Phase 10: Governance types
@@ -1532,6 +1533,19 @@ export async function createLimen(
         return consentRegistry.list(conn, ctx, dataSubjectId);
       },
     } satisfies ConsentApi,
+
+    // v3.0.0 EG-02: Security operations (key rotation)
+    security: {
+      rotateKey(newMasterKey: Buffer) {
+        const conn = getConnection();
+        const ctx = getContext();
+        // rotateKey internally wraps in conn.transaction() — no outer transaction needed.
+        return rotateKey(
+          { crypto: kernel.crypto, audit: kernel.audit },
+          conn, ctx, resolvedConfig.masterKey, newMasterKey,
+        );
+      },
+    } satisfies SecurityApi,
 
     // Phase 10: Governance Suite (classification, protected predicates, erasure, SOC 2)
     governance: {

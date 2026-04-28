@@ -135,6 +135,9 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'maintenance.getRetentionPolicies': { permission: 'view_telemetry' },
   'maintenance.updateRetentionPolicy': { permission: 'purge_data' },
 
+  // ── Security namespace (v3.0.0 EG-02) ──
+  'security.rotateKey': { permission: 'purge_data' }, // admin-level operation
+
   // ── Data namespace ──
   'data.export': { permission: 'export_compliance' },
   'data.purge': { permission: 'purge_data' },
@@ -173,7 +176,7 @@ export const EXEMPT_METHODS: ReadonlySet<string> = new Set([
   // These are listed here so that if a namespace object is also iterable as a key,
   // it is explicitly acknowledged rather than silently ignored.
   'claims', 'workingMemory', 'governance', 'consent', 'cognitive',
-  'agents', 'missions', 'roles', 'data', 'metrics',
+  'agents', 'missions', 'roles', 'data', 'metrics', 'security',
 ]);
 
 /**

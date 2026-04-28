@@ -224,6 +224,23 @@ export interface ConsentApi {
   list(dataSubjectId: string): Result<readonly ConsentRecord[]>;
 }
 
+/**
+ * v3.0.0 EG-02: Security operations namespace.
+ * Key rotation and other security management operations.
+ */
+export interface SecurityApi {
+  /**
+   * Rotate the master encryption key for all vault entries.
+   * Decrypts all entries with the current key, re-encrypts with the new key.
+   * Atomic: all entries rotated or none (transaction rollback on failure).
+   * Audit trail records the rotation event.
+   *
+   * @param newMasterKey - The new master key (must be >= 32 bytes)
+   * @returns Result with count of rotated entries
+   */
+  rotateKey(newMasterKey: Buffer): Result<{ entriesRotated: number }>;
+}
+
 // ============================================================================
 // §6.1: Configuration Types (S39 IP-4, S3.3)
 // ============================================================================
@@ -566,6 +583,14 @@ export interface Limen {
    * Classification rules, protected predicates, GDPR erasure, SOC 2 export.
    */
   readonly governance: GovernanceApi;
+
+  // -- v3.0.0 EG-02: Security Operations --
+
+  /**
+   * v3.0.0 EG-02: Security operations namespace.
+   * Key rotation and other security management operations.
+   */
+  readonly security: SecurityApi;
 
   // -- Phase 1: Convenience API (remember/recall/forget/connect/reflect) --
 
