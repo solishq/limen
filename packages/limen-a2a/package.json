@@ -1,6 +1,6 @@
 {
   "name": "limen-a2a",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A2A server for Limen Cognitive OS — Google Agent-to-Agent Protocol",
   "type": "module",
   "license": "Apache-2.0",
@@ -17,7 +17,14 @@
   "bugs": {
     "url": "https://github.com/solishq/limen/issues"
   },
-  "keywords": ["limen", "a2a", "agent-to-agent", "cognitive-os", "ai", "agent"],
+  "keywords": [
+    "limen",
+    "a2a",
+    "agent-to-agent",
+    "cognitive-os",
+    "ai",
+    "agent"
+  ],
   "publishConfig": {
     "access": "public"
   },

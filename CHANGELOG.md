@@ -5,6 +5,22 @@ All notable changes to Limen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-04-28 (WIRE)
+
+### Summary
+Complete wiring remediation and production readiness release. Every spec promise verified end-to-end. Every "auto" feature runs automatically. Every security feature enforces.
+
+### Added
+- _Phase 1-7 build in progress — entries will be added per phase completion_
+
+### Fixed
+- _Wiring gaps and enforcement gaps cataloged in LIMEN-WIRING-AUDIT-2026-04-28.md_
+
+### Changed
+- Removed all AI attribution from source code, tests, and documentation
+
+---
+
 ## [2.0.0] - 2026-04-03 (THINK)
 
 ### Added

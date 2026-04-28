@@ -1,6 +1,6 @@
 {
   "name": "limen-mcp",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "MCP server for Limen Cognitive OS — AI agent native integration",
   "type": "module",
   "license": "Apache-2.0",
@@ -17,7 +17,14 @@
   "bugs": {
     "url": "https://github.com/solishq/limen/issues"
   },
-  "keywords": ["limen", "mcp", "model-context-protocol", "cognitive-os", "ai-agent", "ai"],
+  "keywords": [
+    "limen",
+    "mcp",
+    "model-context-protocol",
+    "cognitive-os",
+    "ai-agent",
+    "ai"
+  ],
   "publishConfig": {
     "access": "public"
   },

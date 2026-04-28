@@ -1,6 +1,6 @@
 {
   "name": "limen-cli",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "CLI for Limen Cognitive OS — JSON-first command-line interface",
   "type": "module",
   "license": "Apache-2.0",
@@ -17,7 +17,13 @@
   "bugs": {
     "url": "https://github.com/solishq/limen/issues"
   },
-  "keywords": ["limen", "cli", "cognitive-os", "ai", "agent"],
+  "keywords": [
+    "limen",
+    "cli",
+    "cognitive-os",
+    "ai",
+    "agent"
+  ],
   "publishConfig": {
     "access": "public"
   },
