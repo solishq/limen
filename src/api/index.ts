@@ -871,6 +871,11 @@ export async function createLimen(
   });
   const governedOrchestration = governedOrchResult.engine;
 
+  // v3.0.0 EG-01: Lazy consent registry binding.
+  // consentRegistry is created later (~line 1324) but referenced by claimSystem's
+  // getConsentRegistry getter. This mutable binding captures the eventual reference.
+  let lazyConsentRegistry: ReturnType<typeof createConsentRegistry> | null = null;
+
   // CCP claim system (closure-local — DC-P4-406, C-SEC-05)
   // Sprint 1: Real evidence validator replaces accept-all stub (CCP-01, CCP-02)
   const evidenceValidator = createEvidenceValidator();
@@ -931,6 +936,10 @@ export async function createLimen(
     // Phase 11+: Lazy getter for vector store — initialized after createClaimSystem.
     // I-P11-30: Retraction deletes stale embedding.
     getVectorStore: () => vectorStore,
+    // v3.0.0 EG-01: Lazy getter for consent registry (initialized after claimSystem).
+    // Returns null until consentRegistry is created (line ~1324).
+    // Safe because assertClaim is only called after createLimen() completes.
+    getConsentRegistry: () => lazyConsentRegistry,
   });
 
   // WMP working memory system (closure-local — DC-P4-406, C-SEC-05)
@@ -1325,6 +1334,8 @@ export async function createLimen(
     audit: kernel.audit,
     time: kernel.time,
   });
+  // v3.0.0 EG-01: Bind lazy consent registry for ClaimSystem's getConsentRegistry getter.
+  lazyConsentRegistry = consentRegistry;
 
   // Phase 8: Create Plugin Registry (I-P8-01: before freeze)
   // PluginApi provider returns null until enableApi() is called (I-P8-03).

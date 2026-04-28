@@ -135,6 +135,17 @@ export interface SecurityPolicy {
     readonly windowSeconds: number;           // sliding window duration
     readonly subjectDiversityMin: number;     // min unique subjects in window
   };
+  /**
+   * v3.0.0 EG-01: Consent enforcement on claim assertion.
+   * When required is true, assertClaim checks for active consent
+   * before allowing claims about entity subjects.
+   * Default: not required (backward compatible).
+   */
+  readonly consent?: {
+    readonly required: boolean;
+    /** Consent scope to check. Default: 'claim_assertion'. */
+    readonly scope?: string;
+  };
 }
 
 /**
@@ -169,6 +180,9 @@ export const DEFAULT_SECURITY_POLICY: SecurityPolicy = deepFreeze({
     windowSeconds: 60,        // 60-second sliding window
     subjectDiversityMin: 3,   // must assert about >= 3 different subjects
   },
+  consent: {
+    required: false,          // v3.0.0 EG-01: backward compatible default
+  },
 });
 
 /**
@@ -191,7 +205,8 @@ export type SecurityErrorCode =
   | 'CONSENT_NOT_FOUND'         // Consent record not found
   | 'CONSENT_EXPIRED'           // Consent has expired
   | 'CONSENT_ALREADY_REVOKED'   // Consent already revoked
-  | 'CONSENT_INVALID_INPUT';    // Invalid consent input
+  | 'CONSENT_INVALID_INPUT'     // Invalid consent input
+  | 'CONSENT_REQUIRED';         // v3.0.0 EG-01: Consent required but not active
 
 // ── Consent Registry Interface ──
 

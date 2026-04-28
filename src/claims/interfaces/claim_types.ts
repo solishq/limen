@@ -775,6 +775,13 @@ export interface ClaimSystemDeps {
    * I-P11-30: Tombstone/retraction deletes embedding.
    */
   readonly getVectorStore?: () => import('../../vector/vector_store.js').VectorStore | null;
+  /**
+   * v3.0.0 EG-01: Lazy getter for consent registry (consent enforcement on assertion).
+   * Getter pattern because consentRegistry is initialized after ClaimSystem.
+   * When the returned registry is non-null AND securityPolicy.consent.required is true,
+   * assertClaim checks for active consent before INSERT.
+   */
+  readonly getConsentRegistry?: () => import('../../security/security_types.js').ConsentRegistry | null;
 }
 
 /**

@@ -144,6 +144,23 @@ function computeIdempotencyHash(input: ClaimCreateInput): string {
   return createHash('sha256').update(payload).digest('hex');
 }
 
+/**
+ * v3.0.0 EG-01: Extract entity identifier from subject URN.
+ * Subject URN format: entity:<type>:<id>
+ * Returns the full subject as entity identifier for consent lookup,
+ * or null if the subject is not an entity URN.
+ *
+ * The entity identifier used for consent is the data subject ID,
+ * which maps to the <type>:<id> portion of the URN.
+ */
+export function extractEntityFromSubject(subject: string): string | null {
+  if (!subject || typeof subject !== 'string') return null;
+  const parts = subject.split(':');
+  if (parts.length < 3 || parts[0] !== 'entity') return null;
+  // Return type:id as the entity identifier for consent lookup
+  return parts.slice(1).join(':');
+}
+
 // ============================================================================
 // Validation Helpers
 // ============================================================================
@@ -1548,6 +1565,26 @@ function createAssertClaimHandlerImpl(
               ? 'POISONING_BURST_LIMIT'
               : 'POISONING_LOW_DIVERSITY';
             return err(code, poisoningVerdict.reason ?? 'Poisoning defense triggered', 'I-P9-30');
+          }
+        }
+
+        // 13c. v3.0.0 EG-01: Consent enforcement
+        // If consent.required is true, check for active consent before INSERT.
+        // Only enforced for entity:* subjects (non-entity subjects bypass).
+        if (securityPolicy.consent?.required) {
+          const consentReg = deps.getConsentRegistry?.();
+          if (consentReg) {
+            const entityId = extractEntityFromSubject(input.subject);
+            if (entityId !== null) {
+              const consentScope = securityPolicy.consent.scope ?? 'claim_assertion';
+              const consentResult = consentReg.check(conn, ctx, entityId, consentScope);
+              if (!consentResult.ok) {
+                return err('CONSENT_REQUIRED', `Consent check failed: ${consentResult.error.message}`, 'EG-01');
+              }
+              if (consentResult.value === null) {
+                return err('CONSENT_REQUIRED', `No active consent for entity: ${entityId}`, 'EG-01');
+              }
+            }
           }
         }
 
