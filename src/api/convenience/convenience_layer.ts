@@ -56,6 +56,14 @@ import {
 
 import { generatePromptInstructions } from './convenience_prompt.js';
 
+// Phase 3 v3.0.0 WG-04: Decay computation imports for convenience recall.
+// Query-time stability resolution matches the search path in index.ts (lines 1669-1673).
+import { computeDecayFactor, computeAgeMs } from '../../cognitive/decay.js';
+import { computeCascadePenalty } from '../../cognitive/cascade.js';
+import { resolveStability, type StabilityConfig } from '../../cognitive/stability.js';
+import { classifyFreshness } from '../../cognitive/freshness.js';
+import type { FreshnessThresholds } from './convenience_types.js';
+
 // ── Result Helpers ──
 
 function ok<T>(value: T): Result<T> {
@@ -92,6 +100,16 @@ export interface ConvenienceLayerDeps {
   readonly missionId: MissionId;
   readonly taskId: TaskId | null;
   readonly maxAutoConfidence: number;
+  /**
+   * v3.0.0 WG-04: Stability config for query-time decay resolution.
+   * Matches the search path pattern in index.ts for consistency.
+   * Without this, recall uses assertion-time stability (may drift if config changes).
+   */
+  readonly stabilityConfig?: StabilityConfig;
+  /**
+   * v3.0.0 WG-04: Freshness thresholds for query-time freshness classification.
+   */
+  readonly freshnessThresholds?: FreshnessThresholds;
 }
 
 /**
@@ -120,7 +138,7 @@ export interface ConvenienceLayer {
  * Closure captures deps -- survives Object.freeze (I-CONV-15).
  */
 export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceLayer {
-  const { claims, getConnection, time, missionId, taskId, maxAutoConfidence } = deps;
+  const { claims, getConnection, time, missionId, taskId, maxAutoConfidence, stabilityConfig, freshnessThresholds } = deps;
 
   /**
    * Compute effective confidence, applying the maxAutoConfidence cap
@@ -282,25 +300,50 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
         items = items.filter(item => !item.superseded);
       }
 
-      const beliefs: BeliefView[] = items.map(item => ({
-        claimId: item.claim.id,
-        subject: item.claim.subject,
-        predicate: item.claim.predicate,
-        value: String(item.claim.object.value),
-        confidence: item.claim.confidence,
-        validAt: item.claim.validAt,
-        createdAt: item.claim.createdAt,
-        superseded: item.superseded,
-        disputed: item.disputed,
-        // Phase 3: Cognitive Metabolism fields
-        effectiveConfidence: item.effectiveConfidence,
-        freshness: item.freshness,
-        stability: item.claim.stability,
-        lastAccessedAt: item.claim.lastAccessedAt,
-        accessCount: item.claim.accessCount,
-        // Phase 5: Reasoning field
-        reasoning: item.claim.reasoning,
-      }));
+      // v3.0.0 WG-04 / I-CONV-DECAY: Compute decay at query time using
+      // resolveStability() with current config, matching the search path in index.ts.
+      // This ensures recall and search return consistent effectiveConfidence values
+      // even if stabilityConfig changed after claims were asserted.
+      const conn = getConnection();
+      const nowMs = time.nowMs();
+
+      const beliefs: BeliefView[] = items.map(item => {
+        const queryStabilityDays = resolveStability(item.claim.predicate, stabilityConfig);
+        const ageMs = computeAgeMs(item.claim.validAt, nowMs);
+        const decayFactor = computeDecayFactor(ageMs, queryStabilityDays);
+        const cascadePen = computeCascadePenalty(conn, item.claim.id as string);
+        const effConf = item.claim.confidence * decayFactor * cascadePen;
+
+        // Reclassify freshness at query time
+        const lastAccessMs = item.claim.lastAccessedAt
+          ? Date.parse(item.claim.lastAccessedAt)
+          : null;
+        const freshness = classifyFreshness(
+          lastAccessMs && Number.isFinite(lastAccessMs) ? lastAccessMs : null,
+          nowMs,
+          freshnessThresholds,
+        );
+
+        return {
+          claimId: item.claim.id,
+          subject: item.claim.subject,
+          predicate: item.claim.predicate,
+          value: String(item.claim.object.value),
+          confidence: item.claim.confidence,
+          validAt: item.claim.validAt,
+          createdAt: item.claim.createdAt,
+          superseded: item.superseded,
+          disputed: item.disputed,
+          // v3.0.0 WG-04: Query-time decay-adjusted effectiveConfidence
+          effectiveConfidence: effConf,
+          freshness,
+          stability: queryStabilityDays,
+          lastAccessedAt: item.claim.lastAccessedAt,
+          accessCount: item.claim.accessCount,
+          // Phase 5: Reasoning field
+          reasoning: item.claim.reasoning,
+        };
+      });
 
       return ok(beliefs);
     },

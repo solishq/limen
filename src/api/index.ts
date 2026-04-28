@@ -1124,6 +1124,10 @@ export async function createLimen(
       missionId: convInit.missionId,
       taskId: convInit.taskId,
       maxAutoConfidence,
+      // v3.0.0 WG-04: Pass stability/freshness config for query-time decay computation.
+      // Ensures recall() returns decay-adjusted effectiveConfidence matching search().
+      stabilityConfig: config?.cognitive?.stability,
+      freshnessThresholds: config?.cognitive?.freshness,
     });
 
     log({ level: 'info', category: 'init', message: 'Convenience API initialized', context: { missionId: convInit.missionId, agentId: String(convInit.agentId) } });
