@@ -215,11 +215,17 @@ function vectorHydrateSuperseded(conn: DatabaseConnection, claimId: string): boo
   return (row?.cnt ?? 0) > 0;
 }
 
-/** Check if a claim is disputed (bidirectional 'contradicts' check, per I-P4-09). */
+/** Check if a claim is disputed (bidirectional 'contradicts' check, per I-P4-09).
+ *  v3.0.0 fix (F-V3P1-001): Only count contradictions where the OTHER claim is still active.
+ *  Previously counted retracted contradictors, leaving disputed=true after retraction.
+ *  Matches the query pattern applied to claim_stores.ts (2 of 3 sites were fixed; this is site 3).
+ */
 function vectorHydrateDisputed(conn: DatabaseConnection, claimId: string): boolean {
   const row = conn.get<{ cnt: number }>(
-    `SELECT COUNT(*) as cnt FROM claim_relationships WHERE (to_claim_id = ? OR from_claim_id = ?) AND type = 'contradicts'`,
-    [claimId, claimId],
+    `SELECT COUNT(*) as cnt FROM claim_relationships cr
+     JOIN claim_assertions ca ON ca.id = CASE WHEN cr.from_claim_id = ? THEN cr.to_claim_id ELSE cr.from_claim_id END
+     WHERE (cr.to_claim_id = ? OR cr.from_claim_id = ?) AND cr.type = 'contradicts' AND ca.status = 'active'`,
+    [claimId, claimId, claimId],
   );
   return (row?.cnt ?? 0) > 0;
 }
@@ -1266,11 +1272,16 @@ export async function createLimen(
   }
 
   // v3.0.0 WG-02: Subscribe to mission.transitioned for replay snapshots
+  // F-V3P1-004: Use orchestrationConn (same DB connection as the transition emitter)
+  // instead of getConnection() (separate DB connection). The handler runs synchronously
+  // INSIDE the proposeTaskGraph transaction, so using a different connection would cause
+  // SQLITE_BUSY errors. orchestrationConn shares the same transaction context.
   kernel.events.subscribe('mission.transitioned', (event) => {
     try {
       const { missionId, newState } = event.payload as { missionId?: string; newState?: string };
       if (!missionId) return;
-      const conn = getConnection();
+      // Use orchestrationConn when available (production wiring), fall back to getConnection() (test DI)
+      const conn = orchestrationConn ?? getConnection();
       const tenantId = conn.get<{ tenant_id: string | null }>(
         'SELECT tenant_id FROM core_missions WHERE id = ?',
         [missionId],
@@ -1287,9 +1298,10 @@ export async function createLimen(
   });
 
   // v3.0.0 WG-03: Auto-connection suggestions on claim assertion
+  // F-V3P1-010: Hoisted timer to outer scope so shutdown can clear it.
   const autoSuggestEnabled = resolvedConfig.cognitive?.autoSuggestConnections !== false;
+  let suggestionDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   if (autoSuggestEnabled && cognitiveNamespace) {
-    let suggestionDebounceTimer: ReturnType<typeof setTimeout> | undefined;
     const pendingClaimIds: string[] = [];
 
     kernel.events.subscribe('claim.asserted', (event) => {
@@ -2122,6 +2134,15 @@ export async function createLimen(
       if (retentionTimer) {
         try {
           clearInterval(retentionTimer);
+        } catch (err) {
+          shutdownErrors.push(err instanceof Error ? err : new Error(String(err)));
+        }
+      }
+
+      // v3.0.0 WG-03 F-V3P1-010: Stop auto-suggest debounce timer
+      if (suggestionDebounceTimer) {
+        try {
+          clearTimeout(suggestionDebounceTimer);
         } catch (err) {
           shutdownErrors.push(err instanceof Error ? err : new Error(String(err)));
         }
