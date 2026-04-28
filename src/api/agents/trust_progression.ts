@@ -157,3 +157,35 @@ export function getDemotionTarget(
 
   return demotionMap[currentLevel];
 }
+
+// ─── v3.0.0 EG-03: Trust-to-Clearance Mapping ───
+
+/**
+ * Map trust levels to classification clearance levels.
+ * Clearance values align with CLASSIFICATION_LEVEL_ORDER in governance_types.ts:
+ *   unrestricted=0, internal=1, confidential=2, restricted=3, critical=4
+ *
+ * untrusted    -> 0 (unrestricted only)
+ * probationary -> 1 (internal and below)
+ * trusted      -> 2 (confidential and below)
+ * admin        -> 4 (all levels including critical)
+ *
+ * This mapping enforces principle of least privilege:
+ * agents must earn trust before accessing sensitive data.
+ */
+export const TRUST_TO_CLEARANCE: Readonly<Record<TrustLevel, number>> = {
+  untrusted: 0,
+  probationary: 1,
+  trusted: 2,
+  admin: 4,
+};
+
+/**
+ * Get the clearance level for a given trust level.
+ * Returns the maximum classification level the agent can access.
+ * Returns 4 (all) for undefined/null trust (backward compat single-user mode).
+ */
+export function getClearanceForTrust(trustLevel: TrustLevel | null | undefined): number {
+  if (trustLevel === null || trustLevel === undefined) return 4; // full access
+  return TRUST_TO_CLEARANCE[trustLevel] ?? 4;
+}

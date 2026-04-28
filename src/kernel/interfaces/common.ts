@@ -71,6 +71,16 @@ export interface OperationContext {
   readonly agentId: AgentId | null;
   readonly permissions: ReadonlySet<Permission>;
   readonly sessionId?: SessionId;
+  /**
+   * v3.0.0 EG-03/EG-04: Classification clearance level.
+   * Determines which classification levels this context can access.
+   * Derived from agent trust level or RBAC role.
+   * When undefined (backward compat), all classification levels are accessible.
+   *
+   * Mapping: untrusted=0 (unrestricted only), probationary=1 (internal),
+   *          trusted=2 (confidential), admin=4 (all levels).
+   */
+  readonly clearanceLevel?: number;
 }
 
 // ─── Error Handling ───

@@ -509,8 +509,12 @@ export interface ClaimStore {
   archive(conn: DatabaseConnection, claimId: ClaimId, tenantId: TenantId | null): Result<void>;
   /** §14.8: Tombstone a claim — NULL content fields, preserve identity */
   tombstone(conn: DatabaseConnection, claimId: ClaimId, tenantId: TenantId | null, reason: string): Result<void>;
-  /** SC-13: Query claims with filters, pagination, computed properties */
-  query(conn: DatabaseConnection, tenantId: TenantId | null, filters: ClaimQueryInput): Result<ClaimQueryResult>;
+  /**
+   * SC-13: Query claims with filters, pagination, computed properties.
+   * v3.0.0 EG-04: Optional clearanceLevel filters by classification.
+   * When clearanceLevel is undefined, no classification filtering (backward compat).
+   */
+  query(conn: DatabaseConnection, tenantId: TenantId | null, filters: ClaimQueryInput, clearanceLevel?: number): Result<ClaimQueryResult>;
 
   /**
    * DC-CCP-704, Binding 7: Get a claim that has been tombstoned — returns typed ClaimTombstone.

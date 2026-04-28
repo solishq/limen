@@ -79,18 +79,14 @@ export function buildOperationContext(
   agentId: import('../../kernel/interfaces/index.js').AgentId | null,
   permissions: ReadonlySet<Permission>,
   sessionId?: import('../../kernel/interfaces/index.js').SessionId,
+  clearanceLevel?: number,
 ): OperationContext {
-  const ctx: OperationContext = {
+  return {
     tenantId,
     userId,
     agentId,
     permissions,
+    ...(sessionId !== undefined ? { sessionId } : {}),
+    ...(clearanceLevel !== undefined ? { clearanceLevel } : {}),
   };
-
-  // OperationContext.sessionId is optional per the interface
-  if (sessionId !== undefined) {
-    return { ...ctx, sessionId };
-  }
-
-  return ctx;
 }

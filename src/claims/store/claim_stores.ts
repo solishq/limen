@@ -340,6 +340,11 @@ function rowToRelationship(row: Record<string, unknown>): ClaimRelationship {
 // ============================================================================
 
 function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
+  // v3.0.0 EG-04: Per-store schema detection cache for classification column checks in query().
+  const storeSchemaCache: SchemaDetectionCache = deps.schemaCache
+    ? deps.schemaCache
+    : { hasPiiDetectedCol: null, hasClassificationCol: null };
+
   // Phase 3: Lazy detection of v39 schema (stability column).
   // Cached after first check to avoid repeated PRAGMA queries.
   let hasStabilityColumn: boolean | null = null;
@@ -506,7 +511,7 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
       return ok(undefined);
     },
 
-    query(conn: DatabaseConnection, tenantId: TenantId | null, filters: ClaimQueryInput): Result<ClaimQueryResult> {
+    query(conn: DatabaseConnection, tenantId: TenantId | null, filters: ClaimQueryInput, clearanceLevel?: number): Result<ClaimQueryResult> {
       const conditions: string[] = [];
       const params: unknown[] = [];
 
@@ -589,6 +594,26 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
       if ('missionId' in filters && (filters as Record<string, unknown>)['missionId'] !== undefined) {
         conditions.push('c.source_mission_id = ?');
         params.push((filters as Record<string, unknown>)['missionId']);
+      }
+
+      // v3.0.0 EG-04: Classification-based access filtering.
+      // When clearanceLevel is defined, only return claims whose classification
+      // level is at or below the requester's clearance.
+      // Unclassified claims (classification IS NULL) are visible to all (backward compat).
+      // Uses CLASSIFICATION_LEVEL_ORDER mapping from governance_types.ts.
+      if (clearanceLevel !== undefined && hasClassificationColumn(conn, storeSchemaCache)) {
+        // Map classification text to numeric level for comparison.
+        // Claims with NULL classification (legacy/unclassified) bypass the filter.
+        conditions.push(
+          `(c.classification IS NULL OR CASE c.classification ` +
+          `WHEN 'unrestricted' THEN 0 ` +
+          `WHEN 'internal' THEN 1 ` +
+          `WHEN 'confidential' THEN 2 ` +
+          `WHEN 'restricted' THEN 3 ` +
+          `WHEN 'critical' THEN 4 ` +
+          `ELSE 0 END <= ?)`,
+        );
+        params.push(clearanceLevel);
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -2150,7 +2175,8 @@ function createQueryClaimsHandlerImpl(
       }
 
       // 6. Delegate to store
-      return stores.store.query(conn, ctx.tenantId, input);
+      // v3.0.0 EG-04: Pass clearanceLevel from ctx for classification-based filtering.
+      return stores.store.query(conn, ctx.tenantId, input, ctx.clearanceLevel);
     },
   });
 }
