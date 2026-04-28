@@ -42,3 +42,7 @@ docs/local/
 .stryker-cache/
 .stryker-tmp/
 stryker.log
+
+# AAS integration artifacts
+AAS-INTEGRATION-REPORT.md
+AAS-INTELLIGENCE-INTEGRATION.md
