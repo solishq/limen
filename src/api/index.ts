@@ -119,6 +119,9 @@ import { getConflictIndexMigrations } from './migration/031_conflict_index.js';
 import { getReasoningMigrations } from './migration/032_reasoning.js';
 import { createCognitiveNamespace } from './cognitive/cognitive_api.js';
 
+// v3.0.0 WG-02: Replay Engine
+import { createReplayEngine } from '../substrate/replay/replay_engine.js';
+
 // Phase 9: Security Hardening migration (v42) + Consent Registry
 import { getSecurityHardeningMigrations } from './migration/033_security_hardening.js';
 import { createConsentRegistry } from '../security/consent_registry.js';
@@ -513,7 +516,7 @@ function buildOrchestrationAdapter(
     // P0-A: Pass transitionEnforcer for the OrchestrationTransitionService.
     // createOrchestration() uses a passthrough enforcer when undefined (test backward compat).
     try {
-      return realCreateOrchestration(conn, substrate, kernel.audit, kernel.rateLimiter, kernel.time, transitionEnforcer);
+      return realCreateOrchestration(conn, substrate, kernel.audit, kernel.rateLimiter, kernel.time, transitionEnforcer, kernel.events);
     } catch (err) {
       conn.close();
       throw err;
@@ -929,6 +932,9 @@ export async function createLimen(
     time: kernel.time,
   });
 
+  // ── Step 4.6: Replay Engine (v3.0.0 WG-02) ──
+  const replayEngine = createReplayEngine(kernel.audit);
+
   // ── Step 5: Compose the Limen public API ──
   log({ level: 'info', category: 'init', message: 'Limen initialization complete' });
 
@@ -1255,6 +1261,49 @@ export async function createLimen(
         }
       } catch {
         // Self-healing errors are non-fatal — logged but never propagated to emitter
+      }
+    });
+  }
+
+  // v3.0.0 WG-02: Subscribe to mission.transitioned for replay snapshots
+  kernel.events.subscribe('mission.transitioned', (event) => {
+    try {
+      const { missionId, newState } = event.payload as { missionId?: string; newState?: string };
+      if (!missionId) return;
+      const conn = getConnection();
+      const tenantId = conn.get<{ tenant_id: string | null }>(
+        'SELECT tenant_id FROM core_missions WHERE id = ?',
+        [missionId],
+      )?.tenant_id ?? null;
+
+      if (newState === 'PLANNING') {
+        replayEngine.takeSnapshot(conn, missionId, tenantId, 'mission_start', kernel.time);
+      } else if (newState === 'COMPLETED' || newState === 'FAILED' || newState === 'CANCELLED') {
+        replayEngine.takeSnapshot(conn, missionId, tenantId, 'mission_end', kernel.time);
+      }
+    } catch {
+      // Non-fatal: replay snapshot failure must not break mission transitions
+    }
+  });
+
+  // v3.0.0 WG-03: Auto-connection suggestions on claim assertion
+  const autoSuggestEnabled = resolvedConfig.cognitive?.autoSuggestConnections !== false;
+  if (autoSuggestEnabled && cognitiveNamespace) {
+    let suggestionDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+    const pendingClaimIds: string[] = [];
+
+    kernel.events.subscribe('claim.asserted', (event) => {
+      const { claimId } = event.payload as { claimId?: string };
+      if (claimId) {
+        pendingClaimIds.push(claimId);
+        if (suggestionDebounceTimer) clearTimeout(suggestionDebounceTimer);
+        suggestionDebounceTimer = setTimeout(async () => {
+          const batch = pendingClaimIds.splice(0);
+          for (const id of batch) {
+            try { await cognitiveNamespace!.suggestConnections(id); } catch { /* non-fatal */ }
+          }
+        }, 5000);
+        if (suggestionDebounceTimer.unref) suggestionDebounceTimer.unref();
       }
     });
   }
@@ -2004,6 +2053,26 @@ export async function createLimen(
         const conn = getConnection();
         const ctx = getContext();
         return kernel.retention.updatePolicy(conn, ctx, dataType, retentionDays, action);
+      },
+    },
+
+    // v3.0.0 WG-02: Replay verification
+    replay: {
+      verify(missionId: string) {
+        const conn = getConnection();
+        const tenantId = conn.get<{ tenant_id: string | null }>(
+          'SELECT tenant_id FROM core_missions WHERE id = ?',
+          [missionId],
+        )?.tenant_id ?? null;
+        return replayEngine.verifyReplay(conn, missionId, tenantId);
+      },
+      getSnapshots(missionId: string) {
+        const conn = getConnection();
+        const tenantId = conn.get<{ tenant_id: string | null }>(
+          'SELECT tenant_id FROM core_missions WHERE id = ?',
+          [missionId],
+        )?.tenant_id ?? null;
+        return replayEngine.getSnapshots(conn, missionId, tenantId);
       },
     },
 

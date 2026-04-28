@@ -725,6 +725,19 @@ export interface Limen {
     ): Result<void>;
   };
 
+  // -- v3.0.0 WG-02: Replay --
+
+  /**
+   * v3.0.0 WG-02: Replay verification for mission determinism.
+   * Verifies that mission state at end matches expectations from start.
+   */
+  readonly replay: {
+    /** Verify replay determinism for a completed mission. */
+    verify(missionId: string): Result<import('../../substrate/replay/replay_engine.js').ReplayVerification>;
+    /** Get all snapshots for a mission. */
+    getSnapshots(missionId: string): Result<readonly import('../../substrate/replay/replay_engine.js').ReplaySnapshot[]>;
+  };
+
   // -- Lifecycle --
 
   /**

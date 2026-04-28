@@ -27,6 +27,8 @@
  */
 
 import type { DatabaseConnection, MissionId, TaskId, TenantId, AuditTrail, TimeProvider, Result } from '../../kernel/interfaces/index.js';
+import type { EventBus } from '../../kernel/interfaces/events.js';
+import type { OperationContext } from '../../kernel/interfaces/common.js';
 import type { TransitionEnforcer, TransitionResult, MissionLifecycleState, MissionActiveSubstate, TaskLifecycleState } from '../../kernel/interfaces/lifecycle.js';
 import { MISSION_STATE_BACKFILL_MAP, TASK_STATE_BACKFILL_MAP } from '../../kernel/interfaces/lifecycle.js';
 import type { MissionState, TaskState } from '../interfaces/orchestration.js';
@@ -99,6 +101,7 @@ export function createOrchestrationTransitionService(
   enforcer: TransitionEnforcer,
   audit: AuditTrail,
   time: TimeProvider,
+  eventBus?: EventBus,
 ): OrchestrationTransitionService {
 
   // ── Mission transition (core logic) ──
@@ -219,6 +222,27 @@ export function createOrchestrationTransitionService(
           spec: 'S6',
         },
       };
+    }
+
+    // v3.0.0 WG-02: Emit mission.transitioned for replay engine snapshots
+    if (eventBus) {
+      try {
+        const ctx: OperationContext = {
+          agentId: 'system:orchestrator' as unknown as import('../../kernel/interfaces/index.js').AgentId,
+          userId: null,
+          tenantId: transitionTenantId,
+          permissions: new Set(),
+        };
+        eventBus.emit(conn, ctx, {
+          type: 'mission.transitioned',
+          scope: 'mission',
+          propagation: 'local',
+          missionId: mid,
+          payload: { missionId: mid, fromState: from, newState: to },
+        });
+      } catch {
+        // Non-fatal: event emission failure must not break transitions
+      }
     }
 
     return {

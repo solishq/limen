@@ -74,6 +74,7 @@ export function createOrchestration(
   rateLimiter?: RateLimiter,
   time?: TimeProvider,
   transitionEnforcer?: TransitionEnforcer,
+  eventBus?: import('../kernel/interfaces/events.js').EventBus,
 ): OrchestrationEngine {
   // Hard Stop #7: Default to system time if not injected (backward compatibility for tests).
   // Production callers should always provide kernel.time.
@@ -113,7 +114,7 @@ export function createOrchestration(
   // P0-A: OrchestrationTransitionService — bridges L2 transitions to governance TransitionEnforcer.
   // The service is the SOLE mechanism for mission/task state transitions at L2.
   // Created BEFORE internal modules so it can be injected into modules that need it.
-  const transitionService = createOrchestrationTransitionService(resolvedEnforcer, audit, resolvedTime);
+  const transitionService = createOrchestrationTransitionService(resolvedEnforcer, audit, resolvedTime, eventBus);
 
   // Instantiate all internal modules (C-07: each returns frozen object)
   // P0-A: Modules that perform state transitions receive the transition service.

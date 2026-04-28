@@ -49,6 +49,8 @@ export interface CognitiveConfig {
   readonly freshness?: FreshnessThresholds;
   /** Phase 3 §3.4: Access tracking configuration (includes flushIntervalMs per PA Amendment). */
   readonly accessTracking?: AccessTrackerConfig;
+  /** v3.0.0 WG-03: Auto-suggest connections on claim assertion. Default: true when vector available. */
+  readonly autoSuggestConnections?: boolean;
 }
 
 // ── remember() Types ──

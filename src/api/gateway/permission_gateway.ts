@@ -126,6 +126,10 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'roles.assign': { permission: 'manage_roles' },
   'roles.revoke': { permission: 'manage_roles' },
 
+  // ── Replay namespace (v3.0.0 WG-02) ──
+  'replay.verify': { permission: 'view_telemetry' },
+  'replay.getSnapshots': { permission: 'view_telemetry' },
+
   // ── Maintenance namespace (v3.0.0 WG-01) ──
   'maintenance.runRetention': { permission: 'purge_data' },
   'maintenance.getRetentionPolicies': { permission: 'view_telemetry' },
