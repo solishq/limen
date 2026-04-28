@@ -19,6 +19,7 @@ import { createHash } from 'node:crypto';
 import type { Result } from '../../kernel/interfaces/index.js';
 import type { MissionId, TaskId } from '../../kernel/interfaces/index.js';
 import type { DatabaseConnection } from '../../kernel/interfaces/database.js';
+import type { TenantScopedConnection } from '../../kernel/tenant/tenant_scope.js';
 import type { TimeProvider } from '../../kernel/interfaces/time.js';
 import type {
   ClaimCreateInput,
@@ -95,7 +96,7 @@ function hashSubject(text: string): string {
  */
 export interface ConvenienceLayerDeps {
   readonly claims: ClaimApi;
-  readonly getConnection: () => DatabaseConnection;
+  readonly getConnection: () => TenantScopedConnection;
   readonly time: TimeProvider;
   readonly missionId: MissionId;
   readonly taskId: TaskId | null;

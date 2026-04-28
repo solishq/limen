@@ -126,6 +126,11 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'roles.assign': { permission: 'manage_roles' },
   'roles.revoke': { permission: 'manage_roles' },
 
+  // ── Maintenance namespace (v3.0.0 WG-01) ──
+  'maintenance.runRetention': { permission: 'purge_data' },
+  'maintenance.getRetentionPolicies': { permission: 'view_telemetry' },
+  'maintenance.updateRetentionPolicy': { permission: 'purge_data' },
+
   // ── Data namespace ──
   'data.export': { permission: 'export_compliance' },
   'data.purge': { permission: 'purge_data' },

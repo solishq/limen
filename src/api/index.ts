@@ -1126,8 +1126,8 @@ export async function createLimen(
       maxAutoConfidence,
       // v3.0.0 WG-04: Pass stability/freshness config for query-time decay computation.
       // Ensures recall() returns decay-adjusted effectiveConfidence matching search().
-      stabilityConfig: config?.cognitive?.stability,
-      freshnessThresholds: config?.cognitive?.freshness,
+      ...(config?.cognitive?.stability ? { stabilityConfig: config.cognitive.stability } : {}),
+      ...(config?.cognitive?.freshness ? { freshnessThresholds: config.cognitive.freshness } : {}),
     });
 
     log({ level: 'info', category: 'init', message: 'Convenience API initialized', context: { missionId: convInit.missionId, agentId: String(convInit.agentId) } });
@@ -1190,6 +1190,27 @@ export async function createLimen(
     }, vectorConfig.embeddingInterval);
     // M6-FIX: unref() so this timer does not keep the Node.js process alive
     embeddingTimer.unref();
+  }
+
+  // ── v3.0.0 WG-01: Retention Scheduler Automation ──
+  // Background timer for automatic retention passes.
+  // M6-FIX: unref() so timer does not keep Node.js process alive.
+  let retentionTimer: ReturnType<typeof setInterval> | undefined;
+  const retentionIntervalMs = resolvedConfig.maintenance?.retentionIntervalMs ?? 86_400_000;
+  const retentionEnabled = resolvedConfig.maintenance?.retentionEnabled !== false;
+
+  if (retentionEnabled && retentionIntervalMs > 0) {
+    retentionTimer = setInterval(() => {
+      try {
+        const conn = getConnection();
+        const ctx = getContext();
+        kernel.retention.executeRetention(conn, ctx);
+      } catch (retentionErr) {
+        log({ level: 'warn', category: 'maintenance', message: 'Retention pass failed', context: { error: String(retentionErr) } });
+      }
+    }, retentionIntervalMs);
+    retentionTimer.unref();
+    log({ level: 'info', category: 'init', message: 'Retention scheduler started', context: { intervalMs: retentionIntervalMs } });
   }
 
   // Phase 5 + Phase 12: Create CognitiveNamespace for limen.cognitive
@@ -1967,6 +1988,25 @@ export async function createLimen(
       );
     },
 
+    // v3.0.0 WG-01: Maintenance operations
+    maintenance: {
+      runRetention() {
+        const conn = getConnection();
+        const ctx = getContext();
+        return kernel.retention.executeRetention(conn, ctx);
+      },
+      getRetentionPolicies() {
+        const conn = getConnection();
+        const ctx = getContext();
+        return kernel.retention.getPolicies(conn, ctx);
+      },
+      updateRetentionPolicy(dataType: string, retentionDays: number, action: 'archive' | 'delete' | 'soft_delete') {
+        const conn = getConnection();
+        const ctx = getContext();
+        return kernel.retention.updatePolicy(conn, ctx, dataType, retentionDays, action);
+      },
+    },
+
     // S3.4, I-05, SD-06: Graceful shutdown
     // CF-011: Each step wrapped in try/catch so that one failure
     // does not prevent subsequent cleanup. Errors are collected.
@@ -2004,6 +2044,15 @@ export async function createLimen(
       if (embeddingTimer) {
         try {
           clearInterval(embeddingTimer);
+        } catch (err) {
+          shutdownErrors.push(err instanceof Error ? err : new Error(String(err)));
+        }
+      }
+
+      // v3.0.0 WG-01: Stop retention timer
+      if (retentionTimer) {
+        try {
+          clearInterval(retentionTimer);
         } catch (err) {
           shutdownErrors.push(err instanceof Error ? err : new Error(String(err)));
         }

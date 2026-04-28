@@ -372,6 +372,23 @@ export interface LimenConfig {
    * Default: false.
    */
   readonly debug?: boolean;
+
+  /**
+   * v3.0.0 WG-01: Maintenance configuration.
+   * Controls automatic retention scheduling and other background maintenance tasks.
+   */
+  readonly maintenance?: {
+    /**
+     * Interval in milliseconds between automatic retention passes.
+     * Default: 86_400_000 (24 hours). Set to 0 to disable automatic scheduling.
+     */
+    readonly retentionIntervalMs?: number;
+    /**
+     * Whether automatic retention scheduling is enabled.
+     * Default: true. Set to false to disable automatic retention entirely.
+     */
+    readonly retentionEnabled?: boolean;
+  };
 }
 
 /**
@@ -687,6 +704,26 @@ export interface Limen {
    * I-P8-26: Works on frozen instance.
    */
   importData(document: LimenExportDocument, options?: ImportOptions): Result<ImportResult>;
+
+  // -- v3.0.0 WG-01: Maintenance --
+
+  /**
+   * v3.0.0 WG-01: Maintenance operations for data lifecycle management.
+   * Retention runs automatically on a timer (configurable via maintenance config).
+   * Manual trigger available for on-demand retention passes.
+   */
+  readonly maintenance: {
+    /** Execute a retention pass on demand. */
+    runRetention(): Result<import('../../kernel/interfaces/retention.js').RetentionRunResult>;
+    /** Get current retention policies. */
+    getRetentionPolicies(): Result<import('../../kernel/interfaces/retention.js').RetentionPolicy[]>;
+    /** Update a retention policy for a data type. */
+    updateRetentionPolicy(
+      dataType: string,
+      retentionDays: number,
+      action: 'archive' | 'delete' | 'soft_delete',
+    ): Result<void>;
+  };
 
   // -- Lifecycle --
 
