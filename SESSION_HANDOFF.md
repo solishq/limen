@@ -1,98 +1,133 @@
-# Limen Session Handoff — 2026-04-02
+# Limen Session Handoff — 2026-04-25
 
 ## TL;DR
 
-Phase 8 (Integrations) is built on branch `phase-8-integrations` but needs Breaker → Fix → Certifier → Merge. That's it. Then v1.4.0 is complete.
-
-## Exact Steps
-
-```bash
-cd ~/Projects/limen
-git checkout phase-8-integrations    # Already there
-```
-
-### 1. Run Phase 8 Breaker Pass
-
-Dispatch Breaker against these artifacts on branch `phase-8-integrations`:
-
-**Files to attack:**
-- `src/plugins/plugin_types.ts` (218 lines) — Plugin interface
-- `src/plugins/plugin_registry.ts` (415 lines) — Plugin lifecycle + event hooks
-- `src/exchange/export.ts` (256 lines) — JSON/CSV export
-- `src/exchange/import.ts` (241 lines) — JSON import with dedup + ID remapping
-- `packages/limen-langchain/src/memory.ts` (134 lines) — LangChain adapter
-- `src/api/index.ts` — Modified: plugin wiring, export/import, event hooks
-- `src/api/interfaces/api.ts` — Modified: on/off/exportData/importData
-- `tests/unit/phase8_integrations.test.ts` (648 lines, 30 tests)
-- `docs/sprints/PHASE-8-{DC-DECLARATION,TRUTH-MODEL}.md`
-
-**Attack vectors:**
-1. Plugin isolation (crash engine? bypass freeze?)
-2. Event handler error isolation (one throws → kills dispatch?)
-3. Export SQL injection via filter parameters
-4. Import validation (malformed JSON, missing fields)
-5. Import dedup correctness (remove dedup → tests catch it?)
-6. Export → Import roundtrip fidelity (lossless for JSON?)
-7. Plugin destroy on shutdown
-8. LangChain adapter (real or just types?)
-
-Write to: `docs/sprints/PHASE-8-BREAKER-REPORT.md`
-
-### 2. Fix Cycle
-
-Pattern from every prior phase: Builder implements guards, tests don't exercise them. Expect 3-6 HIGH findings. Fix by writing discriminative tests that kill mutations.
-
-### 3. Certifier Gate
-
-Write to: `docs/sprints/PHASE-8-CERTIFIER-REPORT.md`
-
-### 4. Merge to Main
-
-```bash
-git checkout main
-git merge phase-8-integrations --no-ff -m "[CLASS-2][FEAT] Phase 8: Integrations — plugins, events, export/import, LangChain adapter"
-```
-
-### 5. Fix Premature v1.4.0 Tag
-
-```bash
-git tag -d v1.4.0
-git push origin :refs/tags/v1.4.0
-git tag -a v1.4.0 -m "v1.4.0: Quality, Safety, Reasoning & Integrations"
-git push origin main --tags
-```
-
-### 6. npm Publish
-
-Femi runs: `cd ~/Projects/limen && npm publish --access public`
+CLI friction remediation is **CODE-COMPLETE**. All findings closed across 4 Builder → 4 Breaker → Certifier GO (sustained) → Witness 9/10 cycles. Tests: 195/195 CLI + 8 engine. **One item remains: CLI Manual PDF render via Typst.**
 
 ---
 
-## What Was Built This Session
+## Branch & State
 
-| Phase | What | Engineering Controls | Status |
-|-------|------|---------------------|--------|
-| 0 | Foundation + KB API deletion | Tier 3 | MERGED |
-| 1 | Convenience API (remember/recall/forget/connect/reflect) | Full 7 | MERGED |
-| 2 | FTS5 Search (unicode61 + trigram CJK) | Full 7 | MERGED |
-| 3 | Cognitive Metabolism (FSRS decay, freshness, access tracking) | Full 7 | MERGED |
-| 4 | Quality & Safety (conflict, cascade, RBAC, .raw gating) | Full 7 | MERGED |
-| 5 | Reasoning (reasoning column, cognitive.health(), gaps) | Full 7 | MERGED |
-| 6 | Developer Experience (README, examples, error docs) | Tier 3 | MERGED |
-| 7 | MCP Enhancement (5 tools: context, health, search, bulk, decay) | Full 7 | MERGED |
-| 8 | Integrations (plugins, events, export/import, LangChain) | **1-3 only** | **BRANCH** |
+- **Branch:** `phase-13-distributed` (local only, NOT pushed)
+- **HEAD:** `1c2a856` — fix(limen-cli): F-BR6-FV-001 renumber DC-CLI-066/067 to DC-CLI-106/107
+- **CLI tests:** 195/195 (5 files, last verified 2026-04-25)
+- **Engine getClaimStatus tests:** 8/8 (node:test runner)
+- **Dirty files:** `SESSION_HANDOFF.md` (this file), `src/claims/interfaces/claim_types.ts` (2 lines, pre-existing)
+- **Stash:** `stash@{0}` = obsolete WIP (F-BR6-001 fix now committed), safe to drop
+- **Stash:** `stash@{1}` = old WIP on F-BR5-006 commit, safe to drop
 
-## Releases
+---
 
-- **v1.3.0**: npm + GitHub (Phases 0-3)
-- **v1.4.0**: GitHub tag exists (premature). npm shows v1.3.0. Needs re-tag after Phase 8 merge.
+## What This Session Did (2026-04-25)
 
-## Known Issues
+| Action | Result | Commits |
+|---|---|---|
+| Builder: F-BR6-001 fix (skipA2aFilter in search) | 195/195 (+2 tests) | `61ecbd9` |
+| Breaker: verify F-BR6-001 fix | PASS, 1 P3 traceability finding | — |
+| Builder: DC-ID collision fix (106/107) | Renumbered | `1c2a856` |
+| Certifier: addendum | **GO SUSTAINED** | — |
 
-- 1 pre-existing test failure: `test_gap_018_data_integrity.test.ts` — hardcoded v1.2.0 version check
-- Oracle Gates DEGRADED across all phases (Intelligence MCP unavailable)
-- Stale worktrees: run `git worktree prune` to clean
+---
 
-## After v1.4.0
+## Full Session History (CLI Parity — 2026-04-11 through 2026-04-25)
 
-Next: v1.5.0 (Phases 9-10: Security Hardening + Governance Suite)
+| Pass | Verdict | Tests | Key Commits |
+|---|---|---|---|
+| Builder 1 — 10 FPs + README | 152/152 (+19) | `066a325`, `188866e`, `ff869c3` |
+| Breaker 1 — 11 findings | LOOPBACK (F-BR4-001 Critical, F-BR4-004 Major) | — |
+| Builder 2 — Re-derivation | 185/185 (+33) | `f4b08eb`..`cd2d62c` |
+| Breaker 2 — Re-attack | CONDITIONAL PASS, 6 new F-BR5 findings | — |
+| Builder 3 — F-BR5 sweep (6/6) | 192/192 (+8 engine) | `9614c61`..`f4be214` |
+| Breaker 3 — F-BR5 verify | **PASS** (1 informational) | — |
+| **Certifier** | **GO** | — |
+| **Witness re-pass** | **9/10** (up from 7/10) | — |
+| Builder 4 — Search/recall align | 193/193 (+1) | `98feae4` |
+| Breaker 4 — Search fix verify | F-BR6-001 found (P2 latent) | — |
+| Builder 5 — F-BR6-001 fix | 195/195 (+2) | `61ecbd9` |
+| Breaker 5 — F-BR6-001 verify | **PASS** (1 P3 DC-ID) | — |
+| Builder 6 — DC-ID renumber | 195/195 | `1c2a856` |
+| **Certifier addendum** | **GO SUSTAINED** | — |
+
+---
+
+## What Remains
+
+### 1. CLI Manual PDF render (Typst)
+
+- Manual source: `packages/limen-cli/docs/LIMEN-CLI-MANUAL.md` (written 2026-04-10)
+- DT audit scored 75/90 (session `session-2026-04-10-limen-manual.md`)
+- Render with Typst to PDF
+- Prior session note: "PDF NOT RENDERED" — this is the one remaining deliverable
+
+### 2. (Optional) Commit SESSION_HANDOFF.md
+
+This file is dirty. Commit if desired before any merge.
+
+---
+
+## Completed (DO NOT re-do)
+
+### All Findings Closed
+
+| Series | Count | Status |
+|---|---|---|
+| F-BR4 (Breaker Pass 1) | 11 | All closed |
+| F-BR5 (Breaker Pass 2) | 6 | All closed |
+| F-BR6 (Breaker Pass 4-5) | 1 + 1 traceability | All closed |
+| **Total** | **19** | **Zero open** |
+
+### Residual Risks (documented, non-blocking)
+
+1. **RR-CLI-FR-001:** Engine encryption scope — master key does not cryptographically gate claim content. Properly disclaimed in `bootstrap.ts:26-41`. Engine backlog item.
+2. **RR-CLI-FR-002:** OG-FMEA recurring degradation — MCP payload >100k chars. Manual FMEA evidence in Breaker reports.
+
+---
+
+## Finding Reports
+
+| Report | Path | Verdict |
+|---|---|---|
+| Breaker Pass 1 | `.claude/findings/2026-04-11/breaker-cli-friction-report.md` | LOOPBACK |
+| Breaker Pass 2 | `.claude/findings/2026-04-11/breaker-loopback-report.md` | CONDITIONAL PASS |
+| Breaker Pass 3 | `.claude/findings/2026-04-11/breaker-f-br5-sweep-report.md` | PASS |
+| Breaker Pass 4 | `.claude/findings/2026-04-11/breaker-search-fix-report.md` | F-BR6-001 OPEN |
+| Certifier GO | `.claude/findings/2026-04-11/certifier-evidence-gate.md` | **GO** |
+| Certifier addendum | `.claude/findings/2026-04-11/certifier-addendum-f-br6.md` | **GO SUSTAINED** |
+| Witness (original) | `testimony/WITNESS-CLI-TESTIMONY.md` | 7/10 |
+| Witness re-pass | `testimony/WITNESS-CLI-REPASS-TESTIMONY.md` | 9/10 |
+
+---
+
+## Key Files
+
+| Area | Path |
+|---|---|
+| CLI source | `packages/limen-cli/src/commands/` |
+| Belief postprocessing | `packages/limen-cli/src/commands/belief-postprocess.ts` |
+| Search | `packages/limen-cli/src/commands/search.ts` |
+| Bootstrap | `packages/limen-cli/src/bootstrap.ts` |
+| Init | `packages/limen-cli/src/commands/init.ts` |
+| Engine claim status | `src/api/facades/claim_facade.ts` (~line 166-180) |
+| CLI tests | `packages/limen-cli/tests/commands/` (5 files) |
+| Engine status tests | `tests/api/api_claim_status.test.ts` (8 tests) |
+| README | `packages/limen-cli/README.md` |
+| Manual source | `packages/limen-cli/docs/LIMEN-CLI-MANUAL.md` |
+
+## Test Runners
+
+```bash
+# Kill zombies first
+pkill -f vitest
+
+# CLI tests (vitest)
+cd packages/limen-cli && npx -y vitest@4.1.4 run
+
+# Engine getClaimStatus tests (node:test via tsx)
+cd packages/limen-ai && npx tsx --test tests/api/api_claim_status.test.ts
+```
+
+## Standing Orders
+
+- Do NOT push without explicit Lanre approval
+- 12 COORD commits (`98feae4..e1e3030`) sit between CLI parity and HEAD — separate workstream
+- Kill zombie vitest processes before test runs (`pkill -f vitest`)

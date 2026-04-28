@@ -106,7 +106,7 @@ describe('A2A Chat: limen_a2a_send', () => {
   it('stores a channel message as a Limen claim', async () => {
     const limen = await createTestEngine();
     const result = a2aSend(limen, {
-      sender: 'claude-code',
+      sender: 'agent-alpha',
       channel: 'general',
       message: 'Hello team',
     });
@@ -121,24 +121,24 @@ describe('A2A Chat: limen_a2a_send', () => {
   it('stores a DM as a Limen claim with sorted subject', async () => {
     const limen = await createTestEngine();
 
-    // Send from codex to claude-code
+    // Send from agent-beta to agent-alpha
     const result1 = a2aSend(limen, {
-      sender: 'codex',
-      to: 'claude-code',
+      sender: 'agent-beta',
+      to: 'agent-alpha',
       message: 'Question about the PR',
     });
     assert.ok(result1.ok);
 
-    // Send from claude-code to codex (reverse direction, same subject)
+    // Send from agent-alpha to agent-beta (reverse direction, same subject)
     const result2 = a2aSend(limen, {
-      sender: 'claude-code',
-      to: 'codex',
+      sender: 'agent-alpha',
+      to: 'agent-beta',
       message: 'Go ahead',
     });
     assert.ok(result2.ok);
 
     // Both should be on the same subject (sorted)
-    const recall = limen.recall('entity:dm:claude-code_codex', 'a2a.message');
+    const recall = limen.recall('entity:dm:agent-alpha_agent-beta', 'a2a.message');
     assert.ok(recall.ok);
     assert.equal(recall.value.length, 2, 'both messages should be on the same DM thread');
   });
@@ -147,7 +147,7 @@ describe('A2A Chat: limen_a2a_send', () => {
     const limen = await createTestEngine();
 
     a2aSend(limen, {
-      sender: 'codex',
+      sender: 'agent-beta',
       channel: 'general',
       message: 'From HTTP',
       transport: 'http',
@@ -161,23 +161,23 @@ describe('A2A Chat: limen_a2a_send', () => {
     assert.ok(reasoning, 'reasoning should contain metadata');
     const meta = JSON.parse(reasoning);
     assert.equal(meta.transport, 'http', 'transport should be stored in metadata');
-    assert.equal(meta.sender, 'codex');
+    assert.equal(meta.sender, 'agent-beta');
   });
 
   it('stores mentions in metadata (F-9)', async () => {
     const limen = await createTestEngine();
 
     a2aSend(limen, {
-      sender: 'claude-code',
+      sender: 'agent-alpha',
       channel: 'engineering',
       message: 'Review needed',
-      mentions: ['codex', 'femi'],
+      mentions: ['agent-beta', 'femi'],
     });
 
     const recall = limen.recall('entity:channel:engineering', 'a2a.message');
     assert.ok(recall.ok);
     const meta = JSON.parse(recall.value[0].reasoning!);
-    assert.deepEqual(meta.mentions, ['codex', 'femi']);
+    assert.deepEqual(meta.mentions, ['agent-beta', 'femi']);
   });
 
   // ── Rejection paths (Amendment 21) ──
@@ -201,8 +201,8 @@ describe('A2A Chat: limen_a2a_read', () => {
     const limen = await createTestEngine();
 
     // Send 3 messages
-    a2aSend(limen, { sender: 'claude-code', channel: 'general', message: 'msg-1' });
-    a2aSend(limen, { sender: 'codex', channel: 'general', message: 'msg-2' });
+    a2aSend(limen, { sender: 'agent-alpha', channel: 'general', message: 'msg-1' });
+    a2aSend(limen, { sender: 'agent-beta', channel: 'general', message: 'msg-2' });
     a2aSend(limen, { sender: 'femi', channel: 'general', message: 'msg-3' });
 
     const result = limen.recall('entity:channel:general', 'a2a.message', { limit: 20 });
@@ -224,29 +224,29 @@ describe('A2A Chat: limen_a2a_read', () => {
   it('reads DM messages between two specific agents', async () => {
     const limen = await createTestEngine();
 
-    // DMs between codex and claude-code
-    a2aSend(limen, { sender: 'codex', to: 'claude-code', message: 'DM-1' });
-    a2aSend(limen, { sender: 'claude-code', to: 'codex', message: 'DM-2' });
+    // DMs between agent-beta and agent-alpha
+    a2aSend(limen, { sender: 'agent-beta', to: 'agent-alpha', message: 'DM-1' });
+    a2aSend(limen, { sender: 'agent-alpha', to: 'agent-beta', message: 'DM-2' });
 
-    // DMs between femi and codex (different thread)
-    a2aSend(limen, { sender: 'femi', to: 'codex', message: 'DM-other' });
+    // DMs between femi and agent-beta (different thread)
+    a2aSend(limen, { sender: 'femi', to: 'agent-beta', message: 'DM-other' });
 
-    // Read codex-claude DM thread
-    const result = limen.recall('entity:dm:claude-code_codex', 'a2a.message');
+    // Read agent-beta-claude DM thread
+    const result = limen.recall('entity:dm:agent-alpha_agent-beta', 'a2a.message');
     assert.ok(result.ok);
     assert.equal(result.value.length, 2, 'only 2 messages in this DM thread');
 
-    // Read femi-codex DM thread
-    const result2 = limen.recall('entity:dm:codex_femi', 'a2a.message');
+    // Read femi-agent-beta DM thread
+    const result2 = limen.recall('entity:dm:agent-beta_femi', 'a2a.message');
     assert.ok(result2.ok);
-    assert.equal(result2.value.length, 1, 'only 1 message in femi-codex thread');
+    assert.equal(result2.value.length, 1, 'only 1 message in femi-agent-beta thread');
   });
 
   it('respects limit parameter', async () => {
     const limen = await createTestEngine();
 
     for (let i = 0; i < 10; i++) {
-      a2aSend(limen, { sender: 'claude-code', channel: 'general', message: `msg-${i}` });
+      a2aSend(limen, { sender: 'agent-alpha', channel: 'general', message: `msg-${i}` });
     }
 
     const result = limen.recall('entity:channel:general', 'a2a.message', { limit: 3 });
@@ -271,8 +271,8 @@ describe('A2A Chat: limen_a2a_channels', () => {
   it('discovers channels via wildcard recall', async () => {
     const limen = await createTestEngine();
 
-    a2aSend(limen, { sender: 'claude-code', channel: 'general', message: 'hello' });
-    a2aSend(limen, { sender: 'codex', channel: 'engineering', message: 'PR ready' });
+    a2aSend(limen, { sender: 'agent-alpha', channel: 'general', message: 'hello' });
+    a2aSend(limen, { sender: 'agent-beta', channel: 'engineering', message: 'PR ready' });
 
     const result = limen.recall('entity:channel:*', 'a2a.message', { limit: 100 });
     assert.ok(result.ok);
@@ -287,7 +287,7 @@ describe('A2A Chat: limen_a2a_channels', () => {
   it('discovers DM threads via wildcard recall (F-8)', async () => {
     const limen = await createTestEngine();
 
-    a2aSend(limen, { sender: 'codex', to: 'claude-code', message: 'DM' });
+    a2aSend(limen, { sender: 'agent-beta', to: 'agent-alpha', message: 'DM' });
 
     const result = limen.recall('entity:dm:*', 'a2a.message', { limit: 100 });
     assert.ok(result.ok);
@@ -373,13 +373,13 @@ describe('A2A Chat: Predicate Convention', () => {
   it('metadata includes sender, timestamp, transport, and target', async () => {
     const limen = await createTestEngine();
 
-    a2aSend(limen, { sender: 'claude-code', channel: 'general', message: 'test', transport: 'stdio' });
+    a2aSend(limen, { sender: 'agent-alpha', channel: 'general', message: 'test', transport: 'stdio' });
 
     const result = limen.recall('entity:channel:general', 'a2a.message');
     assert.ok(result.ok);
 
     const meta = JSON.parse(result.value[0].reasoning!);
-    assert.equal(meta.sender, 'claude-code');
+    assert.equal(meta.sender, 'agent-alpha');
     assert.ok(meta.timestamp, 'should have timestamp');
     assert.equal(meta.transport, 'stdio');
     assert.deepEqual(meta.target, { type: 'channel', name: 'general' });
@@ -394,7 +394,7 @@ describe('A2A Chat: Name Validation', () => {
   // These test the isValidName function behavior via the convention
 
   it('accepts valid names: alphanumeric, hyphens, underscores', () => {
-    const valid = ['claude-code', 'codex', 'femi', 'agent_1', 'test-123', 'A'];
+    const valid = ['agent-alpha', 'agent-beta', 'femi', 'agent_1', 'test-123', 'A'];
     for (const name of valid) {
       assert.ok(/^[a-zA-Z0-9_-]{1,64}$/.test(name), `${name} should be valid`);
     }

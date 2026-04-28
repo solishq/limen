@@ -1063,8 +1063,8 @@ export const CCP_EVENTS = {
 /** CF-05, PSD-5: Maximum hops for evidence-path grounding (default, configurable per tenant/mission) */
 export const CLAIM_GROUNDING_MAX_HOPS = 3;
 
-/** FM-CCP-01: Maximum claims per mission */
-export const CLAIM_PER_MISSION_LIMIT = 500;
+/** FM-CCP-01: Maximum claims per mission (raised 2026-04-22 by founder directive for long-running A2A-heavy orchestration missions) */
+export const CLAIM_PER_MISSION_LIMIT = 5000;
 
 /** FM-CCP-01: Maximum claims per artifact (SC-4 amendment) */
 export const CLAIM_PER_ARTIFACT_LIMIT = 50;

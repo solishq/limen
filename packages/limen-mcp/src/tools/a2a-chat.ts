@@ -104,11 +104,11 @@ export function registerA2AChatTools(
     'limen_a2a_send',
     'Send a message to an A2A chat channel or direct message. Messages are stored as Limen claims — immutable, auditable, governed.',
     {
-      sender: z.string().min(1).max(64).describe('Your agent name (e.g. "claude-code", "codex", "femi")'),
+      sender: z.string().min(1).max(64).describe('Your agent name (e.g. "agent-alpha", "orchestrator", "reviewer")'),
       channel: z.string().max(64).optional().describe('Channel name for group chat (e.g. "general", "engineering"). Omit for DM.'),
       to: z.string().max(64).optional().describe('Recipient agent name for direct message. Omit for channel message.'),
       message: z.string().min(1).max(2000).describe('The message text (max 2000 chars)'),
-      mentions: z.string().optional().describe('Comma-separated agent names to mention (e.g. "codex,femi")'),
+      mentions: z.string().optional().describe('Comma-separated agent names to mention (e.g. "reviewer,orchestrator")'),
     },
     async (args) => {
       // Validate: must have exactly one of channel or to

@@ -1,7 +1,7 @@
 /**
  * WorkingMemoryApiImpl — Consumer-facing convenience wrapper for WMP system calls.
  *
- * Sprint 7: Bridge to Claude Code
+ * Sprint 7: Public API Bridge
  * Follows AgentApiImpl pattern (src/api/agents/agent_api.ts):
  *   Constructor receives getConnection/getContext closures.
  *   Each method calls them internally before delegating to RawWorkingMemoryFacade.

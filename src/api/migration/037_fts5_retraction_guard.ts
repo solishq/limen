@@ -2,7 +2,7 @@
  * Migration v46: FTS5 retraction zombie fix.
  * Phase 5: Data integrity — prevent retracted claims from haunting the search index.
  *
- * Spec ref: LIMEN_BUILD_PHASES.md, CLAUDE.md DC-1 (Data integrity)
+ * Spec ref: LIMEN_BUILD_PHASES.md, Engineering Constitution DC-1 (Data integrity)
  *
  * Problem: The AFTER UPDATE trigger (claims_fts_au) from migration 037 re-inserts
  * claims into the FTS5 index whenever subject IS NOT NULL. But retraction only sets

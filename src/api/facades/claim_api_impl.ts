@@ -1,7 +1,7 @@
 /**
  * ClaimApiImpl — Consumer-facing convenience wrapper for CCP system calls.
  *
- * Sprint 7: Bridge to Claude Code
+ * Sprint 7: Public API Bridge
  * Phase 3: Access tracking wired after query/search (Decision 5, I-P3-05).
  *
  * Follows AgentApiImpl pattern (src/api/agents/agent_api.ts):
