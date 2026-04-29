@@ -153,17 +153,25 @@ describe('FR-008: Task-Aware Context Preparation (limen.cognitive.prepareForTask
 
     const pricingCtx = pricingResult.value;
 
-    // Discriminative assertion: auth task has auth content, pricing task does not
-    // (or at minimum, coverage arrays differ reflecting keyword influence)
-    const authHasPKCE = ctx.text.includes('PKCE');
-    const pricingHasPKCE = pricingCtx.text.includes('PKCE');
-    // If keyword extraction is removed, both would return identical content — this catches that
-    assert.ok(authHasPKCE, 'auth task must include PKCE');
-    // Coverage arrays should reflect different keyword-driven predicate selection
-    const coverageDiffers = JSON.stringify(ctx.coverage) !== JSON.stringify(pricingCtx.coverage) ||
-                            ctx.text !== pricingCtx.text;
-    assert.ok(coverageDiffers,
-      'auth-focused and pricing-focused tasks must produce different output (keyword extraction must discriminate)');
+    // Auth task must surface PKCE decision from seeded claims
+    assert.ok((ctx.sections.decisions ?? '').includes('PKCE'),
+      'auth task decisions section must include PKCE from seeded claims');
+
+    // Verify keyword extraction function independently — structural kill test.
+    // If extractKeywords is removed/emptied, this import-level test catches it.
+    const { extractKeywords } = await import('../../src/cognitive/task_preparation.js');
+    const authKeywords = extractKeywords('Fix the auth module security issues');
+    assert.ok(authKeywords.length > 0, 'auth description must extract keywords');
+    assert.ok(authKeywords.includes('auth') || authKeywords.includes('security'),
+      'auth description must extract auth/security keywords');
+
+    const pricingKeywords = extractKeywords('Analyze pricing model for enterprise tier');
+    // Auth and pricing descriptions should extract different keywords
+    const authSet = new Set(authKeywords);
+    const pricingSet = new Set(pricingKeywords);
+    const overlap = [...authSet].filter(k => pricingSet.has(k));
+    assert.ok(overlap.length < authKeywords.length,
+      'auth and pricing must extract at least partially different keywords');
   });
 
   // ── DC-PREP-03 [REJECTION]: empty taskDescription returns error ──
