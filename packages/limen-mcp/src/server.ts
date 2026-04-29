@@ -70,6 +70,8 @@ import { registerGovernanceTools } from './tools/governance.js';
 import { registerConsentTools } from './tools/consent.js';
 import { registerMaintenanceTools } from './tools/maintenance.js';
 import { registerOutputTools } from './tools/output.js';
+import { registerTelemetryTools } from './tools/telemetry.js';
+import { registerA2AGovernanceTools } from './tools/a2a-governance.js';
 import { registerHealthResource } from './resources/health.js';
 
 async function main(): Promise<void> {
@@ -117,6 +119,12 @@ async function main(): Promise<void> {
 
   // Register Phase 4 FR-001: Output Primitives tools
   registerOutputTools(server, limen);
+
+  // Register Phase 7 FR-004: Telemetry tools
+  registerTelemetryTools(server, limen);
+
+  // Register Phase 7 FR-002: A2A Governance tools
+  registerA2AGovernanceTools(server, limen);
 
   // Register resources
   registerHealthResource(server, limen);

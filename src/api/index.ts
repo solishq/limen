@@ -203,6 +203,12 @@ import { createOutputApi } from './output/output_api.js';
 import { initializeConvenience } from './convenience/convenience_init.js';
 import { DEFAULT_MAX_AUTO_CONFIDENCE } from './convenience/convenience_types.js';
 
+// Phase 7 FR-004: Telemetry API
+import { createTelemetryApi } from './telemetry/telemetry_api.js';
+
+// Phase 7 FR-002: A2A Governance API
+import { createA2AGovernanceApi } from './a2a-governance/a2a_governance_api.js';
+
 // Phase 8: Plugin Registry and Exchange
 import { createPluginRegistry } from '../plugins/plugin_registry.js';
 import { exportKnowledge } from '../exchange/export.js';
@@ -1206,6 +1212,36 @@ export async function createLimen(
     log({ level: 'info', category: 'init', message: 'Output Primitives API initialized' });
   }
 
+  // Phase 7 FR-004: Telemetry API
+  // Uses the same convenience mission context. If convenience init failed, telemetry API also unavailable.
+  let telemetryApi: ReturnType<typeof createTelemetryApi> | null = null;
+  if (convenienceMissionId) {
+    telemetryApi = createTelemetryApi({
+      claims: claimsApi,
+      getConnection,
+      time: kernel.time,
+      missionId: convenienceMissionId,
+      taskId: null,
+      maxAutoConfidence,
+    });
+    log({ level: 'info', category: 'init', message: 'Telemetry API initialized' });
+  }
+
+  // Phase 7 FR-002: A2A Governance API
+  // Uses the same convenience mission context. If convenience init failed, governance API also unavailable.
+  let a2aGovernanceApi: ReturnType<typeof createA2AGovernanceApi> | null = null;
+  if (convenienceMissionId) {
+    a2aGovernanceApi = createA2AGovernanceApi({
+      claims: claimsApi,
+      getConnection,
+      time: kernel.time,
+      missionId: convenienceMissionId,
+      taskId: null,
+      maxAutoConfidence,
+    });
+    log({ level: 'info', category: 'init', message: 'A2A Governance API initialized' });
+  }
+
   // ── Phase 11: Vector Search Subsystem ──
   // sqlite-vec is OPTIONAL. Try to load. If it fails, vector features degrade gracefully.
   // I-P11-01: Core features work without sqlite-vec.
@@ -1568,6 +1604,20 @@ export async function createLimen(
     output: outputApi ?? {
       assert() { throw new LimenError('ENGINE_UNHEALTHY', 'Output Primitives API not initialized'); },
       query() { throw new LimenError('ENGINE_UNHEALTHY', 'Output Primitives API not initialized'); },
+    },
+
+    // Phase 7 FR-004: Telemetry namespace (limen.telemetry.record/query)
+    telemetry: telemetryApi ?? {
+      record() { throw new LimenError('ENGINE_UNHEALTHY', 'Telemetry API not initialized'); },
+      query() { throw new LimenError('ENGINE_UNHEALTHY', 'Telemetry API not initialized'); },
+    },
+
+    // Phase 7 FR-002: A2A Governance namespace
+    a2aGovernance: a2aGovernanceApi ?? {
+      setGovernanceBlock() { throw new LimenError('ENGINE_UNHEALTHY', 'A2A Governance API not initialized'); },
+      getGovernanceBlock() { throw new LimenError('ENGINE_UNHEALTHY', 'A2A Governance API not initialized'); },
+      registerProactiveRule() { throw new LimenError('ENGINE_UNHEALTHY', 'A2A Governance API not initialized'); },
+      listProactiveRules() { throw new LimenError('ENGINE_UNHEALTHY', 'A2A Governance API not initialized'); },
     },
 
     // Phase 9: Consent management (I-P9-23: all mutations audited)

@@ -99,6 +99,16 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'output.assert': { permission: 'assert_claim', rateLimit: 'api_calls' },
   'output.query': { permission: 'query_claims', rateLimit: 'api_calls' },
 
+  // ── Telemetry namespace (FR-004) ──
+  'telemetry.record': { permission: 'assert_claim', rateLimit: 'api_calls' },
+  'telemetry.query': { permission: 'query_claims', rateLimit: 'api_calls' },
+
+  // ── A2A Governance namespace (FR-002) ──
+  'a2aGovernance.setGovernanceBlock': { permission: 'manage_cognitive', rateLimit: 'api_calls' },
+  'a2aGovernance.getGovernanceBlock': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'a2aGovernance.registerProactiveRule': { permission: 'manage_cognitive', rateLimit: 'api_calls' },
+  'a2aGovernance.listProactiveRules': { permission: 'query_claims', rateLimit: 'api_calls' },
+
   // ── Cognitive namespace ──
   'cognitive.consolidate': { permission: 'manage_cognitive' },
   'cognitive.health': { permission: 'query_claims' },

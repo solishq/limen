@@ -163,6 +163,8 @@ describe('OAT-5: MCP Tool Coverage', () => {
     assert.ok(limen.consent, 'consent namespace exists');
     assert.ok(limen.maintenance, 'maintenance namespace exists');
     assert.ok(limen.replay, 'replay namespace exists');
+    assert.ok(limen.telemetry, 'telemetry namespace exists');
+    assert.ok(limen.a2aGovernance, 'a2aGovernance namespace exists');
 
     // Verify key methods
     assert.equal(typeof limen.cognitive.consolidate, 'function');
@@ -170,6 +172,16 @@ describe('OAT-5: MCP Tool Coverage', () => {
     assert.equal(typeof limen.cognitive.narrative, 'function');
     assert.equal(typeof limen.maintenance.runRetention, 'function');
     assert.equal(typeof limen.replay.verify, 'function');
+
+    // Phase 7 FR-004: Telemetry methods
+    assert.equal(typeof limen.telemetry.record, 'function');
+    assert.equal(typeof limen.telemetry.query, 'function');
+
+    // Phase 7 FR-002: A2A Governance methods
+    assert.equal(typeof limen.a2aGovernance.setGovernanceBlock, 'function');
+    assert.equal(typeof limen.a2aGovernance.getGovernanceBlock, 'function');
+    assert.equal(typeof limen.a2aGovernance.registerProactiveRule, 'function');
+    assert.equal(typeof limen.a2aGovernance.listProactiveRules, 'function');
   });
 });
 

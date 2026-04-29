@@ -82,6 +82,12 @@ import type {
 // Phase 4 FR-001: Output Primitives API types
 import type { OutputApi } from '../output/output_api.js';
 
+// Phase 7 FR-004: Telemetry API types
+import type { TelemetryApi } from '../telemetry/telemetry_api.js';
+
+// Phase 7 FR-002: A2A Governance API types
+import type { A2AGovernanceApi } from '../a2a-governance/a2a_governance_api.js';
+
 // Re-export CCP/WMP types so consumers can construct inputs
 export type {
   ClaimCreateInput, AssertClaimOutput,
@@ -585,6 +591,24 @@ export interface Limen {
    * Each is schema-validated via Zod before storage as a governed claim.
    */
   readonly output: OutputApi;
+
+  // -- Phase 7 FR-004: Telemetry Schemas --
+
+  /**
+   * FR-004: Operational telemetry recording and querying.
+   * 3 types: cost, vital, audit.
+   * Each is schema-validated via Zod before storage as a governed claim.
+   */
+  readonly telemetry: TelemetryApi;
+
+  // -- Phase 7 FR-002: A2A Governance --
+
+  /**
+   * FR-002: Inter-agent governance management.
+   * Governance blocks, proactive rules, capability boundaries.
+   * Each is schema-validated via Zod before storage as a governed claim.
+   */
+  readonly a2aGovernance: A2AGovernanceApi;
 
   // -- Phase 9: Consent Management --
 

@@ -44,6 +44,10 @@ import { createDeltaCommand } from './commands/delta.js';
 import { createOutputAssertCommand } from './commands/output-assert.js';
 import { createOutputQueryCommand } from './commands/output-query.js';
 import { createPrepareForTaskCommand } from './commands/prepare-for-task.js';
+import { createTelemetryRecordCommand } from './commands/telemetry-record.js';
+import { createTelemetryQueryCommand } from './commands/telemetry-query.js';
+import { createA2AGovernanceSetCommand } from './commands/a2a-governance-set.js';
+import { createProactiveRuleRegisterCommand } from './commands/proactive-rule-register.js';
 
 /**
  * F-001 FIX: Apply JSON error output to a Commander command.
@@ -125,6 +129,10 @@ program.addCommand(createDeltaCommand());
 program.addCommand(createOutputAssertCommand());
 program.addCommand(createOutputQueryCommand());
 program.addCommand(createPrepareForTaskCommand());
+program.addCommand(createTelemetryRecordCommand());
+program.addCommand(createTelemetryQueryCommand());
+program.addCommand(createA2AGovernanceSetCommand());
+program.addCommand(createProactiveRuleRegisterCommand());
 
 // Apply JSON error handling AFTER all commands are registered,
 // so the recursive walk covers every subcommand.
