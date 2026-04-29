@@ -70,6 +70,7 @@ import { classify } from '../../governance/classification/classification_engine.
 import { checkPredicateGuard } from '../../governance/classification/predicate_guard.js';
 import { DEFAULT_CLASSIFICATION_RULES, CLASSIFICATION_LEVEL_ORDER } from '../../governance/classification/governance_types.js';
 import { escapeLikeWildcards } from '../../kernel/sql_utils.js';
+import { isOutputPredicate, validateOutputPrimitive, VALID_OUTPUT_PREDICATES } from '../../cognitive/output_primitives.js';
 
 // ============================================================================
 // Helpers
@@ -1358,6 +1359,35 @@ function createAssertClaimHandlerImpl(
         }
         if (isReservedPredicate(input.predicate)) {
           return err('INVALID_PREDICATE', `Reserved predicate namespace: ${input.predicate}`, 'SC-11');
+        }
+
+        // 3a-FR001: Output primitive schema validation (FR-001)
+        // output.* predicates require structured JSON values matching their schema.
+        if (isOutputPredicate(input.predicate)) {
+          if (!VALID_OUTPUT_PREDICATES.has(input.predicate)) {
+            return err('UNKNOWN_OUTPUT_PREDICATE',
+              `Unknown output predicate: "${input.predicate}". Valid types: ${[...VALID_OUTPUT_PREDICATES].join(', ')}`, 'FR-001');
+          }
+          // Value must be valid JSON matching the primitive schema
+          if (input.object.type !== 'json') {
+            return err('INVALID_OUTPUT_PRIMITIVE',
+              `Output primitive "${input.predicate}" requires objectType "json", got "${input.object.type}"`, 'FR-001');
+          }
+          let parsed: unknown;
+          if (typeof input.object.value === 'string') {
+            try {
+              parsed = JSON.parse(input.object.value);
+            } catch {
+              return err('INVALID_OUTPUT_PRIMITIVE',
+                `Output primitive "${input.predicate}" value is not valid JSON`, 'FR-001');
+            }
+          } else {
+            parsed = input.object.value;
+          }
+          const schemaResult = validateOutputPrimitive(input.predicate, parsed);
+          if (!schemaResult.ok) {
+            return err(schemaResult.error.code, schemaResult.error.message, 'FR-001');
+          }
         }
 
         // 3b. Phase 10: Protected predicate guard (I-P10-10, I-P10-11)

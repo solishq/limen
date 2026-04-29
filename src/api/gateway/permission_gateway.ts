@@ -95,6 +95,10 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'consent.check': { permission: 'view_consent' },
   'consent.list': { permission: 'view_consent' },
 
+  // ── Output Primitives namespace (FR-001) ──
+  'output.assert': { permission: 'assert_claim', rateLimit: 'api_calls' },
+  'output.query': { permission: 'query_claims', rateLimit: 'api_calls' },
+
   // ── Cognitive namespace ──
   'cognitive.consolidate': { permission: 'manage_cognitive' },
   'cognitive.health': { permission: 'query_claims' },
@@ -179,7 +183,7 @@ export const EXEMPT_METHODS: ReadonlySet<string> = new Set([
   // These are listed here so that if a namespace object is also iterable as a key,
   // it is explicitly acknowledged rather than silently ignored.
   'claims', 'workingMemory', 'governance', 'consent', 'cognitive',
-  'agents', 'missions', 'roles', 'data', 'metrics', 'security',
+  'agents', 'missions', 'roles', 'data', 'metrics', 'security', 'output',
 ]);
 
 /**

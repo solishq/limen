@@ -41,6 +41,8 @@ import { createConsentRegisterCommand } from './commands/consent-register.js';
 import { createConsentCheckCommand } from './commands/consent-check.js';
 import { createMaintenanceRetentionCommand } from './commands/maintenance-retention.js';
 import { createDeltaCommand } from './commands/delta.js';
+import { createOutputAssertCommand } from './commands/output-assert.js';
+import { createOutputQueryCommand } from './commands/output-query.js';
 
 /**
  * F-001 FIX: Apply JSON error output to a Commander command.
@@ -119,6 +121,8 @@ program.addCommand(createConsentRegisterCommand());
 program.addCommand(createConsentCheckCommand());
 program.addCommand(createMaintenanceRetentionCommand());
 program.addCommand(createDeltaCommand());
+program.addCommand(createOutputAssertCommand());
+program.addCommand(createOutputQueryCommand());
 
 // Apply JSON error handling AFTER all commands are registered,
 // so the recursive walk covers every subcommand.

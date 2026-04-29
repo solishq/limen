@@ -197,6 +197,9 @@ import { WorkingMemoryApiImpl } from './facades/working_memory_api_impl.js';
 
 // Phase 1: Convenience API
 import { createConvenienceLayer } from './convenience/convenience_layer.js';
+
+// Phase 4 FR-001: Output Primitives API
+import { createOutputApi } from './output/output_api.js';
 import { initializeConvenience } from './convenience/convenience_init.js';
 import { DEFAULT_MAX_AUTO_CONFIDENCE } from './convenience/convenience_types.js';
 
@@ -284,6 +287,8 @@ export type {
   DiscardWorkingMemoryInput, DiscardWorkingMemoryOutput,
   // Phase 5: Cognitive API types
   CognitiveNamespace, CognitiveHealthReport, CognitiveHealthConfig,
+  // Phase 4 FR-001: Output Primitives API types
+  OutputApi, OutputAssertOptions, OutputQueryOptions,
   // Phase 8: Plugin and Exchange types
   LimenPlugin, LimenEventName, LimenEventHandler, LimenEvent,
   PluginMeta, PluginContext, PluginApi, PluginLogger,
@@ -1186,6 +1191,21 @@ export async function createLimen(
     log({ level: 'warn', category: 'init', message: 'Convenience API initialization failed (non-fatal)', context: { error: convErr instanceof Error ? convErr.message : String(convErr) } });
   }
 
+  // Phase 4 FR-001: Output Primitives API
+  // Uses the same convenience mission context. If convenience init failed, output API also unavailable.
+  let outputApi: ReturnType<typeof createOutputApi> | null = null;
+  if (convenienceMissionId) {
+    outputApi = createOutputApi({
+      claims: claimsApi,
+      getConnection,
+      time: kernel.time,
+      missionId: convenienceMissionId,
+      taskId: null,
+      maxAutoConfidence,
+    });
+    log({ level: 'info', category: 'init', message: 'Output Primitives API initialized' });
+  }
+
   // ── Phase 11: Vector Search Subsystem ──
   // sqlite-vec is OPTIONAL. Try to load. If it fails, vector features degrade gracefully.
   // I-P11-01: Core features work without sqlite-vec.
@@ -1543,6 +1563,12 @@ export async function createLimen(
 
     // Phase 5: Cognitive intelligence namespace (limen.cognitive.health())
     cognitive: cognitiveNamespace,
+
+    // Phase 4 FR-001: Output Primitives namespace (limen.output.assert/query)
+    output: outputApi ?? {
+      assert() { throw new LimenError('ENGINE_UNHEALTHY', 'Output Primitives API not initialized'); },
+      query() { throw new LimenError('ENGINE_UNHEALTHY', 'Output Primitives API not initialized'); },
+    },
 
     // Phase 9: Consent management (I-P9-23: all mutations audited)
     consent: {

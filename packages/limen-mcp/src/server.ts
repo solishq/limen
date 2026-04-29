@@ -69,6 +69,7 @@ import { registerReplayTools } from './tools/replay.js';
 import { registerGovernanceTools } from './tools/governance.js';
 import { registerConsentTools } from './tools/consent.js';
 import { registerMaintenanceTools } from './tools/maintenance.js';
+import { registerOutputTools } from './tools/output.js';
 import { registerHealthResource } from './resources/health.js';
 
 async function main(): Promise<void> {
@@ -113,6 +114,9 @@ async function main(): Promise<void> {
   registerGovernanceTools(server, limen);
   registerConsentTools(server, limen);
   registerMaintenanceTools(server, limen);
+
+  // Register Phase 4 FR-001: Output Primitives tools
+  registerOutputTools(server, limen);
 
   // Register resources
   registerHealthResource(server, limen);

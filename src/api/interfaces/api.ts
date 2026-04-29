@@ -79,6 +79,9 @@ import type {
   DiscardWorkingMemoryInput, DiscardWorkingMemoryOutput,
 } from '../../working-memory/interfaces/wmp_types.js';
 
+// Phase 4 FR-001: Output Primitives API types
+import type { OutputApi } from '../output/output_api.js';
+
 // Re-export CCP/WMP types so consumers can construct inputs
 export type {
   ClaimCreateInput, AssertClaimOutput,
@@ -137,6 +140,9 @@ export type {
 // Phase 5: Cognitive API types
 export type { CognitiveNamespace } from '../cognitive/cognitive_api.js';
 export type { CognitiveHealthReport, CognitiveHealthConfig } from '../../cognitive/health.js';
+
+// Phase 4 FR-001: Output Primitives API types
+export type { OutputApi, OutputAssertOptions, OutputQueryOptions } from '../output/output_api.js';
 
 // FR-006: Context Compiler types
 export type { CompileOptions, CompiledContext, CompileFormat, CompilePriority } from '../../cognitive/context_compiler.js';
@@ -570,6 +576,15 @@ export interface Limen {
    * PA Ruling: limen.cognitive.health() (not limen.health.cognitive()).
    */
   readonly cognitive: CognitiveNamespace;
+
+  // -- Phase 4 FR-001: Output Primitives --
+
+  /**
+   * FR-001: Semantic output primitives for agent-produced structured output.
+   * 7 types: assertion, judgment, evidence, action, question, alert, narrative.
+   * Each is schema-validated via Zod before storage as a governed claim.
+   */
+  readonly output: OutputApi;
 
   // -- Phase 9: Consent Management --
 
