@@ -63,3 +63,8 @@ testimony/
 
 # Phase 13 WIP (deferred to v3.1)
 src/sync/
+
+# Internal SolisHQ IP — never commit
+.qal.json
+LIMEN-REMEDIATION-DISPATCH.md
+SESSION_HANDOFF.md
