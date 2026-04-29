@@ -123,6 +123,10 @@ import { createCognitiveNamespace } from './cognitive/cognitive_api.js';
 // v3.0.0 WG-02: Replay Engine
 import { createReplayEngine } from '../substrate/replay/replay_engine.js';
 
+// v3.0.0 EG-03/04: Trust-to-clearance mapping for classification filtering
+import { getClearanceForTrust } from './agents/trust_progression.js';
+import type { TrustLevel } from './agents/trust_progression.js';
+
 // Phase 9: Security Hardening migration (v42) + Consent Registry
 import { getSecurityHardeningMigrations } from './migration/033_security_hardening.js';
 import { createConsentRegistry } from '../security/consent_registry.js';
@@ -1010,9 +1014,31 @@ export async function createLimen(
 
   const getContext = (): OperationContext => {
     if (tenancyMode === 'single') {
-      return buildOperationContext(null, null, defaultAgentId, allPermissions);
+      // v3.0.0 EG-03/04: In single-tenant mode, RBAC is dormant (§3.7).
+      // The default convenience agent has trust_level='untrusted' (I-09: earned trust).
+      // But in single-user mode, we grant full clearance for backward compat — the
+      // classification filter only restricts in multi-tenant mode with explicit RBAC.
+      // When requireRbac is true, resolve actual trust level for classification filtering.
+      let clearance: number = 4; // full clearance by default in single-tenant
+      if (resolvedConfig.requireRbac && defaultAgentId) {
+        try {
+          const conn = activeConn;
+          if (conn) {
+            const row = conn.get<{ trust_level: string | null }>(
+              'SELECT trust_level FROM core_agents WHERE id = ?',
+              [defaultAgentId],
+            );
+            clearance = getClearanceForTrust(row?.trust_level as TrustLevel | null);
+          }
+        } catch {
+          // Non-fatal: default to full clearance if lookup fails
+        }
+      }
+      return buildOperationContext(null, null, defaultAgentId, allPermissions, undefined, clearance);
     }
-    // Multi-tenant: context must be provided per-call via session
+    // Multi-tenant: context must be provided per-call via session.
+    // v3.0.0 EG-03/04: No clearance set — classification filter inactive for
+    // multi-tenant until session-based clearance is implemented.
     return buildOperationContext(null, null, null, new Set());
   };
 

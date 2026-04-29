@@ -761,7 +761,7 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
      * Invariants: I-P2-01 (sync), I-P2-02 (tenant isolation), I-P2-03 (retracted exclusion),
      *             I-P2-05 (score), I-P2-06 (error containment)
      */
-    search(conn: DatabaseConnection, tenantId: TenantId | null, input: SearchClaimInput): Result<SearchClaimResult> {
+    search(conn: DatabaseConnection, tenantId: TenantId | null, input: SearchClaimInput, clearanceLevel?: number): Result<SearchClaimResult> {
       const limit = Math.min(input.limit ?? SEARCH_DEFAULT_LIMIT, SEARCH_MAX_LIMIT);
       const analysis = analyzeQuery(input.query);
 
@@ -857,11 +857,25 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
         const claimIds = Array.from(scoreMap.keys());
         const placeholders = claimIds.map(() => '?').join(',');
 
+        // v3.0.0 EG-04: Apply classification filter to search results
+        let classificationFilter = '';
+        const queryParams: unknown[] = [...claimIds];
+        if (clearanceLevel !== undefined && hasClassificationColumn(conn, storeSchemaCache)) {
+          classificationFilter = ` AND (c.classification IS NULL OR CASE c.classification ` +
+            `WHEN 'unrestricted' THEN 0 ` +
+            `WHEN 'internal' THEN 1 ` +
+            `WHEN 'confidential' THEN 2 ` +
+            `WHEN 'restricted' THEN 3 ` +
+            `WHEN 'critical' THEN 4 ` +
+            `ELSE 0 END <= ?)`;
+          queryParams.push(clearanceLevel);
+        }
+
         const claimRows = conn.query<Record<string, unknown>>(
           `SELECT c.* FROM claim_assertions c
            WHERE c.id IN (${placeholders})
-             AND c.purged_at IS NULL`,
-          claimIds,
+             AND c.purged_at IS NULL${classificationFilter}`,
+          queryParams,
         );
 
         const results: SearchClaimResultItem[] = [];
@@ -1598,6 +1612,10 @@ function createAssertClaimHandlerImpl(
         // Only enforced for entity:* subjects (non-entity subjects bypass).
         if (securityPolicy.consent?.required) {
           const consentReg = deps.getConsentRegistry?.();
+          // v3.0.0 F-V3P2-005: Fail-closed when consent required but registry unavailable
+          if (!consentReg) {
+            return err('CONSENT_REQUIRED', 'Consent enforcement required but consent registry unavailable', 'EG-01');
+          }
           if (consentReg) {
             const entityId = extractEntityFromSubject(input.subject);
             if (entityId !== null) {

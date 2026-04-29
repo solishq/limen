@@ -151,7 +151,8 @@ export function createRawClaimFacade(
       input: SearchClaimInput,
     ): Result<SearchClaimResult> {
       requirePermission(rbac, ctx, 'query_claims');
-      return claimSystem.store.search(conn, ctx.tenantId, input);
+      // v3.0.0 EG-04: Pass clearanceLevel for classification-filtered search
+      return claimSystem.store.search(conn, ctx.tenantId, input, ctx.clearanceLevel);
     },
 
     /**

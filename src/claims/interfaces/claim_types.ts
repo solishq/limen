@@ -531,7 +531,7 @@ export interface ClaimStore {
    * Invariants: I-P2-01 (sync), I-P2-02 (tenant isolation), I-P2-03 (retracted exclusion),
    *             I-P2-05 (score monotonicity), I-P2-06 (error containment)
    */
-  search(conn: DatabaseConnection, tenantId: TenantId | null, input: SearchClaimInput): Result<SearchClaimResult>;
+  search(conn: DatabaseConnection, tenantId: TenantId | null, input: SearchClaimInput, clearanceLevel?: number): Result<SearchClaimResult>;
 }
 
 /**
