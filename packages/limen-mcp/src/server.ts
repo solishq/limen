@@ -33,6 +33,19 @@
  *   limen_forget          — Retract a claim (governed, audited)
  *   limen_connect         — Relate two claims (supports/contradicts/supersedes/derived_from)
  *
+ * v3.0.0 Phase 3 tools (MCP Tool Completion):
+ *   limen_consolidate          — Run cognitive consolidation (merge/archive/resolve)
+ *   limen_importance           — Compute 5-factor importance score for a claim
+ *   limen_narrative            — Compute narrative snapshot (mission or global)
+ *   limen_verify               — Verify a claim via external provider (advisory)
+ *   limen_suggest_connections  — Suggest connections via embedding similarity
+ *   limen_replay_verify        — Verify mission replay determinism
+ *   limen_governance_erasure   — Execute GDPR erasure with certificate
+ *   limen_governance_audit_export — Generate SOC 2 audit export
+ *   limen_consent_register     — Register consent record
+ *   limen_consent_check        — Check active consent
+ *   limen_maintenance_retention — Execute manual retention pass
+ *
  * Resources:
  *   limen://health        — Health status JSON
  */
@@ -52,6 +65,10 @@ import { registerCognitiveTools } from './tools/cognitive.js';
 import { registerSearchTools } from './tools/search.js';
 import { registerLearningTools } from './tools/learning.js';
 import { registerA2AChatTools } from './tools/a2a-chat.js';
+import { registerReplayTools } from './tools/replay.js';
+import { registerGovernanceTools } from './tools/governance.js';
+import { registerConsentTools } from './tools/consent.js';
+import { registerMaintenanceTools } from './tools/maintenance.js';
 import { registerHealthResource } from './resources/health.js';
 
 async function main(): Promise<void> {
@@ -90,6 +107,12 @@ async function main(): Promise<void> {
 
   // Register A2A chat tools (direct-tool coordination channel — canonical per Femi directive 2026-04-19).
   registerA2AChatTools(server, limen, 'stdio');
+
+  // Register v3.0.0 Phase 3 tools (MCP Tool Completion)
+  registerReplayTools(server, limen);
+  registerGovernanceTools(server, limen);
+  registerConsentTools(server, limen);
+  registerMaintenanceTools(server, limen);
 
   // Register resources
   registerHealthResource(server, limen);

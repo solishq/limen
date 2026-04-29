@@ -29,6 +29,17 @@ import { createA2aReadCommand } from './commands/a2a-read.js';
 import { createA2aChannelsCommand } from './commands/a2a-channels.js';
 import { createA2aPresenceCommand } from './commands/a2a-presence.js';
 import { createHealthCognitiveCommand } from './commands/health-cognitive.js';
+import { createConsolidateCommand } from './commands/consolidate.js';
+import { createImportanceCommand } from './commands/importance.js';
+import { createNarrativeCommand } from './commands/narrative.js';
+import { createVerifyCommand } from './commands/verify.js';
+import { createSuggestConnectionsCommand } from './commands/suggest-connections.js';
+import { createReplayVerifyCommand } from './commands/replay-verify.js';
+import { createGovernanceErasureCommand } from './commands/governance-erasure.js';
+import { createGovernanceAuditExportCommand } from './commands/governance-audit-export.js';
+import { createConsentRegisterCommand } from './commands/consent-register.js';
+import { createConsentCheckCommand } from './commands/consent-check.js';
+import { createMaintenanceRetentionCommand } from './commands/maintenance-retention.js';
 
 /**
  * F-001 FIX: Apply JSON error output to a Commander command.
@@ -95,6 +106,17 @@ program.addCommand(createA2aReadCommand());
 program.addCommand(createA2aChannelsCommand());
 program.addCommand(createA2aPresenceCommand());
 program.addCommand(createHealthCognitiveCommand());
+program.addCommand(createConsolidateCommand());
+program.addCommand(createImportanceCommand());
+program.addCommand(createNarrativeCommand());
+program.addCommand(createVerifyCommand());
+program.addCommand(createSuggestConnectionsCommand());
+program.addCommand(createReplayVerifyCommand());
+program.addCommand(createGovernanceErasureCommand());
+program.addCommand(createGovernanceAuditExportCommand());
+program.addCommand(createConsentRegisterCommand());
+program.addCommand(createConsentCheckCommand());
+program.addCommand(createMaintenanceRetentionCommand());
 
 // Apply JSON error handling AFTER all commands are registered,
 // so the recursive walk covers every subcommand.
