@@ -11,13 +11,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Complete wiring remediation and production readiness release. Every spec promise verified end-to-end. Every "auto" feature runs automatically. Every security feature enforces.
 
 ### Added
-- _Phase 1-7 build in progress — entries will be added per phase completion_
+- **Phase 1: Core Wiring** — Decay computation in convenience `recall()` (effectiveConfidence at query time). Automated retention scheduler (background timer, configurable interval). Replay engine integration (mission state snapshots on lifecycle transitions). Auto-connection suggestions (debounced, fires on claim assertion).
+- **Phase 2: Security Enforcement** — Consent enforcement on claim assertion (fail-closed, configurable). Classification-filtered retrieval on query AND search paths (trust-level mapped clearance). Key rotation (atomic re-encryption of vault entries).
+- **Phase 3: MCP Tool Completion** — 11 new MCP tools: `limen_consolidate`, `limen_importance`, `limen_narrative`, `limen_verify`, `limen_suggest_connections`, `limen_replay_verify`, `limen_governance_erasure`, `limen_governance_audit_export`, `limen_consent_register`, `limen_consent_check`, `limen_maintenance_retention`. 11 matching CLI commands. Total: 36 MCP tools.
+- **Phase 4: DX/UX** — README overhaul (Node>=22 banner, ESM note, CLI section, MCP for Claude section, What's New in v3). Examples README with runner instructions.
+- **Phase 5: Proof Pack** — Security model expanded from 8 to 11 mechanisms. Readiness doc refreshed for v3.0.0.
+- **Phase 6: OAT** — 8 operational acceptance scenarios verifying every spec promise end-to-end.
+- `limen.maintenance.runRetention()`, `getRetentionPolicies()`, `updateRetentionPolicy()` — manual retention API
+- `limen.replay.verify(missionId)`, `replay.getSnapshots(missionId)` — mission determinism verification
+- `limen.security.rotateKey(newMasterKey)` — atomic key rotation
+- `maintenance.retentionEnabled`, `maintenance.retentionIntervalMs` config options
+- `security.consent.required`, `security.consent.scope` config options
+- `cognitive.autoSuggestConnections` config option
 
 ### Fixed
-- _Wiring gaps and enforcement gaps cataloged in LIMEN-WIRING-AUDIT-2026-04-28.md_
+- **Dispute recomputation** — `disputed` flag now correctly recomputes to `false` after contradicting claim is retracted (3 sites: queryClaims, searchClaims, vectorHydrateDisputed)
+- **Classification filter bypass** — search path now filters by classification level (was query-only)
+- **Consent fail-open** — consent enforcement now fail-closed when registry unavailable
+- **Replay SQLITE_BUSY** — replay snapshots use orchestrationConn instead of separate connection
+- **Stale worktree/stryker pollution** — cleaned phantom test failures from stale temp directories
 
 ### Changed
 - Removed all AI attribution from source code, tests, and documentation
+- `vitest.config.ts` added at root to prevent phantom failures from node:test files
+- Permission gateway updated with maintenance, replay, security namespace registrations
 
 ---
 
