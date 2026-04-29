@@ -35,6 +35,8 @@ import type {
   ConnectionSuggestion,
   SelfHealingConfig,
 } from '../../cognitive/cognitive_types.js';
+import type { CompileOptions, CompiledContext } from '../../cognitive/context_compiler.js';
+import { compileContext } from '../../cognitive/context_compiler.js';
 import {
   computeCognitiveHealth,
   computeDelta,
@@ -84,6 +86,9 @@ export interface CognitiveNamespace {
 
   /** Phase 12: Reject a pending connection suggestion. */
   rejectSuggestion(suggestionId: string): Result<void>;
+
+  /** FR-006: Compile claims from a domain into reasoning-ready context. */
+  compile(options: CompileOptions): Result<CompiledContext>;
 }
 
 /**
@@ -411,6 +416,19 @@ export function createCognitiveNamespace(deps: CognitiveNamespaceDeps): Cognitiv
         const msg = e instanceof Error ? e.message : String(e);
         return err('REJECT_SUGGESTION_FAILED', `Failed to reject suggestion: ${msg}`);
       }
+    },
+
+    compile(options: CompileOptions): Result<CompiledContext> {
+      return compileContext(
+        {
+          getConnection: deps.getConnection,
+          getTenantId: () => deps.getTenantId(),
+          time: deps.time,
+          freshnessThresholds: deps.freshnessThresholds,
+          stabilityConfig: deps.stabilityConfig,
+        },
+        options,
+      );
     },
   };
 }

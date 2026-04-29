@@ -138,6 +138,9 @@ export type {
 export type { CognitiveNamespace } from '../cognitive/cognitive_api.js';
 export type { CognitiveHealthReport, CognitiveHealthConfig } from '../../cognitive/health.js';
 
+// FR-006: Context Compiler types
+export type { CompileOptions, CompiledContext, CompileFormat, CompilePriority } from '../../cognitive/context_compiler.js';
+
 // Phase 12: Cognitive Engine types
 export type {
   SelfHealingConfig, SelfHealingEvent,
