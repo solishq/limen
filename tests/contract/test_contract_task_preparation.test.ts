@@ -109,12 +109,13 @@ describe('FR-008: Task-Aware Context Preparation (limen.cognitive.prepareForTask
     assert.ok('constraints' in ctx.sections, 'sections must have constraints');
     assert.ok('findings' in ctx.sections, 'sections must have findings');
 
-    // At least some sections should have content (we seeded claims for all namespaces)
-    const hasContent = ctx.sections.decisions.length > 0 ||
-                       ctx.sections.corrections.length > 0 ||
-                       ctx.sections.constraints.length > 0 ||
-                       ctx.sections.findings.length > 0;
-    assert.ok(hasContent, 'at least one section must have content');
+    // Sections must contain actual seeded claim content — not just be non-empty
+    assert.ok(ctx.sections.decisions.includes('PKCE'),
+      'decisions section must include seeded PKCE claim content');
+    assert.ok(ctx.sections.corrections.includes('middleware') || ctx.sections.corrections.includes('localStorage'),
+      'corrections section must include seeded correction content');
+    assert.ok(ctx.sections.constraints.includes('backward compatible') || ctx.sections.constraints.includes('200ms'),
+      'constraints section must include seeded constraint content');
 
     // Token estimate must be positive
     assert.ok(ctx.estimatedTokens > 0, 'estimatedTokens must be positive');
@@ -135,23 +136,34 @@ describe('FR-008: Task-Aware Context Preparation (limen.cognitive.prepareForTask
     if (!result.ok) return;
 
     const ctx = result.value;
-    // The text should contain auth-related content since "auth" is a keyword
-    // that maps to additional auth-specific predicates
-    assert.ok(ctx.text.length > 0, 'text must contain content');
 
-    // Compare with a generic task that doesn't mention auth
-    const genericResult = limen.cognitive.prepareForTask({
+    // Auth-focused task must surface auth-specific seeded content
+    assert.ok(ctx.text.includes('PKCE'),
+      'auth-focused task must surface seeded PKCE decision in text');
+
+    // Compare with a non-overlapping task — pricing has no seeded claims
+    const pricingResult = limen.cognitive.prepareForTask({
       agentRole: 'Builder',
       project: 'entity:project:alpha',
-      taskDescription: 'General maintenance work on the system',
+      taskDescription: 'Analyze pricing model for enterprise tier',
     });
 
-    assert.equal(genericResult.ok, true, 'generic prepareForTask must succeed');
-    if (!genericResult.ok) return;
+    assert.equal(pricingResult.ok, true, 'pricing prepareForTask must succeed');
+    if (!pricingResult.ok) return;
 
-    // Both should succeed but the auth-focused one may have different coverage
-    // The key assertion: the keyword extraction works and coverage tracks it
-    assert.ok(Array.isArray(ctx.coverage), 'coverage must be an array');
+    const pricingCtx = pricingResult.value;
+
+    // Discriminative assertion: auth task has auth content, pricing task does not
+    // (or at minimum, coverage arrays differ reflecting keyword influence)
+    const authHasPKCE = ctx.text.includes('PKCE');
+    const pricingHasPKCE = pricingCtx.text.includes('PKCE');
+    // If keyword extraction is removed, both would return identical content — this catches that
+    assert.ok(authHasPKCE, 'auth task must include PKCE');
+    // Coverage arrays should reflect different keyword-driven predicate selection
+    const coverageDiffers = JSON.stringify(ctx.coverage) !== JSON.stringify(pricingCtx.coverage) ||
+                            ctx.text !== pricingCtx.text;
+    assert.ok(coverageDiffers,
+      'auth-focused and pricing-focused tasks must produce different output (keyword extraction must discriminate)');
   });
 
   // ── DC-PREP-03 [REJECTION]: empty taskDescription returns error ──
