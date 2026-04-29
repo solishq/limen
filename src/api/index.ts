@@ -1280,6 +1280,14 @@ export async function createLimen(
     selfHealingConfig,
   });
 
+  // FR-003: Invalidate health cache on claim mutations
+  kernel.events.subscribe('claim.asserted', () => {
+    cognitiveNamespace.invalidateHealthCache();
+  });
+  kernel.events.subscribe('claim.retracted', () => {
+    cognitiveNamespace.invalidateHealthCache();
+  });
+
   // Phase 12: Register self-healing event listener on claim.retracted
   // F-P12-003 fix: The listener is the ENTRY POINT only. When processSelfHealing
   // internally retracts child claims, those retractions emit claim.retracted events

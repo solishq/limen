@@ -147,6 +147,8 @@ export type {
   NarrativeSnapshot, NarrativeThread,
   VerificationResult, VerificationProvider,
   CognitiveErrorCode,
+  OutputMode,
+  DeltaOptions, DeltaResult,
 } from '../../cognitive/cognitive_types.js';
 
 // Phase 8: Plugin and Exchange types

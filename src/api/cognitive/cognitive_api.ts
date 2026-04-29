@@ -37,9 +37,12 @@ import type {
 } from '../../cognitive/cognitive_types.js';
 import {
   computeCognitiveHealth,
+  computeDelta,
+  applyOutputMode,
   type CognitiveHealthReport,
   type CognitiveHealthConfig,
 } from '../../cognitive/health.js';
+import type { DeltaOptions, DeltaResult } from '../../cognitive/cognitive_types.js';
 import { computeImportance } from '../../cognitive/importance.js';
 import { consolidate as runConsolidate } from '../../cognitive/consolidation.js';
 import { computeNarrative } from '../../cognitive/narrative.js';
@@ -52,8 +55,14 @@ import { suggestConnections as runSuggestConnections } from '../../cognitive/aut
  * Exposed as `limen.cognitive` on the Limen public API.
  */
 export interface CognitiveNamespace {
-  /** Phase 5 §5.3: Compute cognitive health report. Synchronous. */
+  /** Phase 5 §5.3 + FR-003: Compute cognitive health report. Synchronous. Supports maxAge caching. */
   health(config?: CognitiveHealthConfig): Result<CognitiveHealthReport>;
+
+  /** FR-003: Query claim changes since a timestamp. */
+  delta(options: DeltaOptions): Result<DeltaResult>;
+
+  /** FR-003: Invalidate cached health result. Called internally on mutations. */
+  invalidateHealthCache(): void;
 
   /** Phase 12 §12.6: Run consolidation (merge + archive + suggest resolution). */
   consolidate(options?: ConsolidationOptions): Result<ConsolidationResult>;
@@ -115,9 +124,24 @@ function err<T>(code: string, message: string): Result<T> {
  * Captures dependencies via closure -- survives Object.freeze (same pattern as ConvenienceLayer).
  */
 export function createCognitiveNamespace(deps: CognitiveNamespaceDeps): CognitiveNamespace {
+  // FR-003: Per-instance health cache
+  let cachedReport: CognitiveHealthReport | null = null;
+  let cacheTimestampMs = 0;
+
   return {
     health(config?: CognitiveHealthConfig): Result<CognitiveHealthReport> {
       try {
+        const maxAge = config?.maxAge;
+
+        // FR-003: Return cached result if within maxAge window
+        if (maxAge !== undefined && maxAge > 0 && cachedReport !== null) {
+          const nowMs = deps.time.nowMs();
+          if (nowMs - cacheTimestampMs < maxAge) {
+            // Apply output mode to cached report (mode may differ per call)
+            return ok(applyOutputMode(cachedReport, config?.outputMode));
+          }
+        }
+
         const conn = deps.getConnection();
         const tenantId = deps.getTenantId();
         const report = computeCognitiveHealth(
@@ -127,11 +151,39 @@ export function createCognitiveNamespace(deps: CognitiveNamespaceDeps): Cognitiv
           deps.freshnessThresholds,
           config,
         );
-        return ok(report);
+
+        // Cache the raw report (without formatting) for reuse
+        cachedReport = report;
+        cacheTimestampMs = deps.time.nowMs();
+
+        // FR-010: Apply output mode formatting
+        return ok(applyOutputMode(report, config?.outputMode));
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return err('CONV_HEALTH_QUERY_FAILED', `Cognitive health computation failed: ${msg}`);
       }
+    },
+
+    delta(options: DeltaOptions): Result<DeltaResult> {
+      try {
+        // Validate since is a valid ISO timestamp
+        const parsed = Date.parse(options.since);
+        if (isNaN(parsed)) {
+          return err('DELTA_INVALID_SINCE', `Invalid since timestamp: ${options.since}`);
+        }
+
+        const conn = deps.getConnection();
+        const tenantId = deps.getTenantId();
+        return ok(computeDelta(conn, tenantId, options));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return err('DELTA_QUERY_FAILED', `Delta query failed: ${msg}`);
+      }
+    },
+
+    invalidateHealthCache(): void {
+      cachedReport = null;
+      cacheTimestampMs = 0;
     },
 
     consolidate(options?: ConsolidationOptions): Result<ConsolidationResult> {

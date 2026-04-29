@@ -85,10 +85,13 @@ export interface CognitiveHealthReport {
     readonly newestClaimAge: string;
     readonly claimCount: number;
   }>;
+
+  /** FR-010: Formatted output when outputMode is not 'structured'. */
+  readonly formatted?: string;
 }
 
 /**
- * Phase 5: Configuration for cognitive health computation.
+ * Phase 5 + FR-003 + FR-010: Configuration for cognitive health computation.
  */
 export interface CognitiveHealthConfig {
   readonly gapThresholdDays?: number;
@@ -96,6 +99,10 @@ export interface CognitiveHealthConfig {
   readonly maxCriticalConflicts?: number;
   readonly maxGaps?: number;
   readonly maxStaleDomains?: number;
+  /** FR-003: If set, return cached result when age < maxAge (ms). */
+  readonly maxAge?: number;
+  /** FR-010: Output format. Default 'structured'. */
+  readonly outputMode?: import('./cognitive_types.js').OutputMode;
 }
 
 // ── Helpers ──
@@ -395,4 +402,127 @@ export function computeCognitiveHealth(
     gaps: gaps.slice(0, maxGaps),
     staleDomains: staleDomains.slice(0, maxStaleDomains),
   };
+}
+
+// ── FR-003: Delta Query ──
+
+import type { DeltaOptions, DeltaResult } from './cognitive_types.js';
+
+/**
+ * FR-003: Compute delta counts since a given timestamp.
+ *
+ * Three SQL COUNT queries:
+ * 1. Added: claims with created_at > since AND status = 'active'
+ * 2. Retracted: claims with created_at > since AND status = 'retracted'
+ * 3. Conflicts: contradicts relationships with created_at > since
+ *
+ * If predicates are provided, adds AND predicate LIKE ? for each pattern
+ * (converting wildcard `*` to SQL `%`).
+ */
+export function computeDelta(
+  conn: DatabaseConnection,
+  tenantId: TenantId | null,
+  options: DeltaOptions,
+): DeltaResult {
+  const { since, predicates } = options;
+
+  // Build predicate filter clause
+  let predicateClause = '';
+  const predicateParams: string[] = [];
+  if (predicates && predicates.length > 0) {
+    const conditions = predicates.map(() => 'predicate LIKE ?');
+    predicateClause = ` AND (${conditions.join(' OR ')})`;
+    for (const p of predicates) {
+      // Convert wildcard patterns: 'decision.*' -> 'decision.%'
+      predicateParams.push(p.replace(/\*/g, '%'));
+    }
+  }
+
+  // 1. Added claims (created since `since`, currently active)
+  const addedRow = conn.get<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM claim_assertions
+     WHERE status = 'active' AND tenant_id IS ? AND created_at > ?${predicateClause}`,
+    [tenantId, since, ...predicateParams],
+  );
+  const added = addedRow?.cnt ?? 0;
+
+  // 2. Retracted claims (created since `since`, currently retracted)
+  const retractedRow = conn.get<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM claim_assertions
+     WHERE status = 'retracted' AND tenant_id IS ? AND created_at > ?${predicateClause}`,
+    [tenantId, since, ...predicateParams],
+  );
+  const retracted = retractedRow?.cnt ?? 0;
+
+  // 3. New contradicts relationships since `since`
+  // Join to filter by tenant and optionally by predicate on the from_claim
+  let conflictQuery: string;
+  let conflictParams: unknown[];
+  if (predicateClause) {
+    conflictQuery = `SELECT COUNT(*) as cnt FROM claim_relationships cr
+      JOIN claim_assertions ca ON cr.from_claim_id = ca.id
+      WHERE cr.type = 'contradicts' AND cr.created_at > ?
+      AND ca.tenant_id IS ?${predicateClause}`;
+    conflictParams = [since, tenantId, ...predicateParams];
+  } else {
+    conflictQuery = `SELECT COUNT(*) as cnt FROM claim_relationships cr
+      JOIN claim_assertions ca ON cr.from_claim_id = ca.id
+      WHERE cr.type = 'contradicts' AND cr.created_at > ?
+      AND ca.tenant_id IS ?`;
+    conflictParams = [since, tenantId];
+  }
+  const conflictsRow = conn.get<{ cnt: number }>(conflictQuery, conflictParams);
+  const conflicts = conflictsRow?.cnt ?? 0;
+
+  return { added, retracted, conflicts };
+}
+
+// ── FR-010: Token-Optimized Output Formatting ──
+
+/**
+ * Format a CognitiveHealthReport as human-readable text.
+ */
+export function formatHealthHumanReadable(report: CognitiveHealthReport): string {
+  const lines: string[] = [];
+  lines.push(`Cognitive Health Report`);
+  lines.push(`  Total Claims: ${report.totalClaims}`);
+  lines.push(`  Freshness: ${report.freshness.fresh} fresh, ${report.freshness.aging} aging, ${report.freshness.stale} stale (${report.freshness.percentFresh}% fresh)`);
+  lines.push(`  Conflicts: ${report.conflicts.unresolved} unresolved, ${report.conflicts.critical.length} critical`);
+  lines.push(`  Confidence: mean=${report.confidence.mean}, median=${report.confidence.median}, <0.3=${report.confidence.below30}, >0.9=${report.confidence.above90}`);
+  lines.push(`  Gaps: ${report.gaps.length} domain(s)`);
+  for (const g of report.gaps) {
+    lines.push(`    - ${g.domain}: ${g.lastClaimAge} (${g.significance})`);
+  }
+  lines.push(`  Stale Domains: ${report.staleDomains.length}`);
+  for (const s of report.staleDomains) {
+    lines.push(`    - ${s.predicate}: ${s.newestClaimAge}, ${s.claimCount} claims`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Format a CognitiveHealthReport as ai-dense output.
+ *
+ * Format: H[t:<total> f:<fresh>/<aging>/<stale> c:<conflicts> g:<gaps> s:<meanConf> d:<domains>]
+ * Minimal tokens, fixed positions, no prose.
+ */
+export function formatHealthAiDense(report: CognitiveHealthReport): string {
+  return `H[t:${report.totalClaims} f:${report.freshness.fresh}/${report.freshness.aging}/${report.freshness.stale} c:${report.conflicts.unresolved} g:${report.gaps.length} s:${report.confidence.mean} d:${report.staleDomains.length}]`;
+}
+
+/**
+ * Apply output mode formatting to a health report.
+ * Returns a new report with the `formatted` field populated for non-structured modes.
+ */
+export function applyOutputMode(
+  report: CognitiveHealthReport,
+  outputMode: import('./cognitive_types.js').OutputMode | undefined,
+): CognitiveHealthReport {
+  if (!outputMode || outputMode === 'structured') {
+    return report;
+  }
+  const formatted = outputMode === 'human-readable'
+    ? formatHealthHumanReadable(report)
+    : formatHealthAiDense(report);
+  return { ...report, formatted };
 }

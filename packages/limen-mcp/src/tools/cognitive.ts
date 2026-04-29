@@ -41,7 +41,7 @@ function safeCall<T>(fn: () => T): T | { ok: false; error: { code: string; messa
 
 export function registerCognitiveTools(server: McpServer, limen: Limen): void {
 
-  // ── limen_health_cognitive (Phase 7 §7.2) ──
+  // ── limen_health_cognitive (Phase 7 §7.2 + FR-003 + FR-010) ──
   server.tool(
     'limen_health_cognitive',
     'Get cognitive health report: freshness distribution, conflicts, confidence stats, knowledge gaps, and stale domains. Agents can self-diagnose knowledge quality.',
@@ -51,23 +51,62 @@ export function registerCognitiveTools(server: McpServer, limen: Limen): void {
       maxCriticalConflicts: z.number().optional().describe('Maximum critical conflicts to return (default: engine config)'),
       maxGaps: z.number().optional().describe('Maximum gap entries to return (default: engine config)'),
       maxStaleDomains: z.number().optional().describe('Maximum stale domain entries to return (default: engine config)'),
+      maxAge: z.number().optional().describe('Cache window in milliseconds. If set, returns cached result when age < maxAge'),
+      outputMode: z.enum(['structured', 'human-readable', 'ai-dense']).optional().describe('Output format: structured (default JSON), human-readable, or ai-dense (min tokens)'),
     },
     async (args) => {
-      const config = (args.gapThresholdDays !== undefined ||
+      const hasConfig = args.gapThresholdDays !== undefined ||
                       args.staleThresholdDays !== undefined ||
                       args.maxCriticalConflicts !== undefined ||
                       args.maxGaps !== undefined ||
-                      args.maxStaleDomains !== undefined)
+                      args.maxStaleDomains !== undefined ||
+                      args.maxAge !== undefined ||
+                      args.outputMode !== undefined;
+
+      const config = hasConfig
         ? {
             gapThresholdDays: args.gapThresholdDays,
             staleThresholdDays: args.staleThresholdDays,
             maxCriticalConflicts: args.maxCriticalConflicts,
             maxGaps: args.maxGaps,
             maxStaleDomains: args.maxStaleDomains,
+            maxAge: args.maxAge,
+            outputMode: args.outputMode,
           }
         : undefined;
 
       const result = limen.cognitive.health(config);
+
+      if (!result.ok) {
+        return mcpError(result.error.code, result.error.message);
+      }
+
+      // For ai-dense and human-readable, return the formatted string directly
+      if (args.outputMode && args.outputMode !== 'structured' && result.value.formatted) {
+        return {
+          content: [{ type: 'text' as const, text: result.value.formatted }],
+        };
+      }
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result.value, null, 2) }],
+      };
+    },
+  );
+
+  // ── limen_health_delta (FR-003) ──
+  server.tool(
+    'limen_health_delta',
+    'Query claim changes since a timestamp. Returns counts of added claims, retracted claims, and new conflicts. Lightweight alternative to full health check for detecting changes.',
+    {
+      since: z.string().min(1).describe('ISO 8601 timestamp — show changes since this time'),
+      predicates: z.array(z.string()).optional().describe('Optional predicate patterns to filter (e.g., "decision.*")'),
+    },
+    async (args) => {
+      const result = safeCall(() => limen.cognitive.delta({
+        since: args.since,
+        predicates: args.predicates,
+      }));
 
       if (!result.ok) {
         return mcpError(result.error.code, result.error.message);

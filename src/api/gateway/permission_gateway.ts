@@ -98,6 +98,8 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   // ── Cognitive namespace ──
   'cognitive.consolidate': { permission: 'manage_cognitive' },
   'cognitive.health': { permission: 'query_claims' },
+  'cognitive.delta': { permission: 'query_claims' },
+  'cognitive.invalidateHealthCache': null,  // internal, no permission needed
   'cognitive.verify': { permission: 'manage_cognitive' },
   'cognitive.narrative': { permission: 'query_claims' },
   'cognitive.importance': { permission: 'query_claims' },

@@ -238,6 +238,48 @@ export interface VerificationResult {
 // Error Codes
 // ============================================================================
 
+// ============================================================================
+// Output Mode Types (FR-010: Token-Optimized Output)
+// ============================================================================
+
+/**
+ * FR-010: Output format for cognitive health and narrative results.
+ * - 'structured': Default JSON behavior (no change)
+ * - 'human-readable': Formatted text with labels
+ * - 'ai-dense': Minimum tokens, fixed positions, abbreviations
+ */
+export type OutputMode = 'structured' | 'human-readable' | 'ai-dense';
+
+// ============================================================================
+// Delta Query Types (FR-003: Delta Query)
+// ============================================================================
+
+/**
+ * FR-003: Options for delta query — show changes since a timestamp.
+ */
+export interface DeltaOptions {
+  /** ISO 8601 timestamp — show changes since this time. */
+  readonly since: string;
+  /** Optional predicate patterns to filter (e.g., 'decision.*'). */
+  readonly predicates?: readonly string[];
+}
+
+/**
+ * FR-003: Result of a delta query — counts of changes since a timestamp.
+ */
+export interface DeltaResult {
+  /** Claims asserted (created_at) since `since`. */
+  readonly added: number;
+  /** Claims retracted since `since`. */
+  readonly retracted: number;
+  /** New contradicts relationships created since `since`. */
+  readonly conflicts: number;
+}
+
+// ============================================================================
+// Error Codes
+// ============================================================================
+
 /**
  * Phase 12 error codes.
  * Design Source Output 5: Error Taxonomy.
@@ -252,4 +294,5 @@ export type CognitiveErrorCode =
   | 'NARRATIVE_NO_CLAIMS'
   | 'VERIFY_PROVIDER_MISSING'
   | 'VERIFY_PROVIDER_FAILED'
-  | 'VERIFY_CLAIM_NOT_FOUND';
+  | 'VERIFY_CLAIM_NOT_FOUND'
+  | 'DELTA_INVALID_SINCE';
