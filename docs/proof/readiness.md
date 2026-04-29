@@ -3,8 +3,8 @@
 > This document synthesizes Limen's proof pack into a single trust surface.
 > Every claim links to a proof document. Every non-proof boundary is explicit.
 >
-> Generated: 2026-03-24
-> Limen version: 3.3.0 (internal spec version; npm package: v2.0.0)
+> Generated: 2026-04-29
+> Limen version: v3.0.0 (npm package)
 
 ---
 
@@ -15,7 +15,7 @@
 | 16 system calls with full A21 coverage | Verified | [system-calls.md](./system-calls.md) | All 16: interface + implementation + scaffold/contract tests + success and rejection paths. SC-1 through SC-10 follow orchestration layer pattern; SC-11 through SC-16 use handler factory pattern (CCP, WMP subsystems). |
 | 134 invariants across 3 tiers | Mixed | [invariants.md](./invariants.md) | 114 Verified, 1 Measured, 4 Implemented, 11 Declared, 4 Out of Scope. Tier 1 (28 core frozen): 27 Verified + 1 Measured. Tier 2 (33 extended): 30 Verified + 3 Declared. Tier 3 (73 subsystem): 57 Verified + 4 Implemented + 8 Declared + 4 Out of Scope. |
 | 21 failure mode defenses (of 45 specified) | Mixed | [failure-modes.md](./failure-modes.md) | 12 Verified, 8 Implemented, 1 Declared. 24 FM IDs (FM-21, FM-23 through FM-34, FM-36 through FM-45) have zero code presence anywhere in the codebase. |
-| 8 security mechanisms | Verified (top-level) | [security-model.md](./security-model.md) | AES-256-GCM vault encryption, append-only audit trail, tenant isolation, RBAC, budget enforcement, migration safety, clock injection, error redaction / input validation. All 8 are Verified at mechanism level. Sub-mechanism properties include ~15 Implemented-class items. |
+| 11 security mechanisms | Verified (top-level) | [security-model.md](./security-model.md) | AES-256-GCM vault encryption, append-only audit trail, tenant isolation, RBAC, budget enforcement, migration safety, clock injection, error redaction / input validation, **consent enforcement (v3)**, **classification filtering (v3)**, **key rotation (v3)**. 11 Verified at mechanism level. |
 | Atomic audit (I-03) | Verified | [invariants.md](./invariants.md) | Every state mutation and its audit entry committed in the same SQLite transaction. Tested at `tests/invariants/i05_transactional_consistency.test.ts:129`. |
 | Agent isolation (I-07) | Verified | [invariants.md](./invariants.md) | One agent's crash, misbehavior, or compromise cannot corrupt another agent's state. Tested at `tests/learning/test_convergence_subsystems.test.ts:405`. |
 | Single production dependency (I-01) | Verified | [invariants.md](./invariants.md) | Only `better-sqlite3`. CI-enforced at `.github/workflows/ci.yml:45`. |

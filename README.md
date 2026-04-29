@@ -16,15 +16,31 @@
 
 Cognitive infrastructure for AI agents — beliefs that decay, governance that enforces, knowledge that heals itself.
 
+> **Requires Node.js >= 22.** ESM-only package (`"type": "module"`).
+
 ```
 npm install limen-ai
 ```
+
+Run with: `npx tsx yourscript.ts`
 
 Optional, for semantic/vector search:
 
 ```
 npm install sqlite-vec
 ```
+
+## What's New in v3.0.0
+
+- **Decay in recall** — `effectiveConfidence` now decays on every read (was only in search)
+- **Automated retention** — background scheduler cleans expired data automatically
+- **Replay verification** — mission determinism verified via state snapshots
+- **Auto-connection** — relationship suggestions fire automatically on claim assertion
+- **Consent enforcement** — claim assertion blocked without active consent (when configured)
+- **Classification filtering** — claims filtered by clearance level at query and search time
+- **Key rotation** — atomic re-encryption of all vault entries with new master key
+- **11 new MCP tools** — 36 total tools, full CLI parity
+- **Dispute fix** — `disputed` flag correctly recomputes after contradicting claim retracted
 
 ## Quick Start
 
@@ -198,7 +214,11 @@ Limen applies security controls before data reaches storage.
 
 **Injection Defense.** Claim content is sanitized against prompt injection patterns. SQL injection via FTS5 queries is neutralized. Subject/predicate formats are validated against URI patterns.
 
-**Consent Tracking.** CRUD for data subject consent records. Consent status (active, revoked, expired) is computed on read with expiry checks. All mutations produce audit trail entries.
+**Consent Enforcement.** CRUD for data subject consent records with enforcement on claim assertion. When `security.consent.required` is true, claims about entities are blocked without active consent. Consent status (active, revoked, expired) is computed on read. All mutations produce audit trail entries.
+
+**Classification Filtering.** Claims are classified at assertion time (unrestricted, internal, confidential, restricted, critical). Query and search results are filtered by the requesting agent's clearance level, derived from trust progression (untrusted=0, probationary=1, trusted=2, admin=4).
+
+**Key Rotation.** Atomic re-encryption of all vault entries with a new master key. Transactional — partial failure rolls back completely. Audit trail records every rotation event.
 
 **Poisoning Defense.** The `maxAutoConfidence` ceiling (default 0.7) prevents any programmatic source from laundering high-confidence claims. Only human-verified claims via `evidence_path` grounding can exceed the ceiling.
 
@@ -300,11 +320,55 @@ All fields optional. `createLimen()` with no arguments runs in zero-config mode.
 | `selfHealing.maxCascadeDepth` | `number` | `5` | Maximum cascade recursion depth |
 | `vector.provider` | `EmbeddingProvider` | `undefined` | Embedding function for semantic search |
 | `vector.dimensions` | `number` | `undefined` | Embedding vector dimensions |
-| `requireRbac` | `boolean` | `false` | Enforce RBAC on all operations |
+| `requireRbac` | `boolean` | `false` | Enforce RBAC + classification filtering |
+| `security.consent.required` | `boolean` | `false` | Enforce consent check on claim assertion |
+| `maintenance.retentionEnabled` | `boolean` | `true` | Automatic retention scheduling |
+| `maintenance.retentionIntervalMs` | `number` | `86400000` | Retention check interval (24h default) |
+| `cognitive.autoSuggestConnections` | `boolean` | `true` | Auto-suggest connections on claim assertion |
 | `defaultTimeoutMs` | `number` | `60000` | Chat/infer timeout (ms) |
 | `rateLimiting.apiCallsPerMinute` | `number` | `100` | API rate limit |
 | `failoverPolicy` | `'degrade' \| 'allow-overdraft' \| 'block'` | `'degrade'` | Provider failure behavior |
 | `logger` | `(event) => void` | No-op | Structured logging callback |
+
+## Command Line
+
+Limen includes a full CLI with JSON output for every operation.
+
+```bash
+npm install -g limen-cli
+
+limen init                          # initialize database
+limen remember --subject entity:user:alice --predicate preference.food --value "loves Thai"
+limen recall --subject entity:user:alice
+limen search --query "Thai food"
+limen forget --claimId <id> --reason incorrect
+limen health                        # knowledge health report
+limen consolidate                   # merge, archive, resolve
+limen importance --claimId <id>     # 5-factor importance score
+limen maintenance-retention         # run retention manually
+```
+
+All 36 MCP tools have CLI equivalents. Run `limen --help` for the full list.
+
+## Limen for Claude (MCP)
+
+Add to `~/.claude/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "limen": {
+      "command": "npx",
+      "args": ["-y", "limen-mcp"],
+      "env": {
+        "LIMEN_DATA_DIR": "/path/to/your/data"
+      }
+    }
+  }
+}
+```
+
+36 tools available: `limen_remember`, `limen_recall`, `limen_search`, `limen_forget`, `limen_connect`, `limen_reflect`, `limen_consolidate`, `limen_importance`, `limen_narrative`, `limen_verify`, `limen_suggest_connections`, `limen_replay_verify`, `limen_consent_register`, `limen_consent_check`, `limen_maintenance_retention`, `limen_governance_erasure`, `limen_governance_audit_export`, and more.
 
 ## Architecture
 
@@ -321,7 +385,7 @@ Kernel            SQLite (WAL), audit trail, RBAC, crypto, events
 
 Layers depend downward only. The kernel knows nothing about AI. The API composes everything into a single frozen `Limen` object via `Object.freeze`.
 
-4,000+ tests. 134+ invariants across 3 tiers. 16 system calls. 1 production dependency (`better-sqlite3`). Every state mutation is audited in a hash-chained, append-only trail. RBAC on every operation. AES-256-GCM encryption at rest.
+4,000+ tests. 134+ invariants across 3 tiers. 16 system calls. 36 MCP tools. 1 production dependency (`better-sqlite3`). Every state mutation is audited in a hash-chained, append-only trail. RBAC on every operation. AES-256-GCM encryption at rest. Consent enforcement. Classification-filtered retrieval. Automated retention scheduling.
 
 ## Trust Surface
 

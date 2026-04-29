@@ -3,8 +3,8 @@
 > CI-governed. Every `file:line` reference is verified by `scripts/verify-proof-pack.ts`.
 > Stale references fail the build.
 >
-> Generated: 2026-03-24
-> Limen version: 3.3.0 (internal spec version; npm package: v2.0.0)
+> Generated: 2026-04-29
+> Limen version: v3.0.0 (npm package)
 
 ## Evidence Classes
 
@@ -28,6 +28,9 @@
 | 6 | Migration Safety | Verified | C-05 | `src/kernel/database/database_lifecycle.ts` | `tests/contract/test_governance_migrations.test.ts` |
 | 7 | Clock Injection (TimeProvider) | Verified | Hard Stop #7 | `src/kernel/time/time_provider.ts` | Throughout (30+ test files import TimeProvider) |
 | 8 | Error Redaction / Input Validation | Verified | S39 IP-4, I-20, FPD-3 | `src/api/errors/limen_error.ts` | `tests/gap/test_gap_014_public_api_boundary.test.ts` |
+| 9 | Consent Enforcement (v3.0.0) | Verified | EG-01 | `src/claims/store/claim_stores.ts` | `tests/contract/test_contract_consent_enforcement.test.ts` |
+| 10 | Classification Filtering (v3.0.0) | Verified | EG-04 | `src/claims/store/claim_stores.ts` | `tests/contract/test_contract_classification_filtering.test.ts` |
+| 11 | Key Rotation (v3.0.0) | Verified | EG-02, I-11 | `src/kernel/crypto/key_rotation.ts` | `tests/contract/test_contract_key_rotation.test.ts` |
 
 **Evidence class counts:** Verified: 8, Implemented: 0, Measured: 0, Declared: 0, Out of Scope: 0
 
