@@ -112,7 +112,7 @@ describe('FR-001: Output Primitives', () => {
     if (!result.ok) return;
 
     // Confidence should be capped at 0.7 (default maxAutoConfidence)
-    assert.ok(result.value.confidence <= 0.7, `confidence should be capped at 0.7, got ${result.value.confidence}`);
+    assert.equal(result.value.confidence, 0.7, `confidence should be capped at exactly 0.7, got ${result.value.confidence}`);
   });
 
   // DC-OUT-03 [REJECTION]: malformed primitive rejected (missing required field)

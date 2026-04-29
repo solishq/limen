@@ -29,6 +29,8 @@ import {
   validateOutputPrimitive,
   VALID_OUTPUT_PREDICATES,
 } from '../../cognitive/output_primitives.js';
+// Note: isOutputPredicate still used in queryOutput below; validateOutputPrimitive
+// checks namespace membership internally, so assertOutput no longer needs a separate guard.
 
 // ── Result Helpers ──
 
@@ -113,13 +115,7 @@ export function createOutputApi(deps: OutputApiDeps): OutputApi {
     primitive: object,
     options?: OutputAssertOptions,
   ): Result<RememberResult> {
-    // 1. Validate predicate is in output.* namespace
-    if (!isOutputPredicate(predicate)) {
-      return err('INVALID_OUTPUT_PRIMITIVE',
-        `Predicate "${predicate}" is not in the output.* namespace. Use output.assert() only for output.* predicates.`);
-    }
-
-    // 2. Validate against schema
+    // 1. Validate predicate + schema in one call (namespace membership checked internally)
     const validation = validateOutputPrimitive(predicate, primitive);
     if (!validation.ok) {
       return validation as Result<RememberResult>;
