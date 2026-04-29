@@ -270,7 +270,7 @@ export interface DeltaOptions {
 export interface DeltaResult {
   /** Claims asserted (created_at) since `since`. */
   readonly added: number;
-  /** Claims retracted since `since`. */
+  /** Claims created since `since` that are currently in retracted status. */
   readonly retracted: number;
   /** New contradicts relationships created since `since`. */
   readonly conflicts: number;
