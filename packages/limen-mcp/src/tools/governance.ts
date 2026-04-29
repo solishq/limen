@@ -44,7 +44,7 @@ export function registerGovernanceTools(server: McpServer, limen: Limen): void {
     {
       dataSubjectId: z.string().min(1).describe('Data subject ID requesting erasure'),
       reason: z.string().min(1).describe('GDPR Article 17 basis for erasure'),
-      includeRelated: z.boolean().describe('Cascade erasure through derived_from chains'),
+      includeRelated: z.boolean().default(false).describe('Cascade erasure through derived_from chains (default: false)'),
     },
     async (args) => {
       const result = safeCall(() => limen.governance.erasure({

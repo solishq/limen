@@ -16,8 +16,18 @@ export function createImportanceCommand(): Command {
   const cmd = new Command('importance')
     .description('Compute importance score for a claim (5-factor composite)')
     .requiredOption('--claimId <id>', 'The claim ID to score')
+    .option('--weight-access <n>', 'Weight for access frequency (0-1)', parseFloat)
+    .option('--weight-recency <n>', 'Weight for recency (0-1)', parseFloat)
+    .option('--weight-connections <n>', 'Weight for connection density (0-1)', parseFloat)
+    .option('--weight-confidence <n>', 'Weight for confidence (0-1)', parseFloat)
+    .option('--weight-governance <n>', 'Weight for governance (0-1)', parseFloat)
     .action(async (options: {
       claimId: string;
+      weightAccess?: number;
+      weightRecency?: number;
+      weightConnections?: number;
+      weightConfidence?: number;
+      weightGovernance?: number;
     }, command: Command) => {
       try {
         const globals = command.optsWithGlobals<{
@@ -27,7 +37,16 @@ export function createImportanceCommand(): Command {
 
         const result = await withEngine(
           (limen) => {
-            const r = limen.cognitive.importance(options.claimId);
+            const weights = (options.weightAccess !== undefined || options.weightRecency !== undefined ||
+              options.weightConnections !== undefined || options.weightConfidence !== undefined ||
+              options.weightGovernance !== undefined) ? {
+              accessFrequency: options.weightAccess,
+              recency: options.weightRecency,
+              connectionDensity: options.weightConnections,
+              confidence: options.weightConfidence,
+              governance: options.weightGovernance,
+            } : undefined;
+            const r = limen.cognitive.importance(options.claimId, weights);
             if (!r.ok) {
               throw new CliError(r.error.code, `Importance failed: ${r.error.message}`);
             }

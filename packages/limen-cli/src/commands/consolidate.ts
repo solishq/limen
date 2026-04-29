@@ -17,7 +17,7 @@ export function createConsolidateCommand(): Command {
     .description('Run cognitive consolidation: merge, archive, and suggest resolutions')
     .option('--mergeSimilarityThreshold <n>', 'Similarity threshold for merging (default: 0.98)', parseFloat)
     .option('--archiveMaxConfidence <n>', 'Max confidence for archive candidates (default: 0.3)', parseFloat)
-    .option('--archiveMaxAccessCount <n>', 'Max access count for archive candidates (default: 1)', parseInt)
+    .option('--archiveMaxAccessCount <n>', 'Max access count for archive candidates (default: 1)', (v) => Math.floor(Number(v)))
     .option('--dryRun', 'Preview changes without applying')
     .action(async (options: {
       mergeSimilarityThreshold?: number;

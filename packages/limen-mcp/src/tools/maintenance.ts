@@ -9,8 +9,6 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen } from 'limen-ai';
-import { z } from 'zod';
-
 /** MCP error response helper. */
 function mcpError(code: string, message: string) {
   return {
