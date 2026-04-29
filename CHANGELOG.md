@@ -5,6 +5,23 @@ All notable changes to Limen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-04-29 (COGNITION)
+
+### Summary
+Cognitive substrate release. Limen stops being a store agents query and becomes the fabric agents think with. Context compilation, dependency-aware knowledge, task-aware preparation, coordination backend, semantic output primitives, telemetry, and A2A governance.
+
+### Added
+- **Phase 1: Vitals & Dense Output** — `cognitive.health({ maxAge })` cached health checks, `cognitive.delta({ since })` lightweight change detection, `outputMode: 'ai-dense' | 'human-readable'` token-optimized formatting
+- **Phase 2: Context Compiler** — `cognitive.compile({ domain, predicates, format, maxTokens })` produces reasoning-ready compiled context from claims. Three formats: raw, structured, reasoning-ready with DECIDED/CORRECTION/OBSERVED labels. Token budget enforcement with truncation
+- **Phase 3: Living Knowledge** — Dependency triggers (`reviewNeeded` flag on claims whose evidence sources are retracted). Filtered event subscriptions with predicate/subject pattern matching. `claim:dependency-invalidated` and `claim:related` events
+- **Phase 4: Semantic Primitives** — 7 `output.*` predicate schemas (assertion, judgment, evidence, action, question, alert, narrative). Zod validation. `output.assert()` and `output.query()` convenience API
+- **Phase 5: Task-Aware Preparation** — `cognitive.prepareForTask({ agentRole, project, taskDescription, maxTokens })` returns sections (decisions, corrections, constraints, findings) with keyword-driven predicate selection
+- **Phase 6: Coordination Backend** — `createLimenBackend(limen)` adapter for Symphonic Swarm cluster mode. Session management, decision coordination, domain locking with TTL
+- **Phase 7: Telemetry & A2A Governance** — 3 telemetry schemas (cost, vital, audit) with `telemetry.record()` and `telemetry.query()`. A2A governance block, capability boundary, data classification, and proactive rule schemas with full CRUD API
+
+### Changed
+- Version bump from 3.0.0 to 4.0.0
+
 ## [3.0.0] - 2026-04-28 (WIRE)
 
 ### Summary
