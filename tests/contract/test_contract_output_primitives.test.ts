@@ -296,6 +296,38 @@ describe('FR-001: Output Primitives', () => {
     assert.equal(result.error.code, 'INVALID_OUTPUT_PRIMITIVE');
   });
 
+  // ── Unit tests for validateOutputPrimitive (kills M1/M2 independently) ──
+
+  it('DC-OUT-09 [REJECTION]: validateOutputPrimitive rejects malformed primitive independently', async () => {
+    // This tests the OutputApi guard in ISOLATION — if removed, this test fails
+    // even though claim_stores.ts has the same validation.
+    const { validateOutputPrimitive } = await import('../../src/cognitive/output_primitives.js');
+
+    // Missing required field 'rationale'
+    const result = validateOutputPrimitive('output.judgment', {
+      subject: 'test', assessment: 'good',
+      // rationale MISSING
+    });
+    assert.equal(result.ok, false, 'must reject malformed primitive');
+    assert.equal(result.error.code, 'INVALID_OUTPUT_PRIMITIVE');
+  });
+
+  it('DC-OUT-10 [REJECTION]: validateOutputPrimitive rejects non-output namespace independently', async () => {
+    const { validateOutputPrimitive } = await import('../../src/cognitive/output_primitives.js');
+
+    const result = validateOutputPrimitive('decision.rationale', { content: 'test' });
+    assert.equal(result.ok, false, 'must reject non-output.* predicate');
+    assert.equal(result.error.code, 'INVALID_OUTPUT_PRIMITIVE');
+  });
+
+  it('DC-OUT-11 [REJECTION]: validateOutputPrimitive rejects unknown output.* type independently', async () => {
+    const { validateOutputPrimitive } = await import('../../src/cognitive/output_primitives.js');
+
+    const result = validateOutputPrimitive('output.unknown_type', { data: 'test' });
+    assert.equal(result.ok, false, 'must reject unknown output type');
+    assert.equal(result.error.code, 'UNKNOWN_OUTPUT_PREDICATE');
+  });
+
   // ── Direct claim assertion with output.* predicate requires JSON type ──
 
   it('Direct claim.assertClaim with output.* predicate requires json type', async () => {
