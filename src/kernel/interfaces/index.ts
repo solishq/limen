@@ -35,6 +35,7 @@ export type {
 // Event bus
 export type {
   EventScope, Propagation, EventPayload, EventHandler, EventBus,
+  EventSubscriptionFilter,
 } from './events.js';
 
 // RBAC engine

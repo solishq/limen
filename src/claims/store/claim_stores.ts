@@ -682,12 +682,21 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
           [claimIdVal, claimIdVal, claimIdVal],
         );
 
+        // FR-007: Check if any claim-type evidence source has been retracted
+        const reviewNeededRow = conn.get<{ cnt: number }>(
+          `SELECT COUNT(*) as cnt FROM claim_evidence ce
+           JOIN claim_assertions ca ON ca.id = ce.evidence_id
+           WHERE ce.claim_id = ? AND ce.evidence_type = 'claim' AND ca.status = 'retracted'`,
+          [claimIdVal],
+        );
+
         const item: ClaimQueryResultItem = {
           claim,
           superseded: (supersededRow?.cnt ?? 0) > 0,
           disputed: (disputedRow?.cnt ?? 0) > 0,
           effectiveConfidence: effConf,
           freshness,
+          reviewNeeded: (reviewNeededRow?.cnt ?? 0) > 0,
         };
 
         // Include evidence if requested
@@ -1947,6 +1956,30 @@ function createRetractClaimHandlerImpl(
               },
             });
           }
+
+          // FR-007: Emit dependency-invalidated event when dependents exist
+          if (dependentEvidence.value.length > 0) {
+            // Get the subject/predicate of the retracted claim for filter matching
+            const retractedClaim = stores.store.get(conn, input.claimId, ctx.tenantId);
+            const retractedSubject = retractedClaim.ok ? retractedClaim.value.subject : undefined;
+            const retractedPredicate = retractedClaim.ok ? retractedClaim.value.predicate : undefined;
+
+            for (const ev of dependentEvidence.value) {
+              // Get dependent claim's subject and predicate for filter matching
+              const depClaim = stores.store.get(conn, ev.claimId, ctx.tenantId);
+              deps.eventBus.emit(conn, ctx, {
+                type: CCP_EVENTS.CLAIM_DEPENDENCY_INVALIDATED.type,
+                scope: CCP_EVENTS.CLAIM_DEPENDENCY_INVALIDATED.scope,
+                propagation: CCP_EVENTS.CLAIM_DEPENDENCY_INVALIDATED.propagation,
+                payload: {
+                  claimId: ev.claimId,
+                  retractedEvidenceId: input.claimId,
+                  subject: depClaim.ok ? depClaim.value.subject : retractedSubject,
+                  predicate: depClaim.ok ? depClaim.value.predicate : retractedPredicate,
+                },
+              });
+            }
+          }
         }
 
         // 9. Trace: claim.retracted (Binding 14)
@@ -2098,6 +2131,26 @@ function createRelateClaimsHandlerImpl(
             relationshipId: createResult.value.id,
           },
         });
+
+        // 12b. FR-005: Emit claim.related event on every relationship creation
+        {
+          const fromClaimResult = stores.store.get(conn, input.fromClaimId, null);
+          const toClaimResult = stores.store.get(conn, input.toClaimId, null);
+          deps.eventBus.emit(conn, ctx, {
+            type: CCP_EVENTS.CLAIM_RELATED.type,
+            scope: CCP_EVENTS.CLAIM_RELATED.scope,
+            propagation: CCP_EVENTS.CLAIM_RELATED.propagation,
+            missionId: input.missionId,
+            payload: {
+              fromClaimId: input.fromClaimId,
+              toClaimId: input.toClaimId,
+              type: input.type,
+              relationshipId: createResult.value.id,
+              subject: fromClaimResult.ok ? fromClaimResult.value.subject : undefined,
+              predicate: fromClaimResult.ok ? fromClaimResult.value.predicate : undefined,
+            },
+          });
+        }
 
         // 13. Trace: claim.challenged on contradicts (DC-CCP-512)
         if (input.type === 'contradicts' && deps.traceEmitter) {

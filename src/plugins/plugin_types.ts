@@ -37,6 +37,8 @@ export type LimenEventName =
   | 'claim:relationship:declared'
   | 'claim:tombstoned'
   | 'claim:evidence:orphaned'
+  | 'claim:dependency:invalidated'
+  | 'claim:related'
   | '*';  // wildcard — all events
 
 /**
@@ -70,6 +72,8 @@ export const EVENT_NAME_MAP: ReadonlyMap<LimenEventName, string> = new Map([
   ['claim:relationship:declared', 'claim.relationship.declared'],
   ['claim:tombstoned', 'claim.tombstoned'],
   ['claim:evidence:orphaned', 'claim.evidence.orphaned'],
+  ['claim:dependency:invalidated', 'claim.dependency.invalidated'],
+  ['claim:related', 'claim.related'],
 ]);
 
 /** Reverse map: internal type -> consumer event name */
@@ -85,6 +89,8 @@ export const VALID_EVENT_NAMES: ReadonlySet<string> = new Set([
   'claim:relationship:declared',
   'claim:tombstoned',
   'claim:evidence:orphaned',
+  'claim:dependency:invalidated',
+  'claim:related',
   '*',
 ]);
 

@@ -1840,6 +1840,7 @@ export async function createLimen(
               lastAccessedAt: (claimRow['last_accessed_at'] ?? null) as string | null,
               accessCount: (claimRow['access_count'] ?? 0) as number,
               reasoning: (claimRow['reasoning'] ?? null) as string | null,
+              reviewNeeded: false, // FR-007: Vector search path does not compute reviewNeeded
             },
             relevance: -kr.distance, // Negate distance for consistency with FTS5 convention
             score: distanceToSimilarity(kr.distance), // C3: correct L2→cosine formula from duplicate_detector
@@ -1926,6 +1927,7 @@ export async function createLimen(
                 lastAccessedAt: (claimRow['last_accessed_at'] ?? null) as string | null,
                 accessCount: (claimRow['access_count'] ?? 0) as number,
                 reasoning: (claimRow['reasoning'] ?? null) as string | null,
+                reviewNeeded: false, // FR-007: Hybrid search path does not compute reviewNeeded
               },
               relevance: 0,
               score: hs.combinedScore,

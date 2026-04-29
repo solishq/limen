@@ -176,6 +176,8 @@ export interface BeliefView {
   readonly accessCount: number;
   /** Phase 5: Free-text reasoning for why this belief was asserted. Null if not provided. */
   readonly reasoning: string | null;
+  /** FR-007: True when any claim-type evidence source has been retracted. */
+  readonly reviewNeeded: boolean;
 }
 
 // ── forget() Types ──

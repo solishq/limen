@@ -392,6 +392,8 @@ export interface ClaimQueryResultItem {
   readonly effectiveConfidence: number;
   /** Phase 3: Freshness classification based on last access time. */
   readonly freshness: import('../../cognitive/freshness.js').FreshnessLabel;
+  /** FR-007: True when any claim-type evidence source has been retracted. Computed at query time. */
+  readonly reviewNeeded: boolean;
 }
 
 // ============================================================================
@@ -1065,6 +1067,10 @@ export const CCP_EVENTS = {
   CLAIM_TOMBSTONED: { type: 'claim.tombstoned', scope: 'system' as const, propagation: 'local' as const },
   /** §14, CCP-I5: Fired when non-claim evidence source purged. Scope: system, Propagation: local */
   CLAIM_EVIDENCE_ORPHANED: { type: 'claim.evidence.orphaned', scope: 'system' as const, propagation: 'local' as const },
+  /** FR-007: Fired per dependent claim when evidence source retracted AND dependents exist. Scope: system, Propagation: local */
+  CLAIM_DEPENDENCY_INVALIDATED: { type: 'claim.dependency.invalidated', scope: 'system' as const, propagation: 'local' as const },
+  /** FR-005: Fired on relationship creation (connect). Scope: mission, Propagation: local */
+  CLAIM_RELATED: { type: 'claim.related', scope: 'mission' as const, propagation: 'local' as const },
 } as const;
 
 // ============================================================================

@@ -39,6 +39,18 @@ export interface EventPayload {
  */
 export type EventHandler = (event: EventPayload) => void;
 
+/**
+ * FR-005: Optional filter for event subscriptions.
+ * When provided, handler only receives events whose payload matches the filter patterns.
+ * Pattern matching uses glob-style with '*' as wildcard.
+ */
+export interface EventSubscriptionFilter {
+  /** Filter by predicate field in event payload. Glob patterns supported. */
+  readonly predicate?: string;
+  /** Filter by subject field in event payload. Glob patterns supported. */
+  readonly subject?: string;
+}
+
 // ─── Event Bus Interface ───
 
 /**
@@ -57,9 +69,10 @@ export interface EventBus {
   /**
    * Subscribe to events matching pattern. Returns subscription ID.
    * Pattern uses glob syntax: 'mission.*', 'task.failed', '*'.
+   * FR-005: Optional filter for payload-level filtering by predicate/subject.
    * S ref: RDD-4 (subscription registry)
    */
-  subscribe(pattern: string, handler: EventHandler): Result<string>;
+  subscribe(pattern: string, handler: EventHandler, filter?: EventSubscriptionFilter): Result<string>;
 
   /**
    * Unsubscribe by subscription ID.

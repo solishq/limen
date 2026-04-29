@@ -343,6 +343,8 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
           accessCount: item.claim.accessCount,
           // Phase 5: Reasoning field
           reasoning: item.claim.reasoning,
+          // FR-007: Dependency trigger flag
+          reviewNeeded: item.reviewNeeded,
         };
       });
 
@@ -562,6 +564,8 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
           accessCount: item.claim.accessCount,
           // Phase 5: Reasoning field
           reasoning: item.claim.reasoning,
+          // FR-007: Search results don't compute reviewNeeded (no evidence join in FTS path)
+          reviewNeeded: false,
         },
         relevance: item.relevance,
         score: item.score,

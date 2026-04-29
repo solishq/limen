@@ -86,6 +86,9 @@ export interface CognitiveHealthReport {
     readonly claimCount: number;
   }>;
 
+  /** FR-007: Count of active claims with retracted evidence sources needing review. */
+  readonly reviewNeeded: number;
+
   /** FR-010: Formatted output when outputMode is not 'structured'. */
   readonly formatted?: string;
 }
@@ -190,6 +193,7 @@ export function computeCognitiveHealth(
       confidence: { mean: 0, median: 0, below30: 0, above90: 0 },
       gaps: [],
       staleDomains: [],
+      reviewNeeded: 0,
     };
   }
 
@@ -389,6 +393,18 @@ export function computeCognitiveHealth(
     });
   }
 
+  // ── 7. FR-007: Review needed count ──
+  // Count active claims that have at least one claim-type evidence source that is retracted
+  const reviewNeededRow = conn.get<{ cnt: number }>(
+    `SELECT COUNT(DISTINCT ca.id) as cnt
+     FROM claim_assertions ca
+     JOIN claim_evidence ce ON ce.claim_id = ca.id AND ce.evidence_type = 'claim'
+     JOIN claim_assertions src ON src.id = ce.evidence_id AND src.status = 'retracted'
+     WHERE ca.status = 'active' AND ca.tenant_id IS ?`,
+    [tenantId],
+  );
+  const reviewNeededCount = reviewNeededRow?.cnt ?? 0;
+
   return {
     totalClaims,
     freshness: { fresh, aging, stale, percentFresh },
@@ -401,6 +417,7 @@ export function computeCognitiveHealth(
     },
     gaps: gaps.slice(0, maxGaps),
     staleDomains: staleDomains.slice(0, maxStaleDomains),
+    reviewNeeded: reviewNeededCount,
   };
 }
 
@@ -493,6 +510,7 @@ export function formatHealthHumanReadable(report: CognitiveHealthReport): string
   for (const g of report.gaps) {
     lines.push(`    - ${g.domain}: ${g.lastClaimAge} (${g.significance})`);
   }
+  lines.push(`  Review Needed: ${report.reviewNeeded}`);
   lines.push(`  Stale Domains: ${report.staleDomains.length}`);
   for (const s of report.staleDomains) {
     lines.push(`    - ${s.predicate}: ${s.newestClaimAge}, ${s.claimCount} claims`);
@@ -507,7 +525,7 @@ export function formatHealthHumanReadable(report: CognitiveHealthReport): string
  * Minimal tokens, fixed positions, no prose.
  */
 export function formatHealthAiDense(report: CognitiveHealthReport): string {
-  return `H[t:${report.totalClaims} f:${report.freshness.fresh}/${report.freshness.aging}/${report.freshness.stale} c:${report.conflicts.unresolved} g:${report.gaps.length} s:${report.confidence.mean} d:${report.staleDomains.length}]`;
+  return `H[t:${report.totalClaims} f:${report.freshness.fresh}/${report.freshness.aging}/${report.freshness.stale} c:${report.conflicts.unresolved} g:${report.gaps.length} s:${report.confidence.mean} d:${report.staleDomains.length} r:${report.reviewNeeded}]`;
 }
 
 /**

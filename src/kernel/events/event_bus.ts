@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   Result, EventId, OperationContext,
   EventBus, EventPayload, EventHandler,
+  EventSubscriptionFilter,
   DatabaseConnection,
 } from '../interfaces/index.js';
 import type { TimeProvider } from '../interfaces/time.js';
@@ -26,6 +27,8 @@ interface Subscription {
   readonly id: string;
   readonly pattern: string;
   readonly handler: EventHandler;
+  /** FR-005: Optional payload-level filter for predicate/subject matching. */
+  readonly filter?: EventSubscriptionFilter;
 }
 
 /**
@@ -57,6 +60,38 @@ function matchesPattern(eventType: string, pattern: string): boolean {
   + '$';
 
   return new RegExp(regexStr).test(eventType);
+}
+
+/**
+ * FR-005: Validate subject filter pattern.
+ * Subject URNs use colons (entity:type:id) so we need a broader pattern than SAFE_GLOB_PATTERN.
+ * Allows alphanumeric, dots, hyphens, underscores, colons, and asterisk wildcard.
+ */
+const SAFE_SUBJECT_PATTERN = /^[a-zA-Z0-9.*_:/-]+$/;
+
+function isValidFilterSubject(pattern: string): boolean {
+  return SAFE_SUBJECT_PATTERN.test(pattern);
+}
+
+/**
+ * FR-005: Check if an event payload matches a subscription filter.
+ * A filter matches if every specified field (predicate, subject) in the filter
+ * matches the corresponding field in the event payload using glob-style patterns.
+ * If a filter field is undefined, it matches all values for that field.
+ * If the payload doesn't contain the field, the filter does NOT match (except when filter field is undefined).
+ */
+function matchesFilter(payload: Record<string, unknown>, filter: EventSubscriptionFilter): boolean {
+  if (filter.predicate !== undefined) {
+    const payloadPredicate = payload['predicate'];
+    if (typeof payloadPredicate !== 'string') return false;
+    if (!matchesPattern(payloadPredicate, filter.predicate)) return false;
+  }
+  if (filter.subject !== undefined) {
+    const payloadSubject = payload['subject'];
+    if (typeof payloadSubject !== 'string') return false;
+    if (!matchesPattern(payloadSubject, filter.subject)) return false;
+  }
+  return true;
 }
 
 /**
@@ -141,6 +176,10 @@ export function createEventBus(encryption?: EventBusEncryption, time?: TimeProvi
         // so they must only see committed state.
         for (const sub of subscriptions.values()) {
           if (matchesPattern(event.type, sub.pattern)) {
+            // FR-005: Apply payload-level filter if present
+            if (sub.filter && !matchesFilter(event.payload, sub.filter)) {
+              continue;
+            }
             try {
               sub.handler(event);
             } catch {
@@ -167,7 +206,7 @@ export function createEventBus(encryption?: EventBusEncryption, time?: TimeProvi
      * Subscribe to events matching pattern. Returns subscription ID.
      * S ref: RDD-4 (subscription registry)
      */
-    subscribe(pattern: string, handler: EventHandler): Result<string> {
+    subscribe(pattern: string, handler: EventHandler, filter?: EventSubscriptionFilter): Result<string> {
       try {
         // CF-029: Validate pattern before registration
         if (!SAFE_GLOB_PATTERN.test(pattern)) {
@@ -177,6 +216,28 @@ export function createEventBus(encryption?: EventBusEncryption, time?: TimeProvi
               code: 'INVALID_PATTERN',
               message: `Event pattern contains unsafe characters. Only alphanumeric, '.', '*', '-', '_' allowed.`,
               spec: 'RDD-4',
+            },
+          };
+        }
+
+        // FR-005: Validate filter patterns if provided
+        if (filter?.predicate !== undefined && !SAFE_GLOB_PATTERN.test(filter.predicate)) {
+          return {
+            ok: false,
+            error: {
+              code: 'INVALID_PATTERN',
+              message: `Filter predicate pattern contains unsafe characters.`,
+              spec: 'RDD-4/FR-005',
+            },
+          };
+        }
+        if (filter?.subject !== undefined && filter.subject !== '' && !isValidFilterSubject(filter.subject)) {
+          return {
+            ok: false,
+            error: {
+              code: 'INVALID_PATTERN',
+              message: `Filter subject pattern contains unsafe characters.`,
+              spec: 'RDD-4/FR-005',
             },
           };
         }
@@ -194,7 +255,10 @@ export function createEventBus(encryption?: EventBusEncryption, time?: TimeProvi
         }
 
         const id = randomUUID();
-        subscriptions.set(id, { id, pattern, handler });
+        const sub: Subscription = filter
+          ? { id, pattern, handler, filter }
+          : { id, pattern, handler };
+        subscriptions.set(id, sub);
         return { ok: true, value: id };
       } catch (err) {
         return {
