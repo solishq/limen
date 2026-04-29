@@ -120,18 +120,32 @@ describe('EG-04: Classification-Filtered Retrieval', () => {
     assert.equal(claims.length, 1, 'unclassified claim visible');
   });
 
-  it('DC-CLASS-04 [SUCCESS]: classification filter applies to search path too', async () => {
+  it('DC-CLASS-04 [SUCCESS]: search path filters by classification with requireRbac=true (F-CERT-P2-003)', async () => {
+    // Mirrors DC-CLASS-02 approach but for the search path.
+    // With requireRbac=true, the untrusted default agent gets clearance=0,
+    // which should exclude classified claims from search results.
     const dir = trackDir(makeTempDir());
-    const limen = trackInstance(await createLimen({ dataDir: dir, masterKey: makeKey() }));
+    const limen = trackInstance(await createLimen({
+      dataDir: dir,
+      masterKey: makeKey(),
+      requireRbac: true,
+    }));
 
-    limen.remember('entity:searchclass:a', 'knowledge.searchable', 'findable public info');
-    limen.remember('entity:searchclass:b', 'medical.searchable', 'findable restricted info');
+    // Store claims — assertion doesn't filter by classification
+    limen.remember('entity:searchfilter:a', 'knowledge.searchable', 'findable public data');
+    limen.remember('entity:searchfilter:b', 'medical.searchable', 'findable restricted data');
 
-    // Admin search should find both
+    // Search with untrusted clearance (0) — should filter restricted claims
     const searchResult = limen.search('findable');
     assert.ok(searchResult.ok, 'search should succeed');
-    // Search may or may not find both depending on FTS5 indexing
-    // The key test is that search doesn't crash with clearanceLevel
+    if (searchResult.ok) {
+      // With clearance=0, medical.* (restricted=3) should be filtered out.
+      // Only knowledge.* (unrestricted=0) should appear in results.
+      for (const item of searchResult.value) {
+        assert.ok(!item.belief.predicate.startsWith('medical.'),
+          `restricted claim with predicate '${item.belief.predicate}' should not appear in search for clearance=0`);
+      }
+    }
   });
 });
 

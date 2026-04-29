@@ -17,7 +17,6 @@
  */
 
 import { randomBytes, pbkdf2Sync } from 'node:crypto';
-import { randomUUID } from 'node:crypto';
 import type { DatabaseConnection, OperationContext, Result } from '../interfaces/index.js';
 import type { CryptoEngine, EncryptedPayload } from '../interfaces/index.js';
 import type { AuditTrail } from '../interfaces/audit.js';

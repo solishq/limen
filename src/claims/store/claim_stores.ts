@@ -1616,17 +1616,16 @@ function createAssertClaimHandlerImpl(
           if (!consentReg) {
             return err('CONSENT_REQUIRED', 'Consent enforcement required but consent registry unavailable', 'EG-01');
           }
-          if (consentReg) {
-            const entityId = extractEntityFromSubject(input.subject);
-            if (entityId !== null) {
-              const consentScope = securityPolicy.consent.scope ?? 'claim_assertion';
-              const consentResult = consentReg.check(conn, ctx, entityId, consentScope);
-              if (!consentResult.ok) {
-                return err('CONSENT_REQUIRED', `Consent check failed: ${consentResult.error.message}`, 'EG-01');
-              }
-              if (consentResult.value === null) {
-                return err('CONSENT_REQUIRED', `No active consent for entity: ${entityId}`, 'EG-01');
-              }
+          // Registry available — check consent for entity subjects
+          const entityId = extractEntityFromSubject(input.subject);
+          if (entityId !== null) {
+            const consentScope = securityPolicy.consent.scope ?? 'claim_assertion';
+            const consentResult = consentReg.check(conn, ctx, entityId, consentScope);
+            if (!consentResult.ok) {
+              return err('CONSENT_REQUIRED', `Consent check failed: ${consentResult.error.message}`, 'EG-01');
+            }
+            if (consentResult.value === null) {
+              return err('CONSENT_REQUIRED', `No active consent for entity: ${entityId}`, 'EG-01');
             }
           }
         }
