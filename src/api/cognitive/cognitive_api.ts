@@ -37,6 +37,8 @@ import type {
 } from '../../cognitive/cognitive_types.js';
 import type { CompileOptions, CompiledContext } from '../../cognitive/context_compiler.js';
 import { compileContext } from '../../cognitive/context_compiler.js';
+import type { PrepareForTaskOptions, PreparedContext } from '../../cognitive/task_preparation.js';
+import { prepareForTask } from '../../cognitive/task_preparation.js';
 import {
   computeCognitiveHealth,
   computeDelta,
@@ -89,6 +91,9 @@ export interface CognitiveNamespace {
 
   /** FR-006: Compile claims from a domain into reasoning-ready context. */
   compile(options: CompileOptions): Result<CompiledContext>;
+
+  /** FR-008: Prepare task-aware context for an agent based on role and task description. */
+  prepareForTask(options: PrepareForTaskOptions): Result<PreparedContext>;
 }
 
 /**
@@ -426,6 +431,25 @@ export function createCognitiveNamespace(deps: CognitiveNamespaceDeps): Cognitiv
           time: deps.time,
           freshnessThresholds: deps.freshnessThresholds,
           stabilityConfig: deps.stabilityConfig,
+        },
+        options,
+      );
+    },
+
+    prepareForTask(options: PrepareForTaskOptions): Result<PreparedContext> {
+      // FR-008: Delegate to task_preparation module.
+      // Uses this.compile as the backbone — prepareForTask calls compile()
+      // per section, never duplicates compilation logic.
+      const compileDeps = {
+        getConnection: deps.getConnection,
+        getTenantId: () => deps.getTenantId(),
+        time: deps.time,
+        freshnessThresholds: deps.freshnessThresholds,
+        stabilityConfig: deps.stabilityConfig,
+      };
+      return prepareForTask(
+        {
+          compile: (compileOpts) => compileContext(compileDeps, compileOpts),
         },
         options,
       );

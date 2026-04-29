@@ -43,6 +43,7 @@ import { createMaintenanceRetentionCommand } from './commands/maintenance-retent
 import { createDeltaCommand } from './commands/delta.js';
 import { createOutputAssertCommand } from './commands/output-assert.js';
 import { createOutputQueryCommand } from './commands/output-query.js';
+import { createPrepareForTaskCommand } from './commands/prepare-for-task.js';
 
 /**
  * F-001 FIX: Apply JSON error output to a Commander command.
@@ -123,6 +124,7 @@ program.addCommand(createMaintenanceRetentionCommand());
 program.addCommand(createDeltaCommand());
 program.addCommand(createOutputAssertCommand());
 program.addCommand(createOutputQueryCommand());
+program.addCommand(createPrepareForTaskCommand());
 
 // Apply JSON error handling AFTER all commands are registered,
 // so the recursive walk covers every subcommand.

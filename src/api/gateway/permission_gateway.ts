@@ -111,6 +111,7 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'cognitive.acceptSuggestion': { permission: 'manage_cognitive' },
   'cognitive.rejectSuggestion': { permission: 'manage_cognitive' },
   'cognitive.compile': { permission: 'query_claims' },
+  'cognitive.prepareForTask': { permission: 'query_claims' },
 
   // ── Agents namespace ──
   'agents.register': { permission: 'create_agent' },

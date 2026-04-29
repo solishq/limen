@@ -209,6 +209,43 @@ export function registerCognitiveTools(server: McpServer, limen: Limen): void {
     },
   );
 
+  // ── limen_prepare_for_task (FR-008) ──
+  server.tool(
+    'limen_prepare_for_task',
+    'Prepare task-aware context for an agent. Analyzes task description to select relevant knowledge (decisions, corrections, constraints, findings) and returns reasoning-ready context with semantic sections.',
+    {
+      agentRole: z.string().min(1).describe('Agent role (e.g., "Builder", "Breaker", "Researcher")'),
+      project: z.string().min(1).describe('Subject pattern for project scope (e.g., "entity:project:veridion")'),
+      taskId: z.string().optional().describe('Optional task identifier'),
+      taskDescription: z.string().min(1).describe('Natural language task description — drives keyword extraction'),
+      maxTokens: z.number().optional().describe('Token budget for total output (default: 2000)'),
+      includeFindings: z.boolean().optional().describe('Include finding.* predicates (default: true)'),
+      includeLocks: z.boolean().optional().describe('Include lock.* predicates (default: false)'),
+      includeBudget: z.boolean().optional().describe('Include budget.* predicates (default: false)'),
+    },
+    async (args) => {
+      const result = safeCall(() => limen.cognitive.prepareForTask({
+        agentRole: args.agentRole,
+        project: args.project,
+        taskId: args.taskId,
+        taskDescription: args.taskDescription,
+        maxTokens: args.maxTokens,
+        includeFindings: args.includeFindings,
+        includeLocks: args.includeLocks,
+        includeBudget: args.includeBudget,
+      }));
+
+      if (!result.ok) {
+        return mcpError(result.error.code, result.error.message);
+      }
+
+      // Return the reasoning-ready text directly — it is designed for agent consumption
+      return {
+        content: [{ type: 'text' as const, text: result.value.text }],
+      };
+    },
+  );
+
   // ── limen_verify (Phase 12 §12.7) — ASYNC ──
   server.tool(
     'limen_verify',

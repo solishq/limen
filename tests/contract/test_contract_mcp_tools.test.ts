@@ -87,7 +87,7 @@ function createMockLimen(): unknown {
 
 describe('Phase 3: MCP Tool Registration', () => {
 
-  it('registerCognitiveTools registers limen_health_cognitive and 5 Phase 12 tools', async () => {
+  it('registerCognitiveTools registers limen_health_cognitive, Phase 12 tools, and FR-008', async () => {
     const { registerCognitiveTools } = await import('../../packages/limen-mcp/src/tools/cognitive.js');
     const server = new MockMcpServer();
     const limen = createMockLimen();
@@ -96,11 +96,13 @@ describe('Phase 3: MCP Tool Registration', () => {
 
     const expectedTools = [
       'limen_health_cognitive',
+      'limen_health_delta',
       'limen_consolidate',
       'limen_importance',
       'limen_narrative',
       'limen_verify',
       'limen_suggest_connections',
+      'limen_prepare_for_task',
     ];
 
     for (const toolName of expectedTools) {
@@ -111,7 +113,7 @@ describe('Phase 3: MCP Tool Registration', () => {
       assert.ok(typeof tool.handler === 'function', `Tool '${toolName}' should have a handler function`);
     }
 
-    assert.equal(server.registeredTools.size, 6, 'Should register exactly 6 cognitive tools');
+    assert.equal(server.registeredTools.size, 8, 'Should register exactly 8 cognitive tools');
   });
 
   it('registerReplayTools registers limen_replay_verify', async () => {
@@ -177,16 +179,18 @@ describe('Phase 3: MCP Tool Registration', () => {
     registerConsentTools(server as unknown as Parameters<typeof registerConsentTools>[0], limen as Parameters<typeof registerConsentTools>[1]);
     registerMaintenanceTools(server as unknown as Parameters<typeof registerMaintenanceTools>[0], limen as Parameters<typeof registerMaintenanceTools>[1]);
 
-    // 6 cognitive (1 existing + 5 new) + 1 replay + 2 governance + 2 consent + 1 maintenance = 12
-    assert.equal(server.registeredTools.size, 12, 'Should register 12 tools total (1 existing cognitive + 11 new)');
+    // 8 cognitive + 1 replay + 2 governance + 2 consent + 1 maintenance = 14
+    assert.equal(server.registeredTools.size, 14, 'Should register 14 tools total');
 
-    // Verify the 11 new tool names
+    // Verify tool names
     const newToolNames = [
       'limen_consolidate',
       'limen_importance',
       'limen_narrative',
       'limen_verify',
       'limen_suggest_connections',
+      'limen_health_delta',
+      'limen_prepare_for_task',
       'limen_replay_verify',
       'limen_governance_erasure',
       'limen_governance_audit_export',
