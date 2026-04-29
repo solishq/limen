@@ -46,3 +46,20 @@ stryker.log
 # AAS integration artifacts
 AAS-INTEGRATION-REPORT.md
 AAS-INTELLIGENCE-INTEGRATION.md
+
+# Internal audit/quality artifacts — SolisHQ IP
+AUDIT-v2-DEEP-2026-04-03.md
+LIMEN_AUDIT_FOR_SAEK.md
+LIMEN-WIRING-AUDIT-2026-04-28.md
+docs/LIMEN_AUDIT_FINDINGS_2026-04-01.md
+docs/LIMEN_CLAUDE_MD_OPTIMIZATION.md
+docs/SCHEMA_EXTENSIONS_KNOWLEDGE_DECAY.md
+docs/breaker-reports/
+docs/certifications/
+docs/incidents/
+promises/
+testimony/
+.goosehints
+
+# Phase 13 WIP (deferred to v3.1)
+src/sync/
