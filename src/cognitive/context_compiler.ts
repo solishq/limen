@@ -208,9 +208,14 @@ export function compileContext(
   }
 
   const format = options.format ?? DEFAULT_FORMAT;
-  const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
   const priority = options.priority ?? DEFAULT_PRIORITY;
   const includeRels = options.includeRelationships ?? false;
+
+  // F-CC-008: maxTokens <= 0 is invalid — agent must provide a positive budget.
+  if (options.maxTokens !== undefined && options.maxTokens <= 0) {
+    return err('COMPILE_INVALID_MAX_TOKENS', 'maxTokens must be a positive number');
+  }
+  const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
 
   try {
     // ── Phase 1: Query ──
@@ -312,7 +317,7 @@ function queryClaims(
     SELECT id, subject, predicate, object_value, confidence, valid_at, created_at, status, last_accessed_at
     FROM claim_assertions
     WHERE ${conditions.join(' AND ')}
-    ORDER BY valid_at DESC
+    ORDER BY valid_at DESC, id ASC
     LIMIT 500
   `;
 
@@ -418,18 +423,20 @@ function fetchRelationships(
 function sortClaims(claims: readonly EnrichedClaim[], priority: CompilePriority): EnrichedClaim[] {
   const sorted = [...claims];
 
+  // F-CC-006: Every sort uses `id` as a deterministic tiebreaker.
+  // Without this, claims with identical sort keys produce unstable order.
   switch (priority) {
     case 'recency':
-      // Most recent validAt first
-      sorted.sort((a, b) => b.validAt.localeCompare(a.validAt));
+      // Most recent validAt first, id ASC tiebreaker
+      sorted.sort((a, b) => b.validAt.localeCompare(a.validAt) || a.id.localeCompare(b.id));
       break;
     case 'confidence':
-      // Highest effective confidence first
-      sorted.sort((a, b) => b.effectiveConfidence - a.effectiveConfidence);
+      // Highest effective confidence first, id ASC tiebreaker
+      sorted.sort((a, b) => (b.effectiveConfidence - a.effectiveConfidence) || a.id.localeCompare(b.id));
       break;
     case 'relevance':
-      // Default: sort by recency (relevance ranking is a future enhancement)
-      sorted.sort((a, b) => b.validAt.localeCompare(a.validAt));
+      // Default: sort by recency (relevance ranking is a future enhancement), id ASC tiebreaker
+      sorted.sort((a, b) => b.validAt.localeCompare(a.validAt) || a.id.localeCompare(b.id));
       break;
   }
 

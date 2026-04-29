@@ -25,6 +25,7 @@ import { randomBytes } from 'node:crypto';
 
 import { createLimen } from '../../src/api/index.js';
 import type { Limen } from '../../src/api/index.js';
+import Database from 'better-sqlite3';
 
 // ── Helpers ──
 
@@ -362,6 +363,289 @@ describe('FR-006: Context Compiler (limen.cognitive.compile)', () => {
     delete p1.compiledAt;
     delete p2.compiledAt;
     assert.deepStrictEqual(p1, p2, 'structured content (minus timestamp) must be identical');
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Breaker remediation tests — kill surviving mutants
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── F-CC-001: Tenant isolation (M-3 kill) ──
+  // Mutation: removing tenant_id filter from queryClaims must fail a test.
+  // Approach: create a single-tenant instance (tenant_id IS NULL), seed claims
+  // via the API, then insert a foreign-tenant claim directly via SQL.
+  // Compile must NOT return the foreign-tenant claim.
+  it('F-CC-001 [TENANT-ISOLATION]: compile excludes claims belonging to a different tenant', async () => {
+    const dir = trackDir(makeTempDir());
+    const limen = trackInstance(await createLimen({ dataDir: dir, masterKey: makeKey() }));
+
+    // Seed a legitimate claim via API (will have tenant_id = NULL in single-tenant mode)
+    limen.remember('entity:project:iso', 'decision.arch', 'Use microservices');
+
+    // Inject a foreign-tenant claim directly into the DB — simulating multi-tenant contamination.
+    // This claim has the SAME subject pattern but belongs to a different tenant.
+    const db = new Database(join(dir, 'limen.db'));
+    db.exec(`
+      INSERT INTO claim_assertions (id, tenant_id, subject, predicate, object_type, object_value, confidence, valid_at, created_at, status, archived, grounding_mode)
+      VALUES ('foreign-claim-001', 'tenant-X', 'entity:project:iso', 'decision.secret', 'string', 'Foreign secret data', 0.9, datetime('now'), datetime('now'), 'active', 0, 'runtime_witness')
+    `);
+    db.close();
+
+    const result = limen.cognitive.compile({
+      domain: 'entity:project:iso',
+      format: 'raw',
+    });
+
+    assert.equal(result.ok, true, 'compile must succeed');
+    if (!result.ok) return;
+
+    const parsed = JSON.parse(result.value.text);
+    assert.ok(Array.isArray(parsed), 'must be array');
+
+    // The foreign-tenant claim must NOT appear
+    const foreignClaims = parsed.filter((c: { id: string }) => c.id === 'foreign-claim-001');
+    assert.equal(foreignClaims.length, 0, 'F-CC-001: foreign-tenant claim must NOT appear in compile output');
+
+    // The legitimate claim MUST appear
+    assert.ok(parsed.length >= 1, 'legitimate claims must be included');
+    const hasLegit = parsed.some((c: { predicate: string }) => c.predicate === 'decision.arch');
+    assert.ok(hasLegit, 'legitimate same-tenant claim must be present');
+  });
+
+  // ── F-CC-002: Decay computation (M-7 kill) ──
+  // Mutation: hardcoding effectiveConfidence = confidence survives because all claims are fresh.
+  // Fix: seed a claim with an old validAt, verify effectiveConfidence < confidence.
+  it('F-CC-002 [DECAY]: effectiveConfidence is less than confidence for old claims', async () => {
+    const dir = trackDir(makeTempDir());
+    const limen = trackInstance(await createLimen({ dataDir: dir, masterKey: makeKey() }));
+
+    // Seed a claim via API first (to ensure schema exists)
+    limen.remember('entity:project:decay', 'observation.recent', 'A recent observation');
+
+    // Now insert a very old claim directly via SQL (1 year ago)
+    const db = new Database(join(dir, 'limen.db'));
+    const oneYearAgo = new Date(Date.now() - 365 * 86_400_000).toISOString();
+    db.exec(`
+      INSERT INTO claim_assertions (id, tenant_id, subject, predicate, object_type, object_value, confidence, valid_at, created_at, status, archived, grounding_mode)
+      VALUES ('old-claim-001', NULL, 'entity:project:decay', 'observation.old', 'string', 'An old observation', 0.9, '${oneYearAgo}', '${oneYearAgo}', 'active', 0, 'runtime_witness')
+    `);
+    db.close();
+
+    const result = limen.cognitive.compile({
+      domain: 'entity:project:decay',
+      format: 'raw',
+    });
+
+    assert.equal(result.ok, true, 'compile must succeed');
+    if (!result.ok) return;
+
+    const parsed = JSON.parse(result.value.text);
+    const oldClaim = parsed.find((c: { id: string }) => c.id === 'old-claim-001');
+    assert.ok(oldClaim, 'old claim must be included in output');
+    assert.ok(
+      oldClaim.effectiveConfidence < oldClaim.confidence,
+      `F-CC-002: effectiveConfidence (${oldClaim.effectiveConfidence}) must be < confidence (${oldClaim.confidence}) for a 1-year-old claim`,
+    );
+    // Verify the recent claim is near 1.0 (no significant decay)
+    const recentClaim = parsed.find((c: { predicate: string }) => c.predicate === 'observation.recent');
+    assert.ok(recentClaim, 'recent claim must be included');
+    assert.ok(
+      recentClaim.effectiveConfidence > oldClaim.effectiveConfidence,
+      'recent claim must have higher effectiveConfidence than old claim',
+    );
+  });
+
+  // ── F-CC-003: Staleness computation (M-10 kill) ──
+  // Mutation: hardcoding staleness='fresh' survives because all claims have recent lastAccessedAt.
+  // Fix: seed claims with old lastAccessedAt via SQL, verify staleness='stale'.
+  it('F-CC-003 [STALENESS]: staleness is "stale" when all claims have old lastAccessedAt', async () => {
+    const dir = trackDir(makeTempDir());
+    const limen = trackInstance(await createLimen({ dataDir: dir, masterKey: makeKey() }));
+
+    // Seed claims via API
+    limen.remember('entity:project:stale', 'observation.item1', 'Observation one');
+    limen.remember('entity:project:stale', 'observation.item2', 'Observation two');
+
+    // Force all claims in this domain to have old lastAccessedAt
+    const db = new Database(join(dir, 'limen.db'));
+    db.exec(`
+      UPDATE claim_assertions
+      SET last_accessed_at = '2020-01-01T00:00:00.000Z'
+      WHERE subject LIKE 'entity:project:stale%'
+    `);
+    db.close();
+
+    const result = limen.cognitive.compile({
+      domain: 'entity:project:stale',
+      format: 'reasoning-ready',
+    });
+
+    assert.equal(result.ok, true, 'compile must succeed');
+    if (!result.ok) return;
+
+    assert.equal(result.value.staleness, 'stale',
+      'F-CC-003: staleness must be "stale" when all included claims have old lastAccessedAt');
+    assert.ok(result.value.claimCount > 0, 'must include claims');
+  });
+
+  // ── F-CC-004: Archived filter (M-8 kill) ──
+  // Mutation: removing `archived = 0` from SQL survives because no claims are archived.
+  // Fix: archive a claim via SQL, verify it's excluded from compile output.
+  it('F-CC-004 [ARCHIVED]: compile excludes archived claims', async () => {
+    const dir = trackDir(makeTempDir());
+    const limen = trackInstance(await createLimen({ dataDir: dir, masterKey: makeKey() }));
+
+    // Seed two claims
+    limen.remember('entity:project:arch', 'decision.keep', 'Keep this');
+    limen.remember('entity:project:arch', 'decision.remove', 'Archive this');
+
+    // Archive one claim via SQL
+    const db = new Database(join(dir, 'limen.db'));
+    db.exec(`
+      UPDATE claim_assertions
+      SET archived = 1
+      WHERE predicate = 'decision.remove' AND subject = 'entity:project:arch'
+    `);
+    db.close();
+
+    const result = limen.cognitive.compile({
+      domain: 'entity:project:arch',
+      format: 'raw',
+    });
+
+    assert.equal(result.ok, true, 'compile must succeed');
+    if (!result.ok) return;
+
+    const parsed = JSON.parse(result.value.text);
+    assert.equal(parsed.length, 1, 'F-CC-004: only non-archived claim should appear');
+    assert.equal(parsed[0].predicate, 'decision.keep', 'the non-archived claim must be the one we kept');
+  });
+
+  // ── F-CC-005: LIKE escaping (M-11 kill) ──
+  // Mutation: removing escapeLikeWildcards call survives because no domains contain SQL wildcards.
+  // Fix: use a domain containing `_` (SQL LIKE wildcard), verify it doesn't match unintended rows.
+  it('F-CC-005 [LIKE-ESCAPE]: domain with SQL wildcards does not match unintended subjects', async () => {
+    const dir = trackDir(makeTempDir());
+    const limen = trackInstance(await createLimen({ dataDir: dir, masterKey: makeKey() }));
+
+    // Seed claims for two similar-looking subjects
+    limen.remember('entity:project:alpha', 'observation.a', 'Alpha claim');
+    limen.remember('entity:project:beta', 'observation.b', 'Beta claim');
+
+    // Query with a domain that uses `_` — without escaping, `_` matches any single char
+    // in LIKE, so 'entity:project:a_pha' would match 'entity:project:alpha'.
+    // But with proper escaping, it should NOT match 'entity:project:alpha'.
+    const result = limen.cognitive.compile({
+      domain: 'entity:project:a_pha',
+      format: 'raw',
+    });
+
+    assert.equal(result.ok, true, 'compile must succeed');
+    if (!result.ok) return;
+
+    const parsed = JSON.parse(result.value.text);
+    // Without LIKE escaping, `a_pha` would match `alpha` (since `_` = any char).
+    // With proper escaping, there should be no match.
+    assert.equal(parsed.length, 0,
+      'F-CC-005: domain "entity:project:a_pha" must NOT match "entity:project:alpha" — underscore must be escaped');
+  });
+
+  // ── F-CC-006: Determinism with tiebreaker ──
+  // This test is covered by existing DC-COMPILE-10 but strengthened by the code fix
+  // (ORDER BY ... , id ASC tiebreaker). No additional test needed beyond DC-COMPILE-10.
+
+  // ── F-CC-007: Truncation for structured/raw formats ──
+  // Existing DC-COMPILE-06 only tests reasoning-ready truncation.
+  // Add tests for structured and raw formats with small maxTokens.
+  it('F-CC-007a [TRUNCATION-STRUCTURED]: maxTokens truncates structured format', async () => {
+    const dir = trackDir(makeTempDir());
+    const limen = trackInstance(await createLimen({ dataDir: dir, masterKey: makeKey() }));
+
+    // Seed many claims
+    for (let i = 0; i < 20; i++) {
+      limen.remember(
+        'entity:project:truncstruct',
+        `observation.item${i}`,
+        `A reasonably long structured observation value number ${i} that fills the token budget`,
+      );
+    }
+
+    const result = limen.cognitive.compile({
+      domain: 'entity:project:truncstruct',
+      format: 'structured',
+      maxTokens: 100, // Very small budget
+    });
+
+    assert.equal(result.ok, true, 'compile must succeed');
+    if (!result.ok) return;
+
+    const ctx = result.value;
+    assert.ok(ctx.claimCount < 20, 'F-CC-007a: structured format must truncate with small maxTokens');
+
+    const parsed = JSON.parse(ctx.text);
+    assert.ok(parsed.omitted, 'must contain omission notice in structured output');
+  });
+
+  it('F-CC-007b [TRUNCATION-RAW]: maxTokens truncates raw format', async () => {
+    const dir = trackDir(makeTempDir());
+    const limen = trackInstance(await createLimen({ dataDir: dir, masterKey: makeKey() }));
+
+    // Seed many claims
+    for (let i = 0; i < 20; i++) {
+      limen.remember(
+        'entity:project:truncraw',
+        `observation.item${i}`,
+        `A reasonably long raw observation value number ${i} that fills the token budget nicely`,
+      );
+    }
+
+    const result = limen.cognitive.compile({
+      domain: 'entity:project:truncraw',
+      format: 'raw',
+      maxTokens: 100, // Very small budget
+    });
+
+    assert.equal(result.ok, true, 'compile must succeed');
+    if (!result.ok) return;
+
+    const ctx = result.value;
+    assert.ok(ctx.claimCount < 20, 'F-CC-007b: raw format must truncate with small maxTokens');
+
+    const parsed = JSON.parse(ctx.text);
+    const omissionEntry = parsed.find((c: { __omitted?: string }) => c.__omitted);
+    assert.ok(omissionEntry, 'raw format must include omission sentinel when truncated');
+  });
+
+  // ── F-CC-008: maxTokens=0 returns error ──
+  it('F-CC-008 [REJECTION]: maxTokens=0 returns COMPILE_INVALID_MAX_TOKENS error', async () => {
+    const limen = await createSeededInstance();
+
+    const result = limen.cognitive.compile({
+      domain: 'entity:project:alpha',
+      format: 'reasoning-ready',
+      maxTokens: 0,
+    });
+
+    assert.equal(result.ok, false, 'maxTokens=0 must return error');
+    if (result.ok) return;
+
+    assert.equal(result.error.code, 'COMPILE_INVALID_MAX_TOKENS',
+      'F-CC-008: error code must be COMPILE_INVALID_MAX_TOKENS');
+  });
+
+  it('F-CC-008b [REJECTION]: negative maxTokens returns COMPILE_INVALID_MAX_TOKENS error', async () => {
+    const limen = await createSeededInstance();
+
+    const result = limen.cognitive.compile({
+      domain: 'entity:project:alpha',
+      format: 'raw',
+      maxTokens: -10,
+    });
+
+    assert.equal(result.ok, false, 'negative maxTokens must return error');
+    if (result.ok) return;
+
+    assert.equal(result.error.code, 'COMPILE_INVALID_MAX_TOKENS',
+      'F-CC-008b: error code must be COMPILE_INVALID_MAX_TOKENS');
   });
 
 });
