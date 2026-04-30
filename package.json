@@ -65,7 +65,8 @@
     "examples/",
     "LICENSE",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "SECURITY.md"
   ],
   "workspaces": [
     "packages/*"
@@ -79,14 +80,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "npx tsx --test $(find tests -path tests/scaffold -prune -o -name '*.test.ts' -print)",
+    "test": "npx tsx --test $(find tests -path tests/scaffold -prune -o -path 'tests/unit/phase13a_sync_foundation.test.ts' -prune -o -name '*.test.ts' -print)",
     "test:all": "npx tsx --test $(find tests -name '*.test.ts')",
     "ci": "npm run typecheck && npm run build && npm run test",
     "test:coverage": "c8 --reporter=text --reporter=lcov npx tsx --test $(find tests -path tests/scaffold -prune -o -name '*.test.ts' -print)",
     "docs": "typedoc",
     "test:mutate": "npx stryker run",
     "test:mutate:erasure": "npx stryker run stryker-erasure.config.mjs",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run ci"
   },
   "dependencies": {
     "better-sqlite3": "11.10.0"

@@ -1,6 +1,6 @@
 {
   "name": "@solishq/limen-langchain",
-  "version": "2.0.0",
+  "version": "4.0.0",
   "description": "LangChain memory adapter for Limen — governed knowledge engine for AI agents",
   "type": "module",
   "license": "Apache-2.0",
@@ -17,7 +17,7 @@
     }
   },
   "peerDependencies": {
-    "limen-ai": "^2.0.0",
+    "limen-ai": "^4.0.0",
     "@langchain/core": "^1.1.7"
   },
   "devDependencies": {},

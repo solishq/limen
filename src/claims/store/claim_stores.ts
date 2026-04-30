@@ -2165,7 +2165,6 @@ function createRelateClaimsHandlerImpl(
         // 12b. FR-005: Emit claim.related event on every relationship creation
         {
           const fromClaimResult = stores.store.get(conn, input.fromClaimId, null);
-          const toClaimResult = stores.store.get(conn, input.toClaimId, null);
           deps.eventBus.emit(conn, ctx, {
             type: CCP_EVENTS.CLAIM_RELATED.type,
             scope: CCP_EVENTS.CLAIM_RELATED.scope,

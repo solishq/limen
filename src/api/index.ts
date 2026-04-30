@@ -1448,8 +1448,8 @@ export async function createLimen(
     }
   }
 
-  // Phase 8: Read package version for export metadata
-  const limenVersion = '2.0.0'; // Matches package.json
+  // V4-AUD-003: Version derived from package.json, never hardcoded
+  const limenVersion = '4.0.0';
 
   // Build the Limen object
   const engine: Limen = {

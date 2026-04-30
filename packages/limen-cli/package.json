@@ -1,6 +1,6 @@
 {
   "name": "limen-cli",
-  "version": "2.0.0",
+  "version": "4.0.0",
   "description": "CLI for Limen Cognitive OS — JSON-first command-line interface",
   "type": "module",
   "license": "Apache-2.0",
@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "commander": "^14.0.0",
-    "limen-ai": "^2.0.0"
+    "limen-ai": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

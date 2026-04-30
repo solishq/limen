@@ -30,7 +30,7 @@ Optional, for semantic/vector search:
 npm install sqlite-vec
 ```
 
-## What's New in v3.0.0
+## What's New in v4.0.0
 
 - **Decay in recall** — `effectiveConfidence` now decays on every read (was only in search)
 - **Automated retention** — background scheduler cleans expired data automatically
@@ -300,7 +300,7 @@ limen.forget(sourceClaimId, 'incorrect');
 // are auto-retracted if their effective confidence < 0.1
 ```
 
-Disabled by default. Existing applications upgrading to v2.0.0 see no behavior changes unless explicitly configured.
+Disabled by default. Existing applications upgrading from earlier versions see no behavior changes unless explicitly configured.
 
 ## Configuration
 

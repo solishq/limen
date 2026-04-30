@@ -32,5 +32,7 @@ We will coordinate with you on disclosure timing and credit you in the advisory 
 
 | Version | Supported |
 |---------|-----------|
-| 2.x     | Yes       |
-| 1.x     | Security fixes only |
+| 4.x     | Yes       |
+| 3.x     | Security fixes only |
+| 2.x     | End of life |
+| 1.x     | End of life |
