@@ -68,3 +68,6 @@ src/sync/
 .qal.json
 LIMEN-REMEDIATION-DISPATCH.md
 SESSION_HANDOFF.md
+.Codex/
+AGENTS.md
+witness-*.ts
