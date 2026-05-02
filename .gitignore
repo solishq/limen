@@ -71,3 +71,4 @@ SESSION_HANDOFF.md
 .Codex/
 AGENTS.md
 witness-*.ts
+v5/target/
