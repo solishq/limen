@@ -75,3 +75,8 @@ v5/target/
 
 # TLC model checker logs (generated, not source)
 v5/formal/*.log
+
+# v5 engineering process artifacts — internal IP, never commit
+v5/docs/
+docs/v5-architecture/
+v5/crates/*/docs/
