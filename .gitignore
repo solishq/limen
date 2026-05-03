@@ -15,28 +15,51 @@ docs/api/
 *.tsbuildinfo
 *.bak
 
-# SolisHQ internal engineering artifacts
+# SolisHQ internal engineering artifacts — COMPREHENSIVE BLOCK
 .claude/
 CLAUDE.md
 STATE.md
 AGENT_CONTEXT.md
 DECISIONS.md
-docs/breaker/
-docs/certifier/
-docs/marketing/
-docs/SPRINT_*
-docs/sprint*_design.md
 .provenance.json
 .provenance.pub
 .provenanceignore
+
+# Engineering process docs — ALL blocked by pattern
+docs/breaker/
+docs/breaker-reports/
+docs/certifier/
+docs/certifications/
+docs/marketing/
+docs/sprints/
+docs/audit-v4/
+docs/e2e/
+docs/verification/
+docs/research/adversarial/
+docs/research/orchestrator/
+docs/incidents/
+docs/local/
+docs/SPRINT_*
+docs/sprint*_design.md
+docs/LIMEN_V4_AUDIT*.md
+reports/
+promises/
+testimony/
+
+# Root-level audit/process files
+LIMEN_V4_AUDIT*.md
+LIMEN_V4_FULL_AUDIT*.md
+*-AUDIT-*.md
+*-BREAKER-*.md
+*-CERTIFIER-*.md
+*-REMEDIATION-*.md
+*-DISPATCH-*.md
+*-FINDINGS-*.md
 
 # Per-package internal artifacts
 packages/*/BREAKER_REPORT.md
 packages/*/CERTIFIER_REPORT.md
 packages/*/scripts/seed-*.ts
-
-# Per-project local documents (not tracked — backed up separately)
-docs/local/
 
 # Stryker mutation testing
 .stryker-cache/
