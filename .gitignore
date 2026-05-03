@@ -71,3 +71,7 @@ SESSION_HANDOFF.md
 .Codex/
 AGENTS.md
 witness-*.ts
+v5/target/
+
+# TLC model checker logs (generated, not source)
+v5/formal/*.log
