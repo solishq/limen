@@ -90,7 +90,9 @@ describe('LimenStore', () => {
     it('Claim 3.24: start() is idempotent', async () => {
       await store.start();
       await store.start();
-      // no throw = pass
+      // Verify store is fully functional after double start
+      const result = await store.batch([{ namespace: ['test'], key: 'k' } as GetOperation]);
+      assert.ok(Array.isArray(result));
     });
 
     it('Claim 3.26: start() after stop() throws', async () => {
@@ -210,8 +212,10 @@ describe('LimenStore', () => {
 
       // First put may have succeeded as a chain entry
       const item1 = await store.get(['data'], 'k1');
-      // It's valid for k1 to have been updated or not depending on timing
-      assert.ok(item1 !== undefined); // k1 always exists from setup
+      // k1 always exists from setup — assert value content, not just existence
+      assert.ok(item1 !== undefined);
+      assert.ok(item1!.value.v === 'original' || item1!.value.v === 'first',
+        `Expected k1 value to be 'original' or 'first', got '${item1!.value.v}'`);
     });
 
     it('Claim 3.4: GetOp returns deserialized copy, not reference', async () => {
@@ -604,6 +608,30 @@ describe('LimenStore', () => {
       await assert.rejects(
         () => store.search(['data']),
         (e: Error) => e instanceof LimenGovernanceError
+      );
+    });
+
+    it('Claim 4.3: Rebuilding state throws retryable LimenGovernanceError for reads', async () => {
+      h.validity.setState('Rebuilding');
+      try {
+        await store.get(['data'], 'k1');
+        assert.fail('Should have thrown');
+      } catch (e) {
+        assert.ok(e instanceof LimenGovernanceError);
+        assert.equal(e.state, 'Rebuilding');
+        assert.equal(e.retryable, true);
+      }
+    });
+
+    it('Claim 4.3: Rebuilding state throws retryable for batch GetOperation', async () => {
+      h.validity.setState('Rebuilding');
+      await assert.rejects(
+        () => store.batch([{ namespace: ['data'], key: 'k1' } as GetOperation]),
+        (e: Error) => {
+          assert.ok(e instanceof LimenGovernanceError);
+          assert.equal((e as LimenGovernanceError).retryable, true);
+          return true;
+        }
       );
     });
 
