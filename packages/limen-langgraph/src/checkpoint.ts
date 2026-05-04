@@ -183,12 +183,14 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
 
       if (version < ADAPTER_SCHEMA_VERSION) {
         this.migrateSchema(version);
+        this.logger.info?.('Schema migrated', { from: version, to: ADAPTER_SCHEMA_VERSION });
       }
 
       // 5. Verify validity state machine
       await this.validity!.verifyOnStartup();
 
       this.initialized = true;
+      this.logger.info?.('Started successfully', { tenantScope: this.tenantScope, schemaVersion: ADAPTER_SCHEMA_VERSION });
     } catch (e) {
       this.starting = false;
       if (e instanceof LimenStorageError) throw e;
@@ -762,6 +764,7 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
     }
 
     this.initialized = false;
+    this.logger.info?.('Stopped', { tenantScope: this.tenantScope });
 
     // Claim 3.25 / F-03: Null refs to release resources
     this.chain = null;
