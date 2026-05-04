@@ -39,9 +39,9 @@ const config = {
 const checkpointer = new LimenCheckpointSaver(config);
 const store = new LimenStore(config);
 
-// MUST call start() before use — verifies infrastructure, checks schema version
+// MUST call start() in this order — checkpointer creates the schema that store depends on
 await checkpointer.start();
-await store.start();
+await store.start();  // Requires checkpointer.start() to have run first
 
 // Wire into LangGraph
 const graph = new StateGraph({ channels: { messages: { value: [] } } })
@@ -154,7 +154,7 @@ try {
 ## Lifecycle
 
 1. **Construct** — `new LimenCheckpointSaver(config)` / `new LimenStore(config)`
-2. **Start** — `await adapter.start()` — verifies infrastructure, checks schema version, runs validity verification. Idempotent.
+2. **Start** — `await adapter.start()` — verifies infrastructure, checks schema version, runs validity verification. Idempotent. **Important:** `checkpointer.start()` must be called before `store.start()` — the checkpointer creates the projection schema that the store depends on.
 3. **Use** — all LangGraph operations available
 4. **Stop** — `await adapter.stop()` — flushes pending work, releases resources. Terminal — create a new instance to restart.
 
@@ -164,6 +164,14 @@ try {
 - **No vector indexing** — the `index` field on put operations is accepted but not used for similarity.
 - **Scan cap** — `list()`, `search()`, and `listNamespaces()` are bounded to 50,000 rows maximum.
 - **Synchronous projection** — writes call `projectPending()` inline. Write latency includes projection time.
+
+## Testing
+
+```bash
+npm test
+```
+
+271 tests across 7 files covering all design claims and 15 failure modes. Tests reference numbered claims (e.g., "Claim 2.1", "F-LG-003") from the internal design specification.
 
 ## License
 
