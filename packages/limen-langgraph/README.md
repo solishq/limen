@@ -168,6 +168,7 @@ try {
 ## Testing
 
 ```bash
+npm install @langchain/langgraph-checkpoint  # peer dep required for full suite
 npm test
 ```
 
