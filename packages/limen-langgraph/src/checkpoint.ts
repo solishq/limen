@@ -108,7 +108,14 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
    * Claim 3.24: Idempotent — multiple calls after success are no-ops.
    * Claim 3.26: start() after stop() throws — consumer must create new instance.
    */
+  private starting = false;
+
   async start(): Promise<void> {
+    // F-NEW-04: Prevent concurrent start() calls from racing
+    if (this.starting) {
+      throw new LimenStorageError('start() already in progress');
+    }
+
     // Claim 3.26: restart not supported
     if (this.stopped) {
       throw new LimenStorageError('Cannot restart after stop(). Create a new adapter instance.');
@@ -119,57 +126,66 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
       return;
     }
 
-    // 1. Verify chain accessible (duck-type + connectivity probe)
+    this.starting = true;
+
     try {
-      if (!this.chain || typeof this.chain.appendEntry !== 'function') {
-        throw new Error('chain.appendEntry is not a function');
+      // 1. Verify chain accessible (duck-type + connectivity probe)
+      try {
+        if (!this.chain || typeof this.chain.appendEntry !== 'function') {
+          throw new Error('chain.appendEntry is not a function');
+        }
+        // F-12: Lightweight probe — verify the chain is reachable beyond duck-type.
+        // ChainStorage interface only exposes appendEntry; no read-only probe exists.
+        // Acceptance: duck-type check is the maximum verification without side effects.
+        // Cited: F-LG-012 — no probe method on ChainStorage interface.
+      } catch (e) {
+        throw new LimenStorageError(`Chain inaccessible: ${(e as Error).message}`);
       }
-      // F-12: Lightweight probe — verify the chain is reachable beyond duck-type.
-      // ChainStorage interface only exposes appendEntry; no read-only probe exists.
-      // Acceptance: duck-type check is the maximum verification without side effects.
-      // Cited: F-LG-012 — no probe method on ChainStorage interface.
-    } catch (e) {
-      throw new LimenStorageError(`Chain inaccessible: ${(e as Error).message}`);
-    }
 
-    // 2. Verify projection accessible (duck-type + connectivity probe)
-    try {
-      if (!this.projection || typeof this.projection.query !== 'function') {
-        throw new Error('projection.query is not a function');
+      // 2. Verify projection accessible (duck-type + connectivity probe)
+      try {
+        if (!this.projection || typeof this.projection.query !== 'function') {
+          throw new Error('projection.query is not a function');
+        }
+        // F-12 / F-NEW-02: Probe — execute a no-op read to verify actual connectivity.
+        // If storage is unreachable, getMetadata() will throw (SQLite error, file not found, etc.).
+        // Returning undefined is valid — it means the key doesn't exist yet, but the storage
+        // layer responded successfully, proving connectivity.
+        this.projection!.getMetadata('lg_schema_version');
+      } catch (e) {
+        throw new LimenStorageError(`Projection inaccessible: ${(e as Error).message}`);
       }
-      // F-12: Probe — execute a no-op read to verify actual connectivity
-      this.projection!.getMetadata('lg_schema_version');
-    } catch (e) {
-      throw new LimenStorageError(`Projection inaccessible: ${(e as Error).message}`);
-    }
 
-    // 3. Verify projector initialized
-    if (!this.projector || typeof this.projector.projectPending !== 'function') {
-      throw new LimenStorageError('Projector not initialized');
-    }
+      // 3. Verify projector initialized
+      if (!this.projector || typeof this.projector.projectPending !== 'function') {
+        throw new LimenStorageError('Projector not initialized');
+      }
 
-    // 4. Schema version check — auto-migrate 0/NULL/1 → 2, reject >2
-    const versionStr = this.projection!.getMetadata('lg_schema_version');
-    const version = versionStr ? parseInt(versionStr, 10) : 0;
+      // 4. Schema version check — auto-migrate 0/NULL/1 → 2, reject >2
+      const versionStr = this.projection!.getMetadata('lg_schema_version');
+      const version = versionStr ? parseInt(versionStr, 10) : 0;
 
-    if (version > ADAPTER_SCHEMA_VERSION) {
-      throw new LimenStorageError(
-        `Schema version ${version} > adapter version ${ADAPTER_SCHEMA_VERSION}. Upgrade the adapter.`
-      );
-    }
+      if (version > ADAPTER_SCHEMA_VERSION) {
+        throw new LimenStorageError(
+          `Schema version ${version} > adapter version ${ADAPTER_SCHEMA_VERSION}. Upgrade the adapter.`
+        );
+      }
 
-    if (version < ADAPTER_SCHEMA_VERSION) {
-      this.migrateSchema(version);
-    }
+      if (version < ADAPTER_SCHEMA_VERSION) {
+        this.migrateSchema(version);
+      }
 
-    // 5. Verify validity state machine
-    try {
+      // 5. Verify validity state machine
       await this.validity!.verifyOnStartup();
+
+      this.initialized = true;
     } catch (e) {
+      this.starting = false;
+      if (e instanceof LimenStorageError) throw e;
       throw new LimenStorageError(`Validity verification failed: ${(e as Error).message}`);
     }
 
-    this.initialized = true;
+    this.starting = false;
   }
 
   // =========================================================================
@@ -301,14 +317,14 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
       // Claim 2.1: exact match
       row = this.projection!.queryOne<LgCheckpointRow>(
         `SELECT * FROM lg_checkpoints
-         WHERE tenant_scope = ?1 AND thread_id = ?2 AND checkpoint_ns = ?3 AND checkpoint_id = ?4`,
+         WHERE tenant_scope = ? AND thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?`,
         [tenant, threadId, checkpointNs, checkpointId]
       );
     } else {
       // Claim 2.2: latest by UUID v6 lexicographic order
       row = this.projection!.queryOne<LgCheckpointRow>(
         `SELECT * FROM lg_checkpoints
-         WHERE tenant_scope = ?1 AND thread_id = ?2 AND checkpoint_ns = ?3
+         WHERE tenant_scope = ? AND thread_id = ? AND checkpoint_ns = ?
          ORDER BY checkpoint_id DESC LIMIT 1`,
         [tenant, threadId, checkpointNs]
       );
@@ -400,12 +416,12 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
 
     // Build query
     let sql = `SELECT * FROM lg_checkpoints
-               WHERE tenant_scope = ?1 AND thread_id = ?2 AND checkpoint_ns = ?3`;
+               WHERE tenant_scope = ? AND thread_id = ? AND checkpoint_ns = ?`;
     const params: unknown[] = [tenant, threadId, checkpointNs];
 
     // Claim 2.8: before filter uses checkpoint_id (UUID v6 lexicographic, not step)
     if (options?.before?.configurable?.checkpoint_id) {
-      sql += ` AND checkpoint_id < ?${params.length + 1}`;
+      sql += ` AND checkpoint_id < ?`;
       params.push(options.before.configurable.checkpoint_id);
     }
 
@@ -413,7 +429,7 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
 
     // Claim 2.14: scan cap
     const scanLimit = MAX_SCAN_ROWS;
-    sql += ` LIMIT ?${params.length + 1}`;
+    sql += ` LIMIT ?`;
     params.push(scanLimit);
 
     const rows = this.projection!.query<LgCheckpointRow>(sql, params);
@@ -717,6 +733,10 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
    * Claim 3.26: start() after stop() not supported.
    */
   async stop(): Promise<void> {
+    // F-NEW-03: Set terminal flag BEFORE early return so that stop() on a
+    // non-initialized instance still prevents subsequent start().
+    this.stopped = true;
+
     if (!this.initialized) {
       return;
     }
@@ -730,7 +750,6 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
     }
 
     this.initialized = false;
-    this.stopped = true;
 
     // Claim 3.25 / F-03: Null refs to release resources
     this.chain = null;
@@ -863,7 +882,7 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
   ): CheckpointPendingWrite[] {
     const rows = this.projection!.query<LgPendingWriteRow>(
       `SELECT * FROM lg_pending_writes
-       WHERE tenant_scope = ?1 AND thread_id = ?2 AND checkpoint_ns = ?3 AND checkpoint_id = ?4
+       WHERE tenant_scope = ? AND thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?
        ORDER BY task_id, write_idx`,
       [tenant, threadId, checkpointNs, checkpointId]
     );
@@ -874,9 +893,12 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
       try {
         const value = this.deserialize(row.type_tag, row.value);
         results.push([row.task_id, row.channel, value]);
-      } catch (_e) {
-        // Skip corrupted write — Claim 6.3 guarantees isolation
-        // In production, this would emit a WARN diagnostic
+      } catch (e) {
+        // F-NEW-05: Log corrupted write instead of silently dropping
+        console.warn(
+          '[LimenCheckpointSaver] Corrupted pending write dropped:',
+          { task_id: row.task_id, channel: row.channel, write_idx: row.write_idx, error: (e as Error).message }
+        );
       }
     }
     return results;
