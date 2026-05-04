@@ -14,6 +14,7 @@ import { BaseStore } from '@langchain/langgraph-checkpoint';
 
 import type {
   LimenCheckpointerConfig,
+  LimenCheckpointLogger,
   ChainStorage,
   ProjectionStorage,
   Projector,
@@ -71,16 +72,34 @@ import {
  * Design doc §0.5: extends BaseStore.
  * Implements: batch.
  * Inherits: get, search, put, delete, listNamespaces, start, stop.
+ *
+ * F-LG-007 DESIGN CONSTRAINT: Store uses adapter-level tenantScope only.
+ * Unlike LimenCheckpointSaver which supports per-request tenant override
+ * via config.configurable.limen_tenant_scope (Claim 5.1), the store does
+ * NOT support per-request tenant resolution. This is intentional:
+ * - LangGraph's BaseStore.batch() does not accept RunnableConfig
+ * - Store operations are cross-thread by design (no thread_id context)
+ * - Tenant scope is set at construction time, matching the store's lifecycle
+ * If per-request tenant isolation is needed, create separate LimenStore
+ * instances per tenant.
  */
 export class LimenStore extends BaseStore {
   private chain: ChainStorage;
   private projection: ProjectionStorage;
   private projector: Projector;
   private validity: ValidityStateMachine;
+  private readonly logger: LimenCheckpointLogger;
   private governed: boolean;
   private tenantScope: string;
   private initialized = false;
   private stopped = false;
+
+  /** Default logger wrapping console.warn for backward compatibility */
+  private static readonly DEFAULT_LOGGER: LimenCheckpointLogger = {
+    warn(msg: string, context?: Record<string, unknown>): void {
+      console.warn(`[LimenStore] ${msg}`, context ?? '');
+    },
+  };
 
   constructor(config: LimenCheckpointerConfig) {
     super();
@@ -90,6 +109,7 @@ export class LimenStore extends BaseStore {
     this.validity = config.validity;
     this.governed = config.governed ?? false;
     this.tenantScope = config.tenantScope ?? DEFAULT_TENANT_SCOPE;
+    this.logger = config.logger ?? LimenStore.DEFAULT_LOGGER;
   }
 
   // =========================================================================
@@ -177,6 +197,11 @@ export class LimenStore extends BaseStore {
    * Sets initialized=false. Post-stop calls throw LimenNotStartedError.
    */
   async stop(): Promise<void> {
+    // F-LG-005: Set terminal flag BEFORE early return so that stop() on a
+    // non-initialized instance still prevents subsequent start().
+    // Matches LimenCheckpointSaver.stop() pattern.
+    this.stopped = true;
+
     if (!this.initialized) {
       return;
     }
@@ -185,11 +210,12 @@ export class LimenStore extends BaseStore {
       await this.projector.projectPending();
     } catch (e) {
       // Claim 3.25: WARN logged, not re-thrown
-      console.warn('[LimenStore] projectPending failed during stop:', e);
+      this.logger.warn('projectPending failed during stop', {
+        error: (e as Error).message,
+      });
     }
 
     this.initialized = false;
-    this.stopped = true;
   }
 
   // =========================================================================
@@ -426,7 +452,7 @@ export class LimenStore extends BaseStore {
     const rows = this.projection.query<LgStoreItemRow>(sql, params);
 
     if (rows.length === scanLimit) {
-      console.warn('[LimenStore] scan cap (50000) reached — results may be incomplete');
+      this.logger.warn('Scan cap reached — results may be incomplete', { scanLimit });
     }
 
     const results: SearchItem[] = [];
@@ -492,7 +518,7 @@ export class LimenStore extends BaseStore {
     );
 
     if (rows.length === scanLimit) {
-      console.warn('[LimenStore] scan cap (50000) reached — results may be incomplete');
+      this.logger.warn('Scan cap reached — results may be incomplete', { scanLimit });
     }
 
     let namespaces = rows.map(r => splitNamespace(r.namespace));
@@ -579,7 +605,11 @@ export class LimenStore extends BaseStore {
           guidance: 'Wait for projector to catch up, then retry',
         });
       }
-      console.warn('[LimenStore] governance state Lagging — reads may be stale');
+      this.logger.warn('Projection lagging, governed=false — proceeding with potentially stale data', {
+        state: 'Lagging',
+        governed: this.governed,
+        tenantScope: this.tenantScope,
+      });
       return;
     }
 

@@ -6,10 +6,7 @@
     "moduleResolution": "nodenext",
     "noEmit": true,
     "esModuleInterop": true,
-    "skipLibCheck": true,
-    "paths": {
-      "@langchain/langgraph-checkpoint": ["./src/langgraph-checkpoint.d.ts"]
-    }
+    "skipLibCheck": true
   },
   "include": ["src/**/*.ts"]
 }

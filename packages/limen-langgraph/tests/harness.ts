@@ -15,6 +15,10 @@ import type {
   ValidityStateMachine,
   ValidityState,
   LimenCheckpointerConfig,
+  LimenCheckpointLogger,
+  Checkpoint,
+  CheckpointMetadata,
+  RunnableConfig,
 } from '../src/types.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -25,12 +29,27 @@ export class InMemoryChain implements ChainStorage {
   private entries: Array<ChainEntryInput & { global_sequence: number; canonical_at: number }> = [];
   private seq = 0;
   shouldFail = false;
+  /** Fail after N successful writes — for partial failure testing */
+  failAfterN: number | null = null;
+  private writeCount = 0;
 
   async appendEntry(entry: ChainEntryInput): Promise<CommittedEntry> {
     if (this.shouldFail) {
       throw new Error('Chain write failure (simulated)');
     }
+    if (this.failAfterN !== null && this.writeCount >= this.failAfterN) {
+      throw new Error('Chain write failure (simulated after N)');
+    }
+    this.writeCount++;
     this.seq++;
+    // F-LG-011: Date.now() is acceptable in test infrastructure. The harness
+    // uses wall-clock time for canonical_at timestamps because:
+    // 1. No test asserts on exact timestamp values — only on ordering (DESC)
+    //    and existence (createdAt/updatedAt instanceof Date).
+    // 2. The real Limen chain uses server-assigned timestamps, not injected clocks.
+    // 3. Injecting a clock here would add complexity without improving test fidelity.
+    // If future tests need deterministic timestamps, replace with an injected
+    // clock factory passed to the harness constructor.
     const committed = {
       ...entry,
       global_sequence: this.seq,
@@ -42,7 +61,7 @@ export class InMemoryChain implements ChainStorage {
 
   getEntries() { return this.entries; }
   getLastEntry() { return this.entries[this.entries.length - 1]; }
-  clear() { this.entries = []; this.seq = 0; }
+  clear() { this.entries = []; this.seq = 0; this.writeCount = 0; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -63,6 +82,14 @@ export class SqliteProjection implements ProjectionStorage {
   }
 
   query<T = Record<string, unknown>>(sql: string, params: unknown[]): T[] {
+    const trimmed = sql.trimStart().toUpperCase();
+    // DDL and DML statements don't return rows — use run()
+    if (trimmed.startsWith('CREATE') || trimmed.startsWith('DROP') ||
+        trimmed.startsWith('INSERT') || trimmed.startsWith('UPDATE') ||
+        trimmed.startsWith('DELETE') || trimmed.startsWith('ALTER')) {
+      this.db.prepare(sql).run(...params);
+      return [] as T[];
+    }
     const stmt = this.db.prepare(sql);
     return stmt.all(...params) as T[];
   }
@@ -91,6 +118,25 @@ export class SqliteProjection implements ProjectionStorage {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // In-Memory Projector (processes chain entries into projection)
+//
+// DESIGN DECISION (F-LG-003): This projector reimplements the chain-to-
+// projection derivation logic that in production lives in the Limen core
+// engine (Rust FFI). This is intentional test infrastructure, NOT a violation
+// of HB#14 (harness/projection pattern divergence). Rationale:
+//
+// 1. The Projector interface is defined in types.ts — only projectPending()
+//    is exposed. The adapter codes against this interface, not a concrete
+//    implementation.
+// 2. The real Limen v5 Rust projector is not available as a dependency in
+//    this package — it will be linked via FFI in the integration layer.
+// 3. Tests verify the ADAPTER code (checkpoint saver + store), not this
+//    projector. The projector is stimulus infrastructure — it makes the
+//    adapter's reads return data written through its writes.
+// 4. The projector's INSERT OR REPLACE semantics and transition_kind
+//    routing are derived from the design doc claims, ensuring test fidelity.
+//
+// When the Limen v5 Rust engine is available, an integration test suite
+// will replace this projector with the real one.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export class InMemoryProjector implements Projector {
@@ -98,16 +144,25 @@ export class InMemoryProjector implements Projector {
   private projection: SqliteProjection;
   private lastProjected = 0;
   shouldFail = false;
+  /** Fail after N successful projectPending calls */
+  failAfterN: number | null = null;
+  private callCount = 0;
 
   constructor(chain: InMemoryChain, projection: SqliteProjection) {
     this.chain = chain;
     this.projection = projection;
   }
 
+  getLastProjected(): number { return this.lastProjected; }
+
   async projectPending(): Promise<void> {
     if (this.shouldFail) {
       throw new Error('projectPending failure (simulated)');
     }
+    if (this.failAfterN !== null && this.callCount >= this.failAfterN) {
+      throw new Error('projectPending failure (simulated after N)');
+    }
+    this.callCount++;
 
     const entries = this.chain.getEntries().filter(e => e.global_sequence > this.lastProjected);
     const db = this.projection.getDb();
@@ -220,6 +275,36 @@ export class MockValidity implements ValidityStateMachine {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Capture Logger — records all log calls for assertion
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface LogEntry {
+  level: 'warn' | 'info' | 'debug';
+  msg: string;
+  context?: Record<string, unknown>;
+}
+
+export class CaptureLogger implements LimenCheckpointLogger {
+  logs: LogEntry[] = [];
+
+  warn(msg: string, context?: Record<string, unknown>): void {
+    this.logs.push({ level: 'warn', msg, context });
+  }
+
+  info(msg: string, context?: Record<string, unknown>): void {
+    this.logs.push({ level: 'info', msg, context });
+  }
+
+  debug(msg: string, context?: Record<string, unknown>): void {
+    this.logs.push({ level: 'debug', msg, context });
+  }
+
+  clear(): void { this.logs = []; }
+
+  getWarns(): LogEntry[] { return this.logs.filter(l => l.level === 'warn'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Factory: create a fully wired test config
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -228,6 +313,7 @@ export interface TestHarness {
   projection: SqliteProjection;
   projector: InMemoryProjector;
   validity: MockValidity;
+  logger: CaptureLogger;
   config: LimenCheckpointerConfig;
 }
 
@@ -236,6 +322,7 @@ export function createTestHarness(opts?: { governed?: boolean; tenantScope?: str
   const projection = new SqliteProjection();
   const projector = new InMemoryProjector(chain, projection);
   const validity = new MockValidity();
+  const logger = new CaptureLogger();
 
   const config: LimenCheckpointerConfig = {
     chain,
@@ -244,7 +331,32 @@ export function createTestHarness(opts?: { governed?: boolean; tenantScope?: str
     validity,
     governed: opts?.governed ?? false,
     tenantScope: opts?.tenantScope ?? '__default__',
+    logger,
   };
 
-  return { chain, projection, projector, validity, config };
+  return { chain, projection, projector, validity, logger, config };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Test Data Builders
+// ═══════════════════════════════════════════════════════════════════════════
+
+export function makeCheckpoint(id: string, step = 0): Checkpoint {
+  return {
+    id,
+    v: 4,
+    ts: new Date().toISOString(),
+    channel_values: {},
+    channel_versions: {},
+    versions_seen: {},
+    pending_sends: [],
+  };
+}
+
+export function makeMetadata(step: number, source: 'input' | 'loop' | 'update' | 'fork' = 'input'): CheckpointMetadata {
+  return { source, step, writes: null, parents: {} };
+}
+
+export function makeConfig(threadId: string, extra?: Partial<RunnableConfig['configurable']>): RunnableConfig {
+  return { configurable: { thread_id: threadId, ...extra } };
 }

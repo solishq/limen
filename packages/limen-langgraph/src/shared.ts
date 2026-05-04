@@ -22,14 +22,29 @@ import { VALID_FILTER_OPS } from './types.js';
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Encode chain entry payload as canonical JSON.
+ * Encode chain entry payload as canonical JSON with sorted keys.
  *
  * Design doc §0.1 Glossary: "state_json" field name is historical — chain layer
  * accepts JSON encoding. This function produces deterministic JSON for chain entries.
  * F-08: Renamed from canonicalMsgpack to accurately reflect the encoding format.
+ * F-LG-009: Keys are sorted recursively to ensure identical payloads produce
+ * identical byte sequences regardless of property insertion order.
  */
 export function canonicalJson(obj: Record<string, unknown>): Uint8Array {
-  return new TextEncoder().encode(JSON.stringify(obj));
+  return new TextEncoder().encode(JSON.stringify(obj, sortedKeyReplacer));
+}
+
+/**
+ * JSON.stringify replacer that sorts object keys recursively.
+ * Arrays pass through unchanged; only plain objects get sorted.
+ */
+function sortedKeyReplacer(_key: string, value: unknown): unknown {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Uint8Array)) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+    );
+  }
+  return value;
 }
 
 /** @deprecated Use canonicalJson — renamed for accuracy (F-08) */
@@ -210,6 +225,15 @@ export function isSearchOp(op: Operation): op is SearchOperation {
   return 'namespacePrefix' in op;
 }
 
+/**
+ * Type guard for ListNamespacesOperation.
+ *
+ * F-LG-008: Tightened guard — requires at least one of `matchConditions` or
+ * `maxDepth` to be present. An object with only `limit` (and no `namespace`
+ * or `namespacePrefix`) could be ambiguous. If a consumer needs a "list all
+ * with only limit," they must include `matchConditions: undefined` or
+ * `maxDepth: undefined` explicitly in the operation object.
+ */
 export function isListNsOp(op: Operation): op is ListNamespacesOperation {
-  return !('key' in op) && !('namespacePrefix' in op) && ('matchConditions' in op || 'maxDepth' in op || ('limit' in op && !('namespace' in op)));
+  return !('key' in op) && !('namespacePrefix' in op) && ('matchConditions' in op || 'maxDepth' in op);
 }

@@ -1,21 +1,17 @@
 /**
- * Type declaration for @langchain/langgraph-checkpoint peer dependency.
- * Provides BaseCheckpointSaver and BaseStore base class types.
+ * DEPRECATED — This file is no longer used for ambient module declaration.
+ *
+ * F-LG-001 remediation: The tsconfig paths mapping that pointed here has been
+ * removed. The adapter now resolves @langchain/langgraph-checkpoint directly
+ * from node_modules, using the package's own dist/index.d.ts for types and
+ * dist/index.js for runtime ESM exports.
+ *
+ * The previous ambient module declaration declared exports that did not match
+ * the real package (BaseCheckpointSaver constructor signature, BaseStore
+ * method signatures), causing ESM resolution crashes at runtime when tsx
+ * resolved the import to this file instead of the real package.
+ *
+ * This file is retained for audit trail only. It has no effect on compilation
+ * or runtime resolution.
  */
-declare module '@langchain/langgraph-checkpoint' {
-  export abstract class BaseCheckpointSaver {
-    constructor();
-  }
-
-  export abstract class BaseStore {
-    constructor();
-    abstract batch(operations: unknown[]): Promise<unknown[]>;
-    get(namespace: string[], key: string): Promise<unknown | null>;
-    search(namespacePrefix: string[], options?: Record<string, unknown>): Promise<unknown[]>;
-    put(namespace: string[], key: string, value: Record<string, unknown>, index?: false | string[]): Promise<void>;
-    delete(namespace: string[], key: string): Promise<void>;
-    listNamespaces(options?: Record<string, unknown>): Promise<string[][]>;
-    start(): void | Promise<void>;
-    stop(): void | Promise<void>;
-  }
-}
+export {};
