@@ -18,7 +18,7 @@ import ClaimNode from './ClaimNode';
 import FilterBar from './FilterBar';
 import NodeDetails from './NodeDetails';
 import StatsPanel from './StatsPanel';
-import { fetchNodes, fetchAllEdges, fetchEdges, fetchStats } from '@/lib/api';
+import { fetchNodes, fetchEdges, fetchStats } from '@/lib/api';
 import { toFlowNodes, toFlowEdges } from '@/lib/graph-utils';
 import type { GraphNode, GraphEdge, GraphStats, NodeFilter } from '@/lib/types';
 
@@ -38,13 +38,13 @@ export default function GraphCanvas() {
     setLoading(true);
     setError(null);
     try {
-      const [rawNodes, rawEdges, rawStats] = await Promise.all([
+      const [rawNodes, rawStats] = await Promise.all([
         fetchNodes(filters),
-        fetchAllEdges(),
         fetchStats(),
       ]);
       setNodes(toFlowNodes(rawNodes));
-      setEdges(toFlowEdges(rawEdges));
+      // Edges loaded per-node on click, not all at once
+      setEdges([]);
       setStats(rawStats);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load graph data');
@@ -63,14 +63,15 @@ export default function GraphCanvas() {
     try {
       const nodeEdges = await fetchEdges(raw.id);
       setSelectedEdges(nodeEdges);
+      setEdges(toFlowEdges(nodeEdges));
     } catch {
       setSelectedEdges([]);
     }
-  }, []);
+  }, [setEdges]);
 
   const onEdgeClick: EdgeMouseHandler = useCallback((_event, edge) => {
     const raw = (edge.data as Record<string, unknown>)?.raw as GraphEdge | undefined;
-    if (raw?.certificateRef) {
+    if (raw) {
       setSelectedNode(null);
       setSelectedEdges([raw]);
     }

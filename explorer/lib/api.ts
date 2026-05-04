@@ -4,10 +4,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export async function fetchNodes(params: NodeFilter): Promise<GraphNode[]> {
   const searchParams = new URLSearchParams();
-  if (params.governanceState) searchParams.set('governanceState', params.governanceState);
-  if (params.tenant) searchParams.set('tenant', params.tenant);
-  if (params.minConfidence !== undefined) searchParams.set('minConfidence', String(params.minConfidence));
+  if (params.governance_state) searchParams.set('governance_state', params.governance_state);
+  if (params.tenant_scope) searchParams.set('tenant_scope', params.tenant_scope);
+  if (params.node_type) searchParams.set('node_type', params.node_type);
+  if (params.min_confidence !== undefined) searchParams.set('min_confidence', String(params.min_confidence));
   if (params.limit !== undefined) searchParams.set('limit', String(params.limit));
+  if (params.offset !== undefined) searchParams.set('offset', String(params.offset));
 
   const url = `${API_BASE}/graph/nodes?${searchParams.toString()}`;
   const res = await fetch(url);
@@ -16,13 +18,7 @@ export async function fetchNodes(params: NodeFilter): Promise<GraphNode[]> {
 }
 
 export async function fetchEdges(nodeId: string): Promise<GraphEdge[]> {
-  const res = await fetch(`${API_BASE}/graph/nodes/${encodeURIComponent(nodeId)}/edges`);
-  if (!res.ok) throw new Error(`Failed to fetch edges: ${res.status}`);
-  return res.json();
-}
-
-export async function fetchAllEdges(): Promise<GraphEdge[]> {
-  const res = await fetch(`${API_BASE}/graph/edges`);
+  const res = await fetch(`${API_BASE}/graph/edges?node_id=${encodeURIComponent(nodeId)}`);
   if (!res.ok) throw new Error(`Failed to fetch edges: ${res.status}`);
   return res.json();
 }

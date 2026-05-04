@@ -1,13 +1,13 @@
 'use client';
 
-import type { GovernanceState, NodeFilter } from '@/lib/types';
+import type { NodeLifecycleState, NodeFilter } from '@/lib/types';
 
 interface FilterBarProps {
   filters: NodeFilter;
   onChange: (filters: NodeFilter) => void;
 }
 
-const STATES: (GovernanceState | 'All')[] = ['All', 'Verified', 'Lagging', 'Divergent', 'Unverified', 'Rebuilding'];
+const STATES: (NodeLifecycleState | 'all')[] = ['all', 'active', 'suspended', 'revoked', 'pending', 'archived'];
 
 export default function FilterBar({ filters, onChange }: FilterBarProps) {
   return (
@@ -18,10 +18,10 @@ export default function FilterBar({ filters, onChange }: FilterBarProps) {
       <label className="text-xs text-gray-500">State</label>
       <select
         className="bg-[#1a1a2e] text-white text-xs px-2 py-1 rounded border border-[#2a2a3e] focus:outline-none focus:border-blue-500"
-        value={filters.governanceState || 'All'}
+        value={filters.governance_state || 'all'}
         onChange={(e) => {
           const val = e.target.value;
-          onChange({ ...filters, governanceState: val === 'All' ? undefined : val as GovernanceState });
+          onChange({ ...filters, governance_state: val === 'all' ? undefined : val as NodeLifecycleState });
         }}
       >
         {STATES.map((s) => (
@@ -34,8 +34,8 @@ export default function FilterBar({ filters, onChange }: FilterBarProps) {
         type="text"
         placeholder="all"
         className="bg-[#1a1a2e] text-white text-xs px-2 py-1 rounded border border-[#2a2a3e] w-24 focus:outline-none focus:border-blue-500"
-        value={filters.tenant || ''}
-        onChange={(e) => onChange({ ...filters, tenant: e.target.value || undefined })}
+        value={filters.tenant_scope || ''}
+        onChange={(e) => onChange({ ...filters, tenant_scope: e.target.value || undefined })}
       />
 
       <label className="text-xs text-gray-500">Min Confidence</label>
@@ -44,12 +44,12 @@ export default function FilterBar({ filters, onChange }: FilterBarProps) {
         min={0}
         max={100}
         step={5}
-        value={(filters.minConfidence || 0) * 100}
-        onChange={(e) => onChange({ ...filters, minConfidence: Number(e.target.value) / 100 || undefined })}
+        value={(filters.min_confidence || 0) * 100}
+        onChange={(e) => onChange({ ...filters, min_confidence: Number(e.target.value) / 100 || undefined })}
         className="w-20 accent-blue-500"
       />
       <span className="text-xs text-gray-400 w-8">
-        {((filters.minConfidence || 0) * 100).toFixed(0)}%
+        {((filters.min_confidence || 0) * 100).toFixed(0)}%
       </span>
     </div>
   );
