@@ -22,6 +22,7 @@
   },
   "devDependencies": {},
   "scripts": {
+    "test": "tsx --test tests/*.ts",
     "typecheck": "echo 'Peer deps required for typecheck — skipped in workspace'"
   }
 }
