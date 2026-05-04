@@ -15,33 +15,27 @@ npm install @limen-ai/langgraph
 | `limen-ai` | `^5.0.0-alpha.1` |
 | `@langchain/langgraph-checkpoint` | `^1.0.1` |
 
-## Quick Start
+## Quickstart
 
 ```typescript
 import { LimenCheckpointSaver, LimenStore } from '@limen-ai/langgraph';
 import { StateGraph } from '@langchain/langgraph';
 
-// -- Obtain Limen infrastructure objects from your limen-ai instance --
-// These 4 objects come from your Limen engine initialization:
-//   chain:      ChainStorage      — append-only immutable log
-//   projection: ProjectionStorage — read-optimized SQLite query layer
-//   projector:  Projector         — derives projection rows from chain entries
-//   validity:   ValidityStateMachine — tracks projection integrity state
+// Obtain Limen infrastructure objects from your limen-ai instance:
+//   chain:      ChainStorage           — append-only immutable log
+//   projection: ProjectionStorage      — read-optimized SQLite query layer
+//   projector:  Projector              — derives projection rows from chain entries
+//   validity:   ValidityStateMachine   — tracks projection integrity state
 
-const config = {
-  chain,        // implements appendEntry(entry) => CommittedEntry
-  projection,   // implements query(), queryOne(), getMetadata(), setMetadata()
-  projector,    // implements projectPending()
-  validity,     // implements currentState(), verifyOnStartup()
-};
+const config = { chain, projection, projector, validity };
 
-// Create adapters
+// Create adapters (both accept LimenCheckpointerConfig)
 const checkpointer = new LimenCheckpointSaver(config);
 const store = new LimenStore(config);
 
-// MUST call start() in this order — checkpointer creates the schema that store depends on
+// Start in order: checkpointer creates schema that store depends on
 await checkpointer.start();
-await store.start();  // Requires checkpointer.start() to have run first
+await store.start();
 
 // Wire into LangGraph
 const graph = new StateGraph({ channels: { messages: { value: [] } } })
@@ -52,73 +46,82 @@ const graph = new StateGraph({ channels: { messages: { value: [] } } })
 // Invoke with thread isolation
 const result = await graph.invoke(
   { messages: [{ role: 'user', content: 'hello' }] },
-  { configurable: { thread_id: 'thread-001' } }
+  { configurable: { thread_id: 'thread-001' } },
 );
 
-// Cleanup when done
+// Cleanup
 await checkpointer.stop();
 await store.stop();
 ```
 
 ## Configuration
 
-Both `LimenCheckpointSaver` and `LimenStore` accept `LimenCheckpointerConfig`:
-
 ```typescript
 interface LimenCheckpointerConfig {
-  chain: ChainStorage;           // Required — append-only chain
-  projection: ProjectionStorage; // Required — projection query layer
-  projector: Projector;          // Required — chain-to-projection derivation
-  validity: ValidityStateMachine;// Required — projection integrity state
-
-  serde?: SerializerProtocol;    // Default: JsonPlusSerializer (handles Date, Set, Map, BigInt)
-  governed?: boolean;            // Default: false — see Governance Modes below
-  tenantScope?: string;          // Default: '__default__' — multi-tenant isolation key
-  logger?: LimenCheckpointLogger;// Default: console.warn wrapper
+  chain: ChainStorage;              // Required — append-only chain
+  projection: ProjectionStorage;    // Required — projection query layer
+  projector: Projector;             // Required — chain-to-projection derivation
+  validity: ValidityStateMachine;   // Required — projection integrity state
+  serde?: SerializerProtocol;       // Default: JsonPlusSerializer
+  governed?: boolean;               // Default: false
+  tenantScope?: string;             // Default: '__default__'
+  logger?: LimenCheckpointLogger;   // Default: console.warn wrapper
 }
 ```
 
-## Governance Modes
+Both `LimenCheckpointSaver` and `LimenStore` accept this config shape.
 
-The `governed` flag controls how strictly the adapter enforces projection validity before serving reads.
+## Governed vs Non-Governed Mode
 
-### `governed: false` (default)
+The `governed` flag controls how strictly the adapter enforces projection validity before serving reads. Claims 4.1-4.8 define the complete state/flag matrix.
 
-Reads proceed when validity state is `Verified` or `Lagging`. Use this for development, non-critical workloads, or when eventual consistency is acceptable.
+| Validity State | `governed: false` (default) | `governed: true` |
+|----------------|---------------------------|-------------------|
+| **Verified** | Reads allowed | Reads allowed |
+| **Lagging** | Reads allowed (WARN logged) | **Blocked** — retryable `LimenGovernanceError` |
+| **Unverified** | **Blocked** — not retryable | **Blocked** — not retryable |
+| **Divergent** | **Blocked** — not retryable | **Blocked** — not retryable |
+| **Rebuilding** | **Blocked** — retryable | **Blocked** — retryable |
 
-### `governed: true`
+All writes (`put`, `putWrites`, `deleteThread`, store `put`, store `delete`) bypass the governance gate entirely (Claim 4.8).
 
-Reads require `Verified` state only. Any other state (including `Lagging`) throws `LimenGovernanceError`. Use this for production workloads where you need guaranteed projection integrity — no stale or unverified data served.
+## API Reference
 
-Both modes block reads entirely when state is `Unverified` or `Divergent`.
+### LimenCheckpointSaver (extends BaseCheckpointSaver)
 
-## Multi-Tenant Isolation
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `start()` | `Promise<void>` | Initialize adapter. Verifies infra, migrates schema, checks validity. Idempotent. |
+| `stop()` | `Promise<void>` | Shutdown. Flushes pending, nulls refs. Terminal. |
+| `getTuple(config)` | `Promise<CheckpointTuple \| undefined>` | Retrieve checkpoint + pending writes by thread/checkpoint_id. |
+| `get(config)` | `Promise<Checkpoint \| undefined>` | Delegates to `getTuple`, returns `tuple?.checkpoint`. |
+| `list(config, options?)` | `AsyncGenerator<CheckpointTuple>` | List checkpoints with filter, before, limit. Scan cap: 50,000. |
+| `put(config, checkpoint, metadata, newVersions)` | `Promise<RunnableConfig>` | Save checkpoint to chain. Bypasses governance. |
+| `putWrites(config, writes, taskId)` | `Promise<void>` | Save pending writes. Special channels get negative indices. |
+| `deleteThread(threadId)` | `Promise<void>` | Delete all checkpoints + writes for thread. Chain preserved. |
+| `getNextVersion(current)` | `number` | Returns `current + 1` or `1`. Integer-only. |
 
-Set `tenantScope` to partition data per tenant. Each checkpoint and store item is scoped to its tenant — queries never cross boundaries.
+### LimenStore (extends BaseStore)
 
-Override per-request via `configurable.limen_tenant_scope`:
-
-```typescript
-await graph.invoke(input, {
-  configurable: {
-    thread_id: 'thread-001',
-    limen_tenant_scope: 'tenant-acme',
-  },
-});
-```
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `start()` | `Promise<void>` | Initialize store. Requires checkpointer schema. Idempotent. |
+| `stop()` | `Promise<void>` | Shutdown. Flushes pending. Terminal. |
+| `batch(operations)` | `Promise<OperationResults>` | Execute Get/Search/ListNs/Put in 3 phases. |
+| `get(namespace, key)` | `Promise<Item \| null>` | Get single item. |
+| `put(namespace, key, value, index?)` | `Promise<void>` | Upsert item. INSERT OR REPLACE. |
+| `delete(namespace, key)` | `Promise<void>` | Delete item. Idempotent. |
+| `search(prefix, options?)` | `Promise<SearchItem[]>` | Filter-based search. No semantic search. |
+| `listNamespaces(options?)` | `Promise<string[][]>` | List unique namespaces with prefix/suffix/maxDepth. |
 
 ## Error Handling
 
-### Error Classes
-
-| Error | Retryable | When |
-|-------|-----------|------|
-| `LimenGovernanceError` | Check `.retryable` | Read blocked by validity state |
-| `LimenStorageError` | No | Chain/projection infrastructure failure |
-| `LimenSerdeError` | No | Serialization/deserialization failure |
-| `LimenNotStartedError` | No | Method called before `start()` |
-
-### Retry Logic
+| Error Class | Retryable | When Thrown | Recovery |
+|-------------|-----------|------------|----------|
+| `LimenGovernanceError` | Check `.retryable` | Read blocked by validity state | If retryable: wait ~100ms, retry. If not: rebuild projection or investigate. |
+| `LimenStorageError` | No | Chain/projection infrastructure failure, schema mismatch, restart after stop | Fix infrastructure. Create new instance if stopped. |
+| `LimenSerdeError` | No | Serialization/deserialization failure | Inspect `.typeTag`, `.dataLength`, `.cause`, `.context`. |
+| `LimenNotStartedError` | No | Any method called before `start()` | Call `start()` first. |
 
 ```typescript
 import { LimenGovernanceError } from '@limen-ai/langgraph';
@@ -126,53 +129,60 @@ import { LimenGovernanceError } from '@limen-ai/langgraph';
 try {
   const result = await graph.invoke(input, config);
 } catch (err) {
-  if (err instanceof LimenGovernanceError) {
-    if (err.retryable) {
-      // State is Lagging or Rebuilding — projection is catching up.
-      // Wait briefly, then retry. Projector will resolve the lag.
-      await delay(100);
-      // retry...
-    } else {
-      // State is Divergent or Unverified — requires manual intervention.
-      // Projection integrity is compromised. Rebuild or investigate.
-      console.error(`Non-retryable governance rejection: ${err.state}`);
-    }
+  if (err instanceof LimenGovernanceError && err.retryable) {
+    await new Promise(r => setTimeout(r, 100));
+    // retry...
   }
 }
 ```
 
-### Validity States
+## Multi-Tenant Isolation
 
-| State | Meaning | `governed: false` | `governed: true` |
-|-------|---------|-------------------|------------------|
-| `Verified` | Projection matches chain | Reads allowed | Reads allowed |
-| `Lagging` | Projection behind chain | Reads allowed | **Blocked** (retryable) |
-| `Unverified` | Integrity unknown | **Blocked** (retryable) | **Blocked** (retryable) |
-| `Divergent` | Projection corrupted | **Blocked** (not retryable) | **Blocked** (not retryable) |
-| `Rebuilding` | Projection rebuilding | **Blocked** (retryable) | **Blocked** (retryable) |
+Set `tenantScope` at construction or override per-request (checkpointer only):
+
+```typescript
+await graph.invoke(input, {
+  configurable: { thread_id: 't1', limen_tenant_scope: 'tenant-acme' },
+});
+```
+
+Store uses adapter-level `tenantScope` only (no per-request override). Create separate `LimenStore` instances per tenant if needed.
 
 ## Lifecycle
 
-1. **Construct** — `new LimenCheckpointSaver(config)` / `new LimenStore(config)`
-2. **Start** — `await adapter.start()` — verifies infrastructure, checks schema version, runs validity verification. Idempotent. **Important:** `checkpointer.start()` must be called before `store.start()` — the checkpointer creates the projection schema that the store depends on.
-3. **Use** — all LangGraph operations available
-4. **Stop** — `await adapter.stop()` — flushes pending work, releases resources. Terminal — create a new instance to restart.
+1. **Construct** -- `new LimenCheckpointSaver(config)` / `new LimenStore(config)`
+2. **Start** -- `await adapter.start()` -- idempotent. Checkpointer before store.
+3. **Use** -- all LangGraph operations available.
+4. **Stop** -- `await adapter.stop()` -- terminal. Create new instance to restart.
+
+## Performance
+
+*Estimated, pending benchmarks.*
+
+- No application-level cache. SQLite page cache handles hot reads.
+- Governance gate cost: in-memory enum comparison (~10ns).
+- Write latency includes synchronous `projectPending()` call.
+- Scan cap: 50,000 rows on `list()`, `search()`, `listNamespaces()`.
 
 ## Limitations
 
-- **No semantic search** — `LimenStore.search()` with a `query` string throws. Filter-based search only.
-- **No vector indexing** — the `index` field on put operations is accepted but not used for similarity.
-- **Scan cap** — `list()`, `search()`, and `listNamespaces()` are bounded to 50,000 rows maximum.
-- **Synchronous projection** — writes call `projectPending()` inline. Write latency includes projection time.
+- **No semantic search** -- `search()` with a `query` string throws.
+- **No vector indexing** -- `index` field on put is stored but unused.
+- **Synchronous projection** -- write latency includes projection time.
+- **Async only** -- sync variants (`getTupleSync`, `putSync`, `putWritesSync`) throw.
+
+## Claims Traceability
+
+All 124 design claims are tracked in [CLAIMS.md](./CLAIMS.md). Tests reference claim numbers (e.g., "Claim 2.1", "F-LG-003").
 
 ## Testing
 
 ```bash
-npm install @langchain/langgraph-checkpoint  # peer dep required for full suite
+npm install @langchain/langgraph-checkpoint  # peer dep required
 npm test
 ```
 
-271 tests across 7 files covering all design claims and 15 failure modes. Tests reference numbered claims (e.g., "Claim 2.1", "F-LG-003") from the internal design specification.
+271 tests across 7 files covering all design claims and 15 failure modes.
 
 ## License
 
