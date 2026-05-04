@@ -10,6 +10,8 @@
  * Design doc: Claims 3.1–3.27, 4.1–4.10, 5.1–5.4, 6.2, 8.1–8.18
  */
 
+import { BaseStore } from '@langchain/langgraph-checkpoint';
+
 import type {
   LimenCheckpointerConfig,
   ChainStorage,
@@ -70,7 +72,7 @@ import {
  * Implements: batch.
  * Inherits: get, search, put, delete, listNamespaces, start, stop.
  */
-export class LimenStore {
+export class LimenStore extends BaseStore {
   private chain: ChainStorage;
   private projection: ProjectionStorage;
   private projector: Projector;
@@ -81,6 +83,7 @@ export class LimenStore {
   private stopped = false;
 
   constructor(config: LimenCheckpointerConfig) {
+    super();
     this.chain = config.chain;
     this.projection = config.projection;
     this.projector = config.projector;
@@ -180,8 +183,9 @@ export class LimenStore {
 
     try {
       await this.projector.projectPending();
-    } catch (_e) {
+    } catch (e) {
       // Claim 3.25: WARN logged, not re-thrown
+      console.warn('[LimenStore] projectPending failed during stop:', e);
     }
 
     this.initialized = false;
@@ -354,7 +358,7 @@ export class LimenStore {
 
     const row = this.projection.queryOne<LgStoreItemRow>(
       `SELECT * FROM lg_store_items
-       WHERE tenant_scope = ?1 AND namespace = ?2 AND key = ?3`,
+       WHERE tenant_scope = ? AND namespace = ? AND key = ?`,
       [this.tenantScope, dotJoin(op.namespace), op.key]
     );
 
@@ -408,25 +412,32 @@ export class LimenStore {
     if (prefix) {
       // Claim 3.8: sargable range — ASCII 46('.') / 47('/') adjacency (Claim 8.9)
       sql = `SELECT * FROM lg_store_items
-             WHERE tenant_scope = ?1 AND namespace >= ?2 AND namespace < ?3
-             ORDER BY updated_at DESC LIMIT ?4`;
+             WHERE tenant_scope = ? AND namespace >= ? AND namespace < ?
+             ORDER BY updated_at DESC LIMIT ?`;
       params = [this.tenantScope, prefix, prefix + '/', scanLimit];
     } else {
       // Claim 3.9: empty prefix → all items in tenant
       sql = `SELECT * FROM lg_store_items
-             WHERE tenant_scope = ?1
-             ORDER BY updated_at DESC LIMIT ?2`;
+             WHERE tenant_scope = ?
+             ORDER BY updated_at DESC LIMIT ?`;
       params = [this.tenantScope, scanLimit];
     }
 
     const rows = this.projection.query<LgStoreItemRow>(sql, params);
+
+    if (rows.length === scanLimit) {
+      console.warn('[LimenStore] scan cap (50000) reached — results may be incomplete');
+    }
+
     const results: SearchItem[] = [];
     let skipped = 0;
 
     for (const row of rows) {
+      // Parse once, reuse for filter check and result construction (F-01)
+      const value = this.parseJson(row.value_json, 'value_json', `${row.namespace}/${row.key}`);
+
       // Apply filter (Claim 3.10)
       if (op.filter) {
-        const value = this.parseJson(row.value_json, 'value_json', `${row.namespace}/${row.key}`);
         if (!matchesFilter(value, op.filter)) {
           continue;
         }
@@ -437,9 +448,6 @@ export class LimenStore {
         skipped++;
         continue;
       }
-
-      // Parse and build result
-      const value = this.parseJson(row.value_json, 'value_json', `${row.namespace}/${row.key}`);
 
       results.push({
         key: row.key,
@@ -477,11 +485,15 @@ export class LimenStore {
 
     const rows = this.projection.query<{ namespace: string }>(
       `SELECT DISTINCT namespace FROM lg_store_items
-       WHERE tenant_scope = ?1
+       WHERE tenant_scope = ?
        ORDER BY namespace
-       LIMIT ?2`,
+       LIMIT ?`,
       [this.tenantScope, scanLimit]
     );
+
+    if (rows.length === scanLimit) {
+      console.warn('[LimenStore] scan cap (50000) reached — results may be incomplete');
+    }
 
     let namespaces = rows.map(r => splitNamespace(r.namespace));
 
@@ -567,6 +579,7 @@ export class LimenStore {
           guidance: 'Wait for projector to catch up, then retry',
         });
       }
+      console.warn('[LimenStore] governance state Lagging — reads may be stale');
       return;
     }
 
