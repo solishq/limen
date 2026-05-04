@@ -267,6 +267,20 @@ export interface LgStoreItemRow {
 // Adapter Configuration (Design doc §0.4)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ---------------------------------------------------------------------------
+// Logger Interface — Pluggable structured logging (Observability)
+// ---------------------------------------------------------------------------
+
+/** Pluggable logger for LimenCheckpointSaver and LimenStore */
+export interface LimenCheckpointLogger {
+  /** Warning-level log — always required */
+  warn(msg: string, context?: Record<string, unknown>): void;
+  /** Info-level log — optional, used for governance gate events */
+  info?(msg: string, context?: Record<string, unknown>): void;
+  /** Debug-level log — optional, used for detailed operation tracing */
+  debug?(msg: string, context?: Record<string, unknown>): void;
+}
+
 export interface LimenCheckpointerConfig {
   /** Limen chain storage instance */
   chain: ChainStorage;
@@ -282,6 +296,8 @@ export interface LimenCheckpointerConfig {
   governed?: boolean;
   /** Tenant scope for multi-tenant isolation. Default: '__default__' */
   tenantScope?: string;
+  /** Pluggable logger. Default: console.warn wrapper */
+  logger?: LimenCheckpointLogger;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

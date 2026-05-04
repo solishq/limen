@@ -35,6 +35,7 @@ export type {
 
   // Adapter config
   LimenCheckpointerConfig,
+  LimenCheckpointLogger,
 
   // LangGraph checkpoint types
   RunnableConfig,

@@ -14,6 +14,7 @@ import { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint';
 
 import type {
   LimenCheckpointerConfig,
+  LimenCheckpointLogger,
   ChainStorage,
   ProjectionStorage,
   Projector,
@@ -70,10 +71,18 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
   private projector: Projector | null;
   private validity: ValidityStateMachine | null;
   private serde: SerializerProtocol | null;
+  private readonly logger: LimenCheckpointLogger;
   private governed: boolean;
   private tenantScope: string;
   private initialized = false;
   private stopped = false;
+
+  /** Default logger wrapping console.warn for backward compatibility */
+  private static readonly DEFAULT_LOGGER: LimenCheckpointLogger = {
+    warn(msg: string, context?: Record<string, unknown>): void {
+      console.warn(`[LimenCheckpointSaver] ${msg}`, context ?? '');
+    },
+  };
 
   constructor(config: LimenCheckpointerConfig) {
     super();
@@ -84,6 +93,7 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
     this.serde = config.serde ?? defaultSerializer;
     this.governed = config.governed ?? false;
     this.tenantScope = config.tenantScope ?? DEFAULT_TENANT_SCOPE;
+    this.logger = config.logger ?? LimenCheckpointSaver.DEFAULT_LOGGER;
   }
 
   // =========================================================================
@@ -746,7 +756,9 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
       await this.projector!.projectPending();
     } catch (e) {
       // Claim 3.25 + F-10: WARN logged, not re-thrown
-      console.warn('[LimenCheckpointSaver] projectPending failed during stop:', e);
+      this.logger.warn('projectPending failed during stop', {
+        error: (e as Error).message,
+      });
     }
 
     this.initialized = false;
@@ -792,19 +804,29 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
         });
       }
       // Claim 4.6: governed=false, Lagging → proceed with WARN log
-      console.warn('[LimenCheckpointSaver] Projection lagging, governed=false — proceeding with potentially stale data');
+      this.logger.warn('Projection lagging, governed=false — proceeding with potentially stale data', {
+        state: 'Lagging',
+        governed: this.governed,
+        threadId: this.tenantScope,
+      });
       return;
     }
 
     // Claims 4.3, 4.4, 4.5, 4.7: Unverified/Divergent/Rebuilding always throw
-    const config: Record<string, { retryable: boolean; guidance?: string }> = {
+    const gateConfig: Record<string, { retryable: boolean; guidance?: string }> = {
       Unverified: { retryable: false },
       Divergent: { retryable: false, guidance: 'Rebuild projection' },
       Rebuilding: { retryable: true, guidance: 'Retry after rebuild' },
     };
 
-    const stateConfig = config[state];
+    const stateConfig = gateConfig[state];
     if (stateConfig) {
+      // Emit info-level event so operators can track governance rejection frequency
+      this.logger.info?.('Governance gate rejected read', {
+        state,
+        governed: this.governed,
+        retryable: stateConfig.retryable,
+      });
       throw new LimenGovernanceError({
         state,
         retryable: stateConfig.retryable,
@@ -895,10 +917,12 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
         results.push([row.task_id, row.channel, value]);
       } catch (e) {
         // F-NEW-05: Log corrupted write instead of silently dropping
-        console.warn(
-          '[LimenCheckpointSaver] Corrupted pending write dropped:',
-          { task_id: row.task_id, channel: row.channel, write_idx: row.write_idx, error: (e as Error).message }
-        );
+        this.logger.warn('Corrupted pending write dropped', {
+          taskId: row.task_id,
+          channel: row.channel,
+          writeIdx: row.write_idx,
+          error: (e as Error).message,
+        });
       }
     }
     return results;
