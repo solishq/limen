@@ -1,0 +1,138 @@
+# SolisHQ IP Guard — GitHub Actions CI Backstop
+# Copy to .github/workflows/ip-guard.yml in each project repo.
+# Catches --no-verify bypasses. Requires branch protection to block merge.
+
+name: IP Guard
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for internal methodology markers
+        run: |
+          BLOCKED=0
+          INSTANT_PATTERNS=(
+            "Certifier Pass"
+            "Certifier Verdict"
+            "Certifier GO"
+            "Certifier NO-GO"
+            "Breaker Pass"
+            "Breaker Verdict"
+            "Breaker Finding"
+            "Breaker CLEAN"
+            "Breaker DIRTY"
+            "Witness Pass"
+            "Witness Testimony"
+            "Witness Score"
+            "Prompt Audit Gate"
+            "Defect-Class Declaration"
+            "Wiring Manifest"
+            "Oracle Gates Summary"
+            "Oracle Gate"
+            "Builder Attestation"
+            "Builder Note"
+            "Founder Ratification"
+            "Zero-Residual Law"
+            "Quality Pipeline Law"
+            "Engineering Intelligence System"
+            "Constitutional Development Methodology"
+          )
+
+          HIGH_PATTERNS=(
+            "SolisHQ.*Engineering"
+            "Hard Ban #[0-9]"
+            "Amendment [0-9]"
+            "Controls 1-7"
+            "QAL-[1-4]"
+            "Tier [1-3].*Controls"
+            "OG-CONSULT"
+            "OG-REVIEW"
+            "OG-VERIFY"
+            "OG-THREAT"
+            "OG-TRACE"
+          )
+
+          FILENAME_PATTERNS=(
+            "BUILDER-.*\.md$"
+            "BREAKER-.*\.md$"
+            "CERTIFIER-.*\.md$"
+            "WITNESS-.*\.md$"
+            "ATTESTATION.*\.md$"
+            "VERDICT.*\.md$"
+            "REMEDIATION.*\.md$"
+            "DISPATCH.*\.md$"
+            "ORACLE-GATES.*\.md$"
+            "WIRING-MANIFEST.*\.md$"
+            "DC-DECLARATION.*\.md$"
+            "TRUTH-MODEL.*\.md$"
+            "DESIGN-SOURCE.*\.md$"
+            "PRECONDITION.*\.md$"
+            "_AUDIT.*\.md$"
+            "-AUDIT-.*\.md$"
+            "PHASE-[0-9].*\.md$"
+          )
+
+          # Document/config extensions: both instant-block and high-threshold
+          DOC_EXTS=( '*.md' '*.json' '*.txt' '*.yaml' '*.yml' )
+          # Source code extensions: instant-block only (high patterns cause false positives)
+          SRC_EXTS=( '*.ts' '*.tsx' '*.js' '*.jsx' '*.py' '*.rs' '*.sh' '*.go' '*.swift' '*.toml' )
+
+          ALL_INCLUDE=()
+          for ext in "${DOC_EXTS[@]}" "${SRC_EXTS[@]}"; do
+            ALL_INCLUDE+=( "--include=$ext" )
+          done
+
+          DOC_INCLUDE=()
+          for ext in "${DOC_EXTS[@]}"; do
+            DOC_INCLUDE+=( "--include=$ext" )
+          done
+
+          # Instant-block: scan ALL file types
+          for pattern in "${INSTANT_PATTERNS[@]}"; do
+            MATCHES=$(grep -rlF "$pattern" "${ALL_INCLUDE[@]}" . 2>/dev/null || true)
+            if [ -n "$MATCHES" ]; then
+              echo "::error::IP CONTENT DETECTED: '$pattern' found in:"
+              echo "$MATCHES" | head -5
+              BLOCKED=1
+            fi
+          done
+
+          # High patterns: 2+ in same file = IP document (documents/config only)
+          for f in $(find . -type f \( -name '*.md' -o -name '*.json' -o -name '*.txt' -o -name '*.yaml' -o -name '*.yml' \) ! -path './.git/*' 2>/dev/null); do
+            HIGH_HITS=0
+            for pattern in "${HIGH_PATTERNS[@]}"; do
+              if grep -qiE -- "$pattern" "$f" 2>/dev/null; then
+                HIGH_HITS=$((HIGH_HITS + 1))
+                if [ "$HIGH_HITS" -ge 2 ]; then
+                  echo "::error::IP CONTENT DETECTED: Multiple methodology markers in $f"
+                  BLOCKED=1
+                  break
+                fi
+              fi
+            done
+          done
+
+          # Filename guard
+          ALL_FILES=$(find . -type f ! -path './.git/*' 2>/dev/null)
+          for pattern in "${FILENAME_PATTERNS[@]}"; do
+            MATCHES=$(echo "$ALL_FILES" | grep -iE -- "$pattern" 2>/dev/null || true)
+            if [ -n "$MATCHES" ]; then
+              echo "::error::IP FILENAME DETECTED: pattern '$pattern' matched:"
+              echo "$MATCHES" | head -5
+              BLOCKED=1
+            fi
+          done
+
+          if [ "$BLOCKED" -eq 1 ]; then
+            echo "::error::SolisHQ IP Policy violation. Engineering process documents must not be committed."
+            exit 1
+          fi

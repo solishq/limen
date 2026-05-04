@@ -61,13 +61,7 @@ export interface NodeFilter {
   offset?: number;
 }
 
-export interface TimeRange {
-  start?: string;
-  end?: string;
-}
-
 export interface QueryRequest {
   filters: NodeFilter[];
-  time_range?: TimeRange;
   limit?: number;
 }
