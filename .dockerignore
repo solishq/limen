@@ -1,0 +1,19 @@
+# Docker build context exclusions — keeps the build context small
+node_modules
+dist
+.git
+.claude
+.github
+.vscode
+tests
+benchmarks
+explorer
+docs
+examples
+v5
+coverage
+.nyc_output
+*.tgz
+stryker*.mjs
+vitest.config.ts
+typedoc.json
