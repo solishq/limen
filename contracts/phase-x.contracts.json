@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "manifestVersion": "1.0.0",
-  "generatedAt": "2026-05-05T11:45:00+01:00",
+  "generatedAt": "2026-05-05T11:52:00+01:00",
   "governing": "CDM v2.1 + Contract Compliance v2.1",
   "phase": "Phase X",
   "status": "builder_remediated_pending_breaker",
@@ -54,8 +54,8 @@
     },
     {
       "path": "contracts/AGENT_CONTEXT_GOVERNANCE.md",
-      "contractVersion": "1.2.1",
-      "sha256": "4620381a0504177af90eac23f74304e75a72b3cd93d004ca55dbd3d9e5041d35",
+      "contractVersion": "1.2.2",
+      "sha256": "1e60d5905022cb8a31d4bbe5ed2d0984f5c443b5f5d1353fde80f7f0c4db0aa0",
       "role": "context_governance"
     },
     {
@@ -101,7 +101,8 @@
     "operation_context_timestamp_boundary",
     "boundary_trigger_governance_closure",
     "mission_context_token_upper_bound",
-    "context_rust_projection_parity"
+    "context_rust_projection_parity",
+    "context_rust_enum_projection_parity"
   ],
   "monotonicityProof": {
     "claim": "defenseSetAfter is a strict superset of defenseSetBefore; no defense from the previous remediated suite is removed or weakened.",
@@ -119,7 +120,8 @@
       "operation_context_timestamp_boundary",
       "boundary_trigger_governance_closure",
       "mission_context_token_upper_bound",
-      "context_rust_projection_parity"
+      "context_rust_projection_parity",
+      "context_rust_enum_projection_parity"
     ],
     "closure": "Any future interface, defense, or contract hash change must update this manifest before certification."
   },
@@ -144,7 +146,8 @@
       "eventClosure": "Core hook events are translated before entering AgentEventBus.",
       "auditClosure": "No successful side effect is returned before the required durable audit path exists.",
       "evolutionClosure": "HB-38 requires any interface change to update the owning contract and this manifest hash.",
-      "tokenClosure": "assembleContext applies TokenEstimator upper-bound admission to mission, working-memory, and belief sections; overflow is exclusion, never zero-token admission."
+      "tokenClosure": "assembleContext applies TokenEstimator upper-bound admission to mission, working-memory, and belief sections; overflow is exclusion, never zero-token admission.",
+      "projectionClosure": "TypeScript and Rust projections preserve closed enum domains for context eviction strategy and boundary trigger type/action fields."
     }
   },
   "phase8Gate": {

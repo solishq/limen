@@ -1,4 +1,4 @@
-# Agent Context Governance Contract v1.2.1
+# Agent Context Governance Contract v1.2.2
 
 **Status:** RATIFIED DESIGN --- Pending Implementation
 **Governing:** CDM v2.1 + Contract Compliance v2.1
@@ -805,7 +805,7 @@ pub struct EvictionResult {
 }
 
 pub struct EvictionPolicy {
-    pub strategy: String,
+    pub strategy: EvictionStrategy,
     pub thresholds: EvictionThresholds,
     pub protected_domains: Option<Vec<String>>,
     pub protected_classifications: Option<Vec<ClassificationLevel>>,
@@ -832,8 +832,8 @@ pub struct WorkingMemoryEntry {
 
 pub struct BoundaryTriggerConfig {
     pub id: Option<String>,
-    pub trigger_type: String,
-    pub action: String,
+    pub trigger_type: BoundaryTriggerType,
+    pub action: BoundaryAction,
     pub condition: Option<BoundaryCondition>,
 }
 
@@ -1097,5 +1097,5 @@ All mutating operations in this table take explicit `OperationContext` at the pu
 
 **Contract Hash:** Tracked in `contracts/phase-x.contracts.json`
 **Authored:** 2026-05-05
-**Revised:** 2026-05-05 (v1.2.1 --- boundary-trigger governance closure, mission-section token upper-bound enforcement, Rust parity)
-**Supersedes:** v1.2.0
+**Revised:** 2026-05-05 (v1.2.2 --- Rust enum projection parity for eviction and boundary trigger structs)
+**Supersedes:** v1.2.1
