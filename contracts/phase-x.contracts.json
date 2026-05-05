@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "manifestVersion": "1.0.0",
-  "generatedAt": "2026-05-05T11:52:00+01:00",
+  "generatedAt": "2026-05-05T13:22:00+01:00",
   "governing": "CDM v2.1 + Contract Compliance v2.1",
   "phase": "Phase X",
-  "status": "builder_remediated_pending_breaker",
+  "status": "final_completion_pending_breaker",
   "hardBansCovered": {
     "HB-37": "No defense-set regression without compensating control. defenseSetAfter is asserted to be a superset of defenseSetBefore.",
     "HB-38": "No interface change without contract update. All public contract files are versioned and content-hashed in this manifest."
@@ -12,14 +12,14 @@
   "contracts": [
     {
       "path": "contracts/SHARED_TYPES.md",
-      "contractVersion": "1.2.1",
-      "sha256": "edbff8fe936d2af1a4978678cfba9b0be739ebe6b4fe980e6acc5105bbecceb9",
+      "contractVersion": "1.3.0",
+      "sha256": "7adb6a59f44c5246f8d5e331474a93fbbf40477b26564672fc572d9343f5033c",
       "role": "canonical_shared_types"
     },
     {
       "path": "contracts/AGENT_MEMORY_BRIDGE.md",
-      "contractVersion": "1.3.0",
-      "sha256": "f29fb87e75dbd1404e36bb1e6e6fa70ebc02aebd5ea07e77247bc87106e6e123",
+      "contractVersion": "1.3.1",
+      "sha256": "c761bc31588b5ffe8de782241353e99a5137cb7c8cebc808d4cc1136de68e186",
       "role": "memory_bridge"
     },
     {
@@ -48,8 +48,8 @@
     },
     {
       "path": "contracts/AGENT_EXECUTION_GOVERNANCE.md",
-      "contractVersion": "1.2.0",
-      "sha256": "5a7d2d7ced675d45b142afd4bc49345e848f2d91498183968b327427494f0fbd",
+      "contractVersion": "1.2.1",
+      "sha256": "e01815604f8705b36655ea05f37b10dd2629ab65edc9d4a0817064acaa3464d0",
       "role": "execution_governance"
     },
     {
@@ -66,9 +66,27 @@
     },
     {
       "path": "docs/PHASE_X_ARCHITECTURE_OVERVIEW.md",
-      "contractVersion": "1.2.0",
-      "sha256": "d54ad2c94a73338539c57c9633dc7f72fae8de138676f577796aee5053be6ed2",
+      "contractVersion": "1.3.0",
+      "sha256": "5c418dc4ccef80b61907d614a5bc14f012704519fa99e2bf96853fb5c3a83872",
       "role": "architecture_overview"
+    },
+    {
+      "path": "contracts/AGENT_SEARCH_GOVERNANCE.md",
+      "contractVersion": "1.0.0",
+      "sha256": "bbda03be7b5f5005d0f706262e9c51a25aee6c2c9dfc17e5e2c8d10a80f74213",
+      "role": "search_governance"
+    },
+    {
+      "path": "contracts/AGENT_COORDINATION_GOVERNANCE.md",
+      "contractVersion": "1.0.0",
+      "sha256": "769083f1f98a2c3cf836f47bb54a920390fee13a383ef2a3bc2b8d290ec6199f",
+      "role": "coordination_governance"
+    },
+    {
+      "path": "contracts/AGENT_OUTPUT_GOVERNANCE.md",
+      "contractVersion": "1.0.0",
+      "sha256": "b0f39222e44ae97c83a82d3c9b966264327246be89412ae8fb1950e1d5e06088",
+      "role": "output_governance"
     }
   ],
   "defenseSetBefore": [
@@ -102,7 +120,21 @@
     "boundary_trigger_governance_closure",
     "mission_context_token_upper_bound",
     "context_rust_projection_parity",
-    "context_rust_enum_projection_parity"
+    "context_rust_enum_projection_parity",
+    "manual_merge_public_resolution_api",
+    "manual_merge_session_end_terminal_path",
+    "session_bound_read_context",
+    "branded_id_source_citations",
+    "clearance_level_3_phase_x_doctrine",
+    "search_governance_surface",
+    "coordination_governance_surface",
+    "output_governance_surface",
+    "embedding_lifecycle_governance",
+    "structured_inference_schema_governance",
+    "plugin_hook_isolation_governance",
+    "public_ts_operation_context_closure",
+    "manual_merge_shared_resolution_type",
+    "shared_type_ownership_index_extended"
   ],
   "monotonicityProof": {
     "claim": "defenseSetAfter is a strict superset of defenseSetBefore; no defense from the previous remediated suite is removed or weakened.",
@@ -121,14 +153,28 @@
       "boundary_trigger_governance_closure",
       "mission_context_token_upper_bound",
       "context_rust_projection_parity",
-      "context_rust_enum_projection_parity"
+      "context_rust_enum_projection_parity",
+      "manual_merge_public_resolution_api",
+      "manual_merge_session_end_terminal_path",
+      "session_bound_read_context",
+      "branded_id_source_citations",
+      "clearance_level_3_phase_x_doctrine",
+      "search_governance_surface",
+      "coordination_governance_surface",
+      "output_governance_surface",
+      "embedding_lifecycle_governance",
+      "structured_inference_schema_governance",
+      "plugin_hook_isolation_governance",
+      "public_ts_operation_context_closure",
+      "manual_merge_shared_resolution_type",
+      "shared_type_ownership_index_extended"
     ],
     "closure": "Any future interface, defense, or contract hash change must update this manifest before certification."
   },
   "lci": {
     "name": "Phase X Contract Integrity",
     "assertion": "For every Phase X agent operation, canonical types, governance gates, consent checks, rate limits, and audit obligations compose into one closed contract family with no authority expansion outside Limen Core.",
-    "tau": "tau_PhaseX = CanonicalTypes ∩ CorePermissionMapping ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩ RateLimit ∩ TokenEstimator ∩ LifecycleState",
+    "tau": "tau_PhaseX = CanonicalTypes ∩ CorePermissionMapping ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩ RateLimit ∩ TokenEstimator ∩ SearchGate ∩ CoordinationGate ∩ OutputGate ∩ LifecycleState",
     "tauDerivation": [
       "CanonicalTypes: all shared cross-contract types, including adapter-facing memory request DTOs, are defined only in SHARED_TYPES.md.",
       "CorePermissionMapping: Phase X permissions are limited to Limen Core Permission strings.",
@@ -138,16 +184,23 @@
       "EventBus: Phase X emits only AgentEvent values from SHARED_TYPES.md.",
       "RateLimit: DEFAULT_RATE_LIMITS are inherited and may only be tightened.",
       "TokenEstimator: every assembled context section, including mission context, is admitted by upper-bound token estimate or excluded before return.",
+      "SearchGate: text, semantic, hybrid, duplicate, and embedding operations filter by OperationContext clearance before returning or mutating data.",
+      "CoordinationGate: A2A, fork, sync, and replay operations enforce capability boundary, classification flow, monotonic watermarks, and deterministic hash verification.",
+      "OutputGate: output, telemetry, inference, plugin, and hook operations enforce evidence, schema, budget, isolation, and classification before success.",
       "LifecycleState: terminal and trust state transitions are explicit and audited."
     ],
     "closureProof": {
-      "typeClosure": "All cross-contract type names are resolved through SHARED_TYPES.md; contract-local types are not referenced by other contracts.",
-      "authorityClosure": "AgentSession maps to OperationContext without adding permissions outside derivePermissions; context boundary-trigger mutations require manage_cognitive through GovernanceAction boundary_trigger.",
+      "typeClosure": "All cross-contract type names are resolved through SHARED_TYPES.md; ManualMergeResolution is shared-owned; contract-local types are not referenced by other contracts.",
+      "authorityClosure": "AgentSession maps to OperationContext without adding permissions outside derivePermissions; all public Search, Coordination, and Output methods carry OperationContext explicitly; context boundary-trigger mutations require manage_cognitive through GovernanceAction boundary_trigger.",
       "eventClosure": "Core hook events are translated before entering AgentEventBus.",
       "auditClosure": "No successful side effect is returned before the required durable audit path exists.",
       "evolutionClosure": "HB-38 requires any interface change to update the owning contract and this manifest hash.",
       "tokenClosure": "assembleContext applies TokenEstimator upper-bound admission to mission, working-memory, and belief sections; overflow is exclusion, never zero-token admission.",
-      "projectionClosure": "TypeScript and Rust projections preserve closed enum domains for context eviction strategy and boundary trigger type/action fields."
+      "projectionClosure": "TypeScript and Rust projections preserve closed enum domains for context eviction strategy and boundary trigger type/action fields.",
+      "searchClosure": "Agents reach vector search, embeddings, duplicate detection, and hybrid ranking only through AGENT_SEARCH_GOVERNANCE.md.",
+      "coordinationClosure": "Agents reach A2A, session fork, sync, peer merge, and replay verification only through AGENT_COORDINATION_GOVERNANCE.md.",
+      "outputClosure": "Agents reach output primitives, telemetry mutation, structured inference, plugin install, and hook registration only through AGENT_OUTPUT_GOVERNANCE.md.",
+      "manualMergeClosure": "Manual merge pending_resolution has public resolve/get state APIs and deterministic session-end discard semantics."
     }
   },
   "phase8Gate": {

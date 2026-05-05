@@ -1,4 +1,4 @@
-# Agent Memory Bridge Contract v1.3.0
+# Agent Memory Bridge Contract v1.3.1
 
 **Status:** RATIFIED DESIGN — Pending Implementation
 **Governing:** CDM v2.1 + Contract Compliance v2.1
@@ -40,6 +40,10 @@ interface LimenAgentClient {
   // Governance
   checkPermission(action: AgentAction, context: GovernanceContext): Promise<Result<GovernanceDecision>>;
 
+  // Manual Merge Resolution (See SHARED_TYPES.md §14.2)
+  resolveConflict(mergeId: string, conflictId: string, resolution: ManualMergeResolution): Promise<Result<MergeConflictResolution>>;
+  getMergeState(mergeId: string): Promise<Result<ManualMergeState>>;
+
   // Events (uses unified event system)
   on(event: AgentEvent, handler: AgentEventHandler): string;
   off(subscriptionId: string): void;
@@ -51,12 +55,30 @@ interface LimenAgentClient {
 - `ClaimId`, `RelationshipId`, `SessionId`, `AgentBranchId`, `MissionId`, `TaskId`, `AgentId`, `TenantId`, `EventId` — See `SHARED_TYPES.md` §1.1, §4
 - `RelationshipType` — See `SHARED_TYPES.md` §2
 - `MergeStrategy` — See `SHARED_TYPES.md` §14
+- `ManualMergeResolution` — See `SHARED_TYPES.md` §14.2
 - `AgentSession` — See `SHARED_TYPES.md` §7
 - `SessionSummary` — See `SHARED_TYPES.md` §15
 - `OperationContext` — See `SHARED_TYPES.md` §1.3
 - `GovernanceContext` — See `SHARED_TYPES.md` §9
 - `StructuredContent`, `AgentMemoryOptions`, `AgentRecallQuery`, `AgentRecallOptions` — See `SHARED_TYPES.md` §10.2.1
 - `AgentEvent`, `AgentEventHandler` — See `SHARED_TYPES.md` §16
+
+### 2.1 Session-Bound Client Model
+
+`LimenAgentClient` is a session-bound instance. It is NOT a standalone object — it is created by and bound to an `AgentSession`.
+
+**Factory:**
+```typescript
+function createAgentClient(session: AgentSession): LimenAgentClient;
+```
+
+Read-only methods on the returned client implicitly operate within the bound session's `OperationContext` (constructed per SHARED_TYPES.md §8). Mutating methods still receive explicit `GovernanceContext` or `OperationContext` at the public interface to preserve the Phase X governance-closure invariant. For session-implicit reads:
+- Classification filtering derives from `session.clearanceLevel`
+- Rate limiting attributes to `session.agentId`
+- Audit entries record `session.sessionId`
+- The client instance supplies the read context; callers cannot override session identity
+
+The client becomes invalid after `endSession()` — any subsequent method call returns `{ ok: false, error: { code: 'SESSION_ENDED' } }`.
 
 ## 3. Data Models
 
@@ -175,7 +197,9 @@ Canonical shared type. See `SHARED_TYPES.md` §10.1.
 ### 3.15 AgentAction
 
 ```typescript
-type AgentAction = 'remember' | 'recall' | 'forget' | 'create_branch' | 'merge_branch' | 'relate' | 'classify' | 'export';
+type AgentAction = 'remember' | 'recall' | 'forget' | 'create_branch' | 'merge_branch' | 'resolve_conflict' | 'get_merge_state' | 'relate' | 'classify' | 'export';
+
+// ManualMergeResolution is canonical in SHARED_TYPES.md §14.2.
 ```
 
 ## 4. Error Types
@@ -191,8 +215,12 @@ type AgentMemoryError =
   | { readonly code: 'GROUNDING_FAILED'; readonly reason: string; readonly claimId?: ClaimId }
   | { readonly code: 'BELIEF_NOT_FOUND'; readonly beliefId: ClaimId }
   | { readonly code: 'BRANCH_NOT_FOUND'; readonly branchId: AgentBranchId }
+  | { readonly code: 'MERGE_NOT_FOUND'; readonly mergeId: string }
+  | { readonly code: 'MERGE_CONFLICT_NOT_FOUND'; readonly mergeId: string; readonly conflictId: string }
+  | { readonly code: 'INVALID_MERGE_RESOLUTION'; readonly resolution: string; readonly reason: string }
   | { readonly code: 'SESSION_NOT_FOUND'; readonly sessionId: SessionId }
-  | { readonly code: 'CONSENT_REQUIRED'; readonly dataSubjectId: string; readonly purpose: ConsentPurpose; readonly operation: ConsentableOperation };
+  | { readonly code: 'CONSENT_REQUIRED'; readonly dataSubjectId: string; readonly purpose: ConsentPurpose; readonly operation: ConsentableOperation }
+  | { readonly code: 'SESSION_ENDED'; readonly sessionId: SessionId };
 ```
 
 ## 5. NonAuthoritative Mode
@@ -269,8 +297,12 @@ pub enum AgentError {
     GroundingFailed { reason: String, claim_id: Option<String> },
     BeliefNotFound { belief_id: String },
     BranchNotFound { branch_id: String },
+    MergeNotFound { merge_id: String },
+    MergeConflictNotFound { merge_id: String, conflict_id: String },
+    InvalidMergeResolution { resolution: String, reason: String },
     SessionNotFound { session_id: String },
     ConsentRequired { data_subject_id: String, purpose: String, operation: String },
+    SessionEnded { session_id: String },
     Internal { message: String },
 }
 
@@ -350,6 +382,18 @@ pub trait AgentMemoryBridge: Send + Sync {
         action: &str,
         context: &GovernanceContext,
     ) -> impl Future<Output = Result<GovernanceDecision, AgentError>> + Send;
+
+    fn resolve_conflict(
+        &self,
+        merge_id: &str,
+        conflict_id: &str,
+        resolution: ManualMergeResolution, // canonical from SHARED_TYPES.md §25
+    ) -> impl Future<Output = Result<MergeConflictResolution, AgentError>> + Send;
+
+    fn get_merge_state(
+        &self,
+        merge_id: &str,
+    ) -> impl Future<Output = Result<ManualMergeState, AgentError>> + Send;
 }
 ```
 
@@ -370,6 +414,8 @@ Rust struct equivalents for local-only types (`AgentMemoryView`, `AgentBranch`, 
 | `startSession` | Session creation + working memory namespace init (SC-14) | Agent registered + tenant valid | `session:started` | No |
 | `endSession` | Session summary + branch cleanup + working memory flush | Session ownership | `session:ended` | No |
 | `checkPermission` | Governance engine evaluation | None (meta-operation) | `governance:allowed` or `governance:refused` | No |
+| `resolveConflict` | SC-11 (assert winning claim) + `retract_claim` (loser) + SC-12 (supersedes relationship) | Session valid + merge ownership | `memory:branch_merged` (on final resolution) | No |
+| `getMergeState` | Query `ManualMergeState` from session working memory | Session valid | None (read-only) | No |
 | `on`/`off` | Unified event bus subscription (See `SHARED_TYPES.md` §16.2) | Session valid | None | No |
 
 **SC Reference Key:**
@@ -497,3 +543,5 @@ if (result.ok && result.value.status === 'pending_resolution') {
 15. Session timeout enforcement is server-side — client cannot extend without re-authentication
 16. Consent gate fires on `remember()` when content contains personal data identifiers — violation returns `CONSENT_REQUIRED` error (See `SHARED_TYPES.md` §19)
 17. Trust level promotion follows unified requirements (See `SHARED_TYPES.md` §5.2) — capability access is trust-gated per §6.1
+18. Session termination with pending manual merge: `endSession()` transitions all pending merges to `'discarded'` state, discards all unmerged branch claims, and records a forced-termination audit entry. Equivalent to calling `discardBranch()` on each pending branch.
+19. Manual conflict resolution is total: each `MergeConflict.conflictId` is resolved exactly once via `resolveConflict()` before merge completion; duplicate or unknown conflict IDs return `MERGE_CONFLICT_NOT_FOUND` and do not mutate branch state.

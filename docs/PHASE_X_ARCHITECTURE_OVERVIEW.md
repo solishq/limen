@@ -1,6 +1,6 @@
 # Phase X: AI Agent Integration Layer — Architecture Overview
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** RATIFIED DESIGN — Pending Implementation
 **Governing:** CDM v2.1 + Contract Compliance v2.1
 **Date:** May 5, 2026
@@ -41,11 +41,14 @@ Limen becomes the universal governed memory and audit layer for all AI coding ag
 +-------v---+ +-----v-----+ +-----v------+ +----v----+ +---v---------+
 | Memory    | | Computer  | | Execution  | | Context | | Intelligence |
 | Bridge    | | Use Gov   | | Governance | | Gov     | | Bridge       |
-| AGENT_    | | COMPUTER_ | | AGENT_     | | AGENT_  | | AGENT_       |
-| MEMORY... | | USE...    | | EXEC...    | | CONTEXT | | INTEL...     |
 +-------+---+ +-----+-----+ +-----+------+ +----+----+ +---+---------+
         |           |             |             |          |
-+-------v-----------v-------------v-------------v----------v----------+
++-------v---+ +-----v-----+ +-----v------+                       |
+| Search    | | Coord     | | Output     |                       |
+| Gov       | | Gov       | | Gov        |                       |
++-------+---+ +-----+-----+ +-----+------+                       |
+        |           |             |                             |
++-------v-----------v-------------v-----------------------------v------+
 | Audit & Visualization Schema                                         |
 | contracts/AUDIT_VISUALIZATION_SCHEMA.md                              |
 | append-only log | timelines | belief graph | heatmap | export        |
@@ -74,6 +77,9 @@ Limen becomes the universal governed memory and audit layer for all AI coding ag
 | Agent Execution Governance | Mission/task lifecycle, delegation, budget reservations, wave scheduling, fairness, and resource evidence | AGENT_EXECUTION_GOVERNANCE.md |
 | Agent Context Governance | Token budget control, importance scoring, working-memory eviction, context assembly, and boundary triggers | AGENT_CONTEXT_GOVERNANCE.md |
 | Agent Intelligence Bridge | Technique extraction, evaluation, promotion/retirement, cognitive health, self-healing, and knowledge repair | AGENT_INTELLIGENCE_BRIDGE.md |
+| Agent Search Governance | Vector search, semantic recall, duplicate detection, embedding lifecycle, and hybrid ranking | AGENT_SEARCH_GOVERNANCE.md |
+| Agent Coordination Governance | A2A messaging, session forking, distributed sync, conflict merge, and replay verification | AGENT_COORDINATION_GOVERNANCE.md |
+| Agent Output Governance | Output primitives, telemetry, structured inference, plugin install, and hook lifecycle | AGENT_OUTPUT_GOVERNANCE.md |
 | Audit & Visualization | Queries, aggregates, and renders agent activity into timelines, belief graphs, governance heatmaps, and exportable reports | AUDIT_VISUALIZATION_SCHEMA.md |
 | Limen Core | Existing CCP, WMP, TGP, EGP, CGP, RBAC, Consent API, Hook System, Refusal Engine, and hash-chained audit | unchanged |
 | Limen v5 Engine | Append-only chain, deterministic projector, typed graph, consensus foundation, and Postgres persistence | unchanged |
@@ -141,6 +147,29 @@ Limen becomes the universal governed memory and audit layer for all AI coding ag
 4. `assembleContext()` outputs position-invariant sections: mission, working memory, then beliefs
 5. Boundary triggers emit context events through the unified event bus
 
+**Flow 7: Agent Searches Governed Knowledge**
+
+1. Adapter calls `AgentSearchClient.search()` with `OperationContext`
+2. Search Governance checks `query_claims`, classification ceiling, rate limits, and ranking policy
+3. FTS5/sqlite-vec candidates are filtered by clearance before result serialization
+4. Hybrid ranker combines FTS/vector/recency/confidence weights only after weight-sum validation
+5. Search audit records query hash, returned claim IDs, filtered count, duplicate count, and embedding model
+
+**Flow 8: Agents Coordinate**
+
+1. Sender calls `AgentCoordinationClient.sendA2A()`
+2. A2A rules enforce capability boundary, classification flow, proactive permissions, and peer authorization
+3. Session forks inherit only parent-authorized capabilities and immutable history before `atTurn`
+4. Sync watermarks advance monotonically by HLC; replay verification compares canonical hashes
+5. Divergence returns first divergent event and emits `replay:diverged`
+
+**Flow 9: Agent Produces Output**
+
+1. Agent calls `AgentOutputClient.produce()` or `AgentInferenceClient.inferStructured()`
+2. Output Governance checks audience classification, confidence/evidence, schema validity, conflicts, and budget
+3. Rejected outputs audit without user-visible emission
+4. Plugin/hook operations require provider authority, capability subset grant, isolation, deterministic priority, and failure containment
+
 ## 3. Integration with Limen Core
 
 ### 3.1 CCP (Claim Protocol) Integration
@@ -203,6 +232,13 @@ Limen becomes the universal governed memory and audit layer for all AI coding ag
 - CGP is reached only through Agent Context Governance; context assembly and eviction use `read_wm`, `write_wm`, `query_claims`, and `manage_cognitive` Core permissions
 - Consent API is consulted before memory writes, knowledge transfer, and data export whenever `ConsentContext` or `ConsentRequirement` is triggered
 - All four subsystems receive `OperationContext` derived from `AgentSession` via `sessionToContext()` in `SHARED_TYPES.md`; no subsystem accepts native adapter identity directly
+
+### 3.8 Search, Coordination, and Output Integration
+
+- Search Governance is the only agent path to sqlite-vec, embedding queue, duplicate detector, and hybrid ranker
+- Coordination Governance is the only agent path to A2A governance, session forks, HLC sync, peer watermarks, and replay verification
+- Output Governance is the only agent path to output primitives, telemetry mutation, structured inference, plugin installation, and hook registration
+- These surfaces use canonical `GovernanceAction` domains in `SHARED_TYPES.md` and emit only canonical `AgentEvent` values
 
 ## 4. Security Model
 

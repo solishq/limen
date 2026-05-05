@@ -1,8 +1,8 @@
-# Phase X Shared Types Registry v1.2.1
+# Phase X Shared Types Registry v1.3.0
 
 **Status:** RATIFIED --- Canonical Authority for All Phase X Contracts
 **Governing:** CDM v2.1 + Contract Compliance v2.1
-**Rule:** Types defined here are the SOLE definitions. All 8 Phase X contracts reference this document. No contract may redefine any shared type listed here. Local types are contract-specific and not used by other contracts.
+**Rule:** Types defined here are the SOLE definitions. All Phase X contracts reference this document. No contract may redefine any shared type listed here. Local types are contract-specific and not used by other contracts.
 **Phase 8 Gate:** Machine-readable status, HB-37/HB-38 coverage, LCI assertion, and monotonicity proof are recorded in `contracts/phase-x.contracts.json`.
 
 ---
@@ -11,7 +11,7 @@
 
 These are Limen Core types that Phase X contracts reference. They are NOT Phase X types and are NOT modifiable by Phase X contracts.
 
-### 1.1 Branded IDs
+### 1.1a Kernel IDs (from `kernel/interfaces/common.ts`)
 
 ```typescript
 export type TenantId = string & { readonly __brand: 'TenantId' };
@@ -24,6 +24,15 @@ export type ArtifactId = string & { readonly __brand: 'ArtifactId' };
 export type PolicyId = string & { readonly __brand: 'PolicyId' };
 export type RoleId = string & { readonly __brand: 'RoleId' };
 export type SessionId = string & { readonly __brand: 'SessionId' };
+```
+
+### 1.1b Protocol IDs (from respective protocol modules)
+
+- `ClaimId`, `RelationshipId`: CCP, `claims/interfaces/claim_types.ts`
+- `ReservationId`, `WaveId`: EGP, `execution/interfaces/egp_types.ts`
+- `EvaluationId`, `PromotionDecisionId`: TGP, `techniques/interfaces/tgp_types.ts`
+
+```typescript
 export type ClaimId = string & { readonly __brand: 'ClaimId' };
 export type RelationshipId = string & { readonly __brand: 'RelationshipId' };
 export type ReservationId = string & { readonly __brand: 'ReservationId' };
@@ -63,8 +72,8 @@ export interface OperationContext {
   readonly permissions: ReadonlySet<Permission>;
   readonly sessionId?: SessionId;
   readonly clearanceLevel?: number;
-  // Mapping: untrusted=0 (unrestricted only), probationary=1 (internal),
-  //          trusted=2 (confidential), admin=4 (all levels)
+  // Phase X mapping: untrusted=0, low=1, medium=2, high=3, verified=4.
+  // Core legacy docs skip 3; Phase X authorizes 3 for restricted access.
 }
 ```
 
@@ -177,6 +186,8 @@ export const PHASE_X_TO_CORE_TRUST: Record<AgentTrustLevel, CoreTrustLevel> = {
   verified: 'admin',
 };
 ```
+
+**Note on clearance level 3:** Phase X extends Core's clearance range to include level 3 (`restricted`). Core's original mapping (0, 1, 2, 4) predates the 5-level classification system. The Phase X mapping (0, 1, 2, 3, 4) is authoritative for all Phase X operations. Core's `clearanceLevel` field accepts any non-negative integer; the skip from 2 to 4 in Core documentation is a legacy convention, not a validation constraint.
 
 ### 5.1 Capability Unlocking by Trust Level
 
@@ -350,7 +361,10 @@ export type GovernanceAction =
   | { readonly domain: 'lifecycle'; readonly operation: 'register' | 'promote' | 'demote' | 'suspend' | 'decommission' }
   | { readonly domain: 'knowledge'; readonly operation: 'export' | 'import' | 'transfer' }
   | { readonly domain: 'consent'; readonly operation: 'register' | 'revoke' | 'check' }
-  | { readonly domain: 'context'; readonly operation: 'write_wm' | 'discard_wm' | 'pin' | 'unpin' | 'evict' | 'boundary_trigger' };
+  | { readonly domain: 'context'; readonly operation: 'write_wm' | 'discard_wm' | 'pin' | 'unpin' | 'evict' | 'boundary_trigger' }
+  | { readonly domain: 'search'; readonly operation: 'query' | 'embed' | 'duplicate_check' | 'configure' }
+  | { readonly domain: 'coordination'; readonly operation: 'a2a_send' | 'fork_session' | 'sync' | 'replay' | 'rule' }
+  | { readonly domain: 'output'; readonly operation: 'produce' | 'telemetry' | 'infer' | 'plugin' | 'hook' };
 
 export type ComputerActionType =
   | 'file:read' | 'file:write' | 'file:delete'
@@ -848,11 +862,11 @@ export type MergeStrategy = 'highest_confidence' | 'evidence_weighted' | 'tempor
    - System identifies all conflicts (same subject+predicate, different values)
    - For each conflict, returns `MergeConflict` in `unresolvedConflicts`
    - Merge does NOT complete --- result has `status: 'pending_resolution'`
-2. Caller must then call `resolveConflict(conflictId, resolution)` for each conflict
+2. Caller must then call `resolveConflict(mergeId, conflictId, resolution)` for each conflict
 3. Resolution options: `'keep_branch' | 'keep_trunk' | 'keep_both' | 'discard_both' | 'merge_new_value'`
 4. Once all conflicts are resolved, merge auto-completes
 5. Timeout: if conflicts are not resolved within `session.timeout`, branch is auto-discarded
-6. Fallback: if session ends with pending conflicts, `autoCleanup` behavior applies
+6. Session-end terminal path: if `endSession()` occurs while conflicts remain pending, the merge transitions to `discarded`, all unmerged branch claims are auto-discarded, and a forced-termination audit entry is recorded. This is equivalent to calling `discardBranch()` on every pending merge branch.
 
 ```typescript
 export type ManualMergeResolution = 'keep_branch' | 'keep_trunk' | 'keep_both' | 'discard_both' | 'merge_new_value';
@@ -882,8 +896,11 @@ export interface ManualMergeState {
   readonly conflicts: readonly MergeConflict[];
   readonly resolved: readonly MergeConflictResolution[];
   readonly deadline: string; // ISO-8601
+  readonly discardedReason?: 'timeout' | 'session_ended' | 'explicit_discard';
 }
 ```
+
+**Session termination:** If `endSession()` is called while a manual merge is in `pending_resolution` state, the merge transitions to `'discarded'`. All branch claims are auto-discarded. An audit entry records the forced termination with reason `'session_ended_with_pending_merge'`.
 
 ---
 
@@ -963,6 +980,23 @@ export type AgentEvent =
   | 'context:pressure_changed' | 'context:eviction_triggered' | 'context:eviction_complete'
   | 'context:pin_added' | 'context:pin_removed'
   | 'working_memory:written' | 'working_memory:discarded' | 'working_memory:flushed'
+  // Search events
+  | 'search:queried' | 'embedding:queued' | 'embedding:completed' | 'duplicate:detected'
+  // Coordination events
+  | 'a2a:sent' | 'a2a:refused' | 'session:forked' | 'sync:watermark_advanced' | 'replay:verified' | 'replay:diverged'
+  | 'a2a:rule_registered' | 'a2a:rule_removed' | 'a2a:action_validated'
+  | 'a2a:action_denied' | 'a2a:action_masked' | 'a2a:rate_limited'
+  | 'fork:created' | 'fork:merged' | 'fork:discarded' | 'fork:conflict_detected'
+  | 'sync:started' | 'sync:completed' | 'sync:failed' | 'sync:conflict_resolved'
+  | 'sync:peer_registered' | 'sync:peer_removed' | 'sync:peer_unreachable'
+  | 'replay:snapshot_captured' | 'replay:verification_complete' | 'replay:verification_failed' | 'replay:divergence_detected'
+  // Output, telemetry, inference, plugin events
+  | 'output:produced' | 'telemetry:reported' | 'inference:completed' | 'inference:rejected'
+  | 'plugin:installed' | 'plugin:disabled' | 'hook:failed'
+  | 'output:retracted' | 'telemetry:cost_recorded' | 'telemetry:vital_recorded'
+  | 'inference:started' | 'inference:retry' | 'inference:failed'
+  | 'plugin:uninstalled' | 'plugin:error'
+  | 'hook:registered' | 'hook:fired' | 'hook:blocked'
   // Lifecycle events
   | 'agent:registered' | 'agent:updated' | 'agent:suspended'
   | 'agent:reactivated' | 'agent:decommissioned'
@@ -1542,6 +1576,16 @@ pub enum MergeStrategy {
     Manual,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManualMergeResolution {
+    KeepBranch,
+    KeepTrunk,
+    KeepBoth,
+    DiscardBoth,
+    MergeNewValue,
+}
+
 // --- RetentionPolicy ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1693,11 +1737,11 @@ pub enum AgentFramework {
 
 | Type | Owner | Referenced By |
 |---|---|---|
-| AgentSession | SHARED_TYPES | All 8 contracts |
+| AgentSession | SHARED_TYPES | All Phase X contracts |
 | GovernanceContext | SHARED_TYPES | Memory Bridge, Computer Use Gov, Adapter Arch, Execution Gov |
-| GovernanceAction | SHARED_TYPES | Memory Bridge, Computer Use Gov, Adapter Arch, Execution Gov |
-| GovernanceVerdict | SHARED_TYPES | Computer Use Gov, Memory Bridge, Adapter Arch, Audit Viz |
-| GovernanceDecision | SHARED_TYPES | Memory Bridge, Audit Viz, Context Gov, Execution Gov |
+| GovernanceAction | SHARED_TYPES | Memory Bridge, Computer Use Gov, Adapter Arch, Execution Gov, Search Gov, Coordination Gov, Output Gov |
+| GovernanceVerdict | SHARED_TYPES | Computer Use Gov, Memory Bridge, Adapter Arch, Audit Viz, Search Gov, Coordination Gov |
+| GovernanceDecision | SHARED_TYPES | Memory Bridge, Audit Viz, Context Gov, Execution Gov, Search Gov, Coordination Gov, Output Gov |
 | StructuredContent | SHARED_TYPES | Memory Bridge, Adapter Arch |
 | AgentMemoryOptions | SHARED_TYPES | Memory Bridge, Adapter Arch |
 | AgentRecallQuery | SHARED_TYPES | Memory Bridge, Adapter Arch |
@@ -1706,15 +1750,16 @@ pub enum AgentFramework {
 | BeliefState / AgentBeliefState | SHARED_TYPES | Memory Bridge, Intelligence Bridge |
 | EvidenceRef | SHARED_TYPES | Memory Bridge, Audit Viz, Intelligence Bridge |
 | RelationshipRef | SHARED_TYPES | Memory Bridge, Audit Viz |
-| AuditLogEntry / AgentAuditEntry | SHARED_TYPES | Audit Viz, Computer Use Gov, Lifecycle Mgmt |
+| AuditLogEntry / AgentAuditEntry | SHARED_TYPES | Audit Viz, Computer Use Gov, Lifecycle Mgmt, Search Gov, Output Gov |
 | ComputerAction | SHARED_TYPES | Computer Use Gov, Adapter Arch, Audit Viz |
 | ComputerActionType | SHARED_TYPES | Computer Use Gov, Adapter Arch, Audit Viz, Execution Gov |
 | ActionBase | SHARED_TYPES | Computer Use Gov, Adapter Arch |
 | NativeAgentAction | SHARED_TYPES | Adapter Arch |
-| AgentCapability | SHARED_TYPES | Adapter Arch, Lifecycle Mgmt, Execution Gov, Intelligence Bridge |
-| AgentTrustLevel | SHARED_TYPES | Lifecycle Mgmt, Computer Use Gov, Adapter Arch, Execution Gov |
+| AgentCapability | SHARED_TYPES | Adapter Arch, Lifecycle Mgmt, Execution Gov, Intelligence Bridge, Coordination Gov, Output Gov |
+| AgentTrustLevel | SHARED_TYPES | Lifecycle Mgmt, Computer Use Gov, Adapter Arch, Execution Gov, Coordination Gov |
 | TRUST_TO_CLEARANCE | SHARED_TYPES | Lifecycle Mgmt, Memory Bridge, Computer Use Gov |
-| MergeStrategy | SHARED_TYPES | Memory Bridge, Adapter Arch |
+| MergeStrategy | SHARED_TYPES | Memory Bridge, Adapter Arch, Coordination Gov |
+| ManualMergeResolution | SHARED_TYPES | Memory Bridge |
 | MergeConflict | SHARED_TYPES | Memory Bridge |
 | ManualMergeState | SHARED_TYPES | Memory Bridge |
 | SessionSummary | SHARED_TYPES | Memory Bridge, Adapter Arch |
@@ -1722,12 +1767,12 @@ pub enum AgentFramework {
 | SessionGovernanceCounts | SHARED_TYPES | Memory Bridge, Adapter Arch, Audit Viz |
 | SessionBranchCounts | SHARED_TYPES | Memory Bridge |
 | SessionMissionCounts | SHARED_TYPES | Execution Gov |
-| AgentEvent | SHARED_TYPES | All 8 contracts |
-| AgentEventPayload | SHARED_TYPES | All 8 contracts |
-| AgentEventHandler | SHARED_TYPES | All 8 contracts |
-| AgentEventBus / EventBus | SHARED_TYPES | All 8 contracts |
-| RetentionPolicy | SHARED_TYPES | Audit Viz, Computer Use Gov, Memory Bridge |
-| RateLimitPolicy | SHARED_TYPES | Computer Use Gov, Adapter Arch, Execution Gov |
+| AgentEvent | SHARED_TYPES | All Phase X contracts |
+| AgentEventPayload | SHARED_TYPES | All Phase X contracts |
+| AgentEventHandler | SHARED_TYPES | All Phase X contracts |
+| AgentEventBus / EventBus | SHARED_TYPES | All Phase X contracts |
+| RetentionPolicy | SHARED_TYPES | Audit Viz, Computer Use Gov, Memory Bridge, Search Gov, Coordination Gov, Output Gov |
+| RateLimitPolicy | SHARED_TYPES | Computer Use Gov, Adapter Arch, Execution Gov, Search Gov, Coordination Gov |
 | ConsentContext | SHARED_TYPES | Memory Bridge, Lifecycle Mgmt, Intelligence Bridge |
 | SandboxConfig | SHARED_TYPES | Computer Use Gov, Adapter Arch |
 | FilesystemSandbox | SHARED_TYPES | Computer Use Gov, Adapter Arch |
@@ -1778,3 +1823,4 @@ Any contract that references a type from this registry MUST use it verbatim. No 
 | 1.1.0 | 2026-05-05 | Added CDM v2.1 Phase 8 manifest binding and canonical TokenEstimator contract. |
 | 1.2.0 | 2026-05-05 | Promoted agent memory request DTOs to shared ownership and canonically mapped terminal escalation audit events. |
 | 1.2.1 | 2026-05-05 | Added canonical context `boundary_trigger` governance operation for boundary trigger registration lifecycle. |
+| 1.3.0 | 2026-05-05 | Added final agent surface governance actions/events, exact branded-ID source split, clearance level 3 doctrine, and manual merge session-end terminal path. |

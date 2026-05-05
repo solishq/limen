@@ -1,4 +1,4 @@
-# Agent Execution Governance Contract v1.2.0
+# Agent Execution Governance Contract v1.2.1
 
 **Status:** RATIFIED DESIGN --- Pending Implementation
 **Governing:** CDM v2.1 + Contract Compliance v2.1
@@ -210,7 +210,7 @@ interface MissionOutcome {
 ```typescript
 interface MissionCompletionResult {
   readonly missionId: MissionId;
-  readonly finalState: 'completed' | 'failed' | 'degraded';
+  readonly finalState: 'completed' | 'failed' | 'cancelled';
   readonly outcome: MissionOutcome;
   readonly duration: number; // milliseconds from creation to completion
   readonly tasksSummary: {
@@ -220,6 +220,9 @@ interface MissionCompletionResult {
     readonly cancelled: number;
   };
 }
+
+// Note: A degraded mission has not completed — the agent must transition it to
+// `failed` or `cancelled` explicitly, or continue execution to resolve the degradation.
 ```
 
 ### 3.11 ResolvedMissionConstraints
@@ -490,7 +493,7 @@ All events are dispatched via `AgentEventBus` (SHARED_TYPES SS16.2) with `AgentE
 type AgentExecutionError =
   | { code: 'INVALID_MISSION_TRANSITION'; from: MissionState; to: MissionState; reason: string }
   | { code: 'INVALID_TASK_TRANSITION'; from: TaskState; to: TaskState; reason: string }
-  | { code: 'INVALID_RESERVATION_TRANSITION'; from: ReservationStatus; to: ReservationStatus; reason: string }
+  | { code: 'INVALID_RESERVATION_TRANSITION'; reservationId: ReservationId; from: ReservationStatus; to: ReservationStatus }
   | { code: 'BUDGET_EXHAUSTED'; dimension: BudgetDimension; requested: number; available: number }
   | { code: 'BUDGET_RESERVATION_FAILED'; reason: string }
   | { code: 'MISSION_DEPTH_EXCEEDED'; maxDepth: number; requestedDepth: number }
@@ -663,7 +666,7 @@ pub enum ReservationStatus {
 pub enum ExecutionError {
     InvalidMissionTransition { from: MissionState, to: MissionState, reason: String },
     InvalidTaskTransition { from: TaskState, to: TaskState, reason: String },
-    InvalidReservationTransition { from: ReservationStatus, to: ReservationStatus, reason: String },
+    InvalidReservationTransition { reservation_id: String, from: ReservationStatus, to: ReservationStatus },
     BudgetExhausted { dimension: BudgetDimension, requested: u64, available: u64 },
     BudgetReservationFailed { reason: String },
     MissionDepthExceeded { max_depth: u32, requested_depth: u32 },
