@@ -21,31 +21,31 @@ This contract defines how AI agents learn from their work (technique extraction 
 
 The following types used throughout this contract are defined canonically in `SHARED_TYPES.md`:
 
-| Type | Section |
+| Type | §ection |
 |---|---|
-| `TGPTechniqueStatus` | S22 |
-| `TechniqueProvenanceKind` | S22 |
-| `EvaluationSource` | S22 |
-| `EvaluationMethod` | S22 |
-| `PromotionResult` | S22 |
-| `TGPRetiredReason` | S22 |
-| `AgentEvent` | S16.1 |
-| `AgentEventPayload` | S16.2 |
-| `AgentEventHandler` | S16.2 |
-| `AgentEventBus` | S16.2 |
-| `FreshnessLabel` | S2 (CCP Types) |
-| `OperationContext` | S1.3 |
-| `Result<T>` | S1.5 |
-| `KernelError` | S1.4 |
-| `AgentId` | S1.1 |
-| `ClaimId` | S1.1 |
-| `SessionId` | S1.1 |
-| `EvaluationId` | S1.1 |
-| `PromotionDecisionId` | S1.1 |
-| `KnowledgePackageId` | S4 |
-| `TriggerConfigId` | S4 |
-| `AgentBranchId` | S4 |
-| `AgentCapability` | S6 |
+| `TGPTechniqueStatus` | §22 |
+| `TechniqueProvenanceKind` | §22 |
+| `EvaluationSource` | §22 |
+| `EvaluationMethod` | §22 |
+| `PromotionResult` | §22 |
+| `TGPRetiredReason` | §22 |
+| `AgentEvent` | §16.1 |
+| `AgentEventPayload` | §16.2 |
+| `AgentEventHandler` | §16.2 |
+| `AgentEventBus` | §16.2 |
+| `FreshnessLabel` | §2 (CCP Types) |
+| `OperationContext` | §1.3 |
+| `Result<T>` | §1.5 |
+| `KernelError` | §1.4 |
+| `AgentId` | §1.1 |
+| `ClaimId` | §1.1 |
+| `SessionId` | §1.1 |
+| `EvaluationId` | §1.1 |
+| `PromotionDecisionId` | §1.1 |
+| `KnowledgePackageId` | §4 |
+| `TriggerConfigId` | §4 |
+| `AgentBranchId` | §4 |
+| `AgentCapability` | §6 |
 
 ---
 
@@ -105,10 +105,10 @@ interface TechniqueObservation {
 ```typescript
 interface AgentTechnique {
   readonly id: ClaimId;
-  readonly status: TGPTechniqueStatus;                // See SHARED_TYPES.md S22
+  readonly status: TGPTechniqueStatus;                // See SHARED_TYPES.md §22
   readonly description: string;
   readonly domain: string;
-  readonly provenance: TechniqueProvenanceKind;       // See SHARED_TYPES.md S22
+  readonly provenance: TechniqueProvenanceKind;       // See SHARED_TYPES.md §22
   readonly sourceAgentId: AgentId;
   readonly confidence: number;              // raw stored confidence
   readonly effectiveConfidence: number;     // with FSRS decay: R(t) = (1 + t/(9*S))^-1
@@ -118,7 +118,7 @@ interface AgentTechnique {
   readonly createdAt: string;               // ISO-8601
   readonly suspendedAt: string | null;      // ISO-8601
   readonly retiredAt: string | null;        // ISO-8601
-  readonly retiredReason: TGPRetiredReason | null;   // See SHARED_TYPES.md S22
+  readonly retiredReason: TGPRetiredReason | null;   // See SHARED_TYPES.md §22
   readonly transferHistory: readonly TransferRecord[];
 }
 ```
@@ -127,8 +127,8 @@ interface AgentTechnique {
 
 ```typescript
 interface TechniqueEvaluation {
-  readonly source: EvaluationSource;    // See SHARED_TYPES.md S22
-  readonly method: EvaluationMethod;    // See SHARED_TYPES.md S22
+  readonly source: EvaluationSource;    // See SHARED_TYPES.md §22
+  readonly method: EvaluationMethod;    // See SHARED_TYPES.md §22
   readonly outcome: 'success' | 'failure' | 'inconclusive';
   readonly confidence: number;      // evaluator's confidence in the evaluation itself [0.0, 1.0]
   readonly context: string;         // what was evaluated and under what conditions
@@ -166,7 +166,7 @@ interface TechniquePromotionEvidence {
 interface PromotionDecision {
   readonly id: PromotionDecisionId;
   readonly techniqueId: ClaimId;
-  readonly result: PromotionResult;                  // See SHARED_TYPES.md S22
+  readonly result: PromotionResult;                  // See SHARED_TYPES.md §22
   readonly newStatus: TGPTechniqueStatus;
   readonly reason: string;
   readonly evidence: TechniquePromotionEvidence;
@@ -354,7 +354,7 @@ interface ImportanceEntry {
   readonly predicate: string;
   readonly importance: ImportanceScore;
   readonly effectiveConfidence: number;
-  readonly freshness: FreshnessLabel;  // See SHARED_TYPES.md S2
+  readonly freshness: FreshnessLabel;  // See SHARED_TYPES.md §2
 }
 ```
 
@@ -515,7 +515,7 @@ interface UnresolvedConflict {
 
 ### 7.1 IntelligenceEvent
 
-A subset of `AgentEvent` values (see `SHARED_TYPES.md` S16.1) relevant to this contract. The unified event bus uses `AgentEvent` as the wire type; this contract filters to the intelligence-domain subset.
+A subset of `AgentEvent` values (see `SHARED_TYPES.md` §16.1) relevant to this contract. The unified event bus uses `AgentEvent` as the wire type; this contract filters to the intelligence-domain subset.
 
 ```typescript
 type IntelligenceEvent =
@@ -535,7 +535,7 @@ type IntelligenceEvent =
   | '*';
 ```
 
-All values above are members of the `AgentEvent` union in `SHARED_TYPES.md` S16.1. No additional event names are permitted on the wire.
+All values above are members of the `AgentEvent` union in `SHARED_TYPES.md` §16.1. No additional event names are permitted on the wire.
 
 ### 7.2 IntelligenceEventHandler
 
@@ -549,7 +549,7 @@ type IntelligenceEventHandler = (event: IntelligenceEventPayload) => void | Prom
 type IntelligenceEventPayload = AgentEventPayload & { readonly type: IntelligenceEvent };
 ```
 
-Canonical `AgentEventPayload` from `SHARED_TYPES.md` S16.2 with `type` narrowed to `IntelligenceEvent`. The required `auditId` field remains top-level and is never moved into `data`.
+Canonical `AgentEventPayload` from `SHARED_TYPES.md` §16.2 with `type` narrowed to `IntelligenceEvent`. The required `auditId` field remains top-level and is never moved into `data`.
 
 ### 7.4 Event Emission Guarantees
 
@@ -583,7 +583,7 @@ type AgentIntelligenceError =
   | { code: 'MAX_OPERATIONS_EXCEEDED'; limit: number };
 ```
 
-All errors are returned via `Result<T>` (see `SHARED_TYPES.md` S1.5) — never thrown. The `KernelError` wrapper applies standard error metadata (timestamp, correlationId, tenantId).
+All errors are returned via `Result<T>` (see `SHARED_TYPES.md` §1.5) — never thrown. The `KernelError` wrapper applies standard error metadata (timestamp, correlationId, tenantId).
 
 ---
 
@@ -630,12 +630,12 @@ All errors are returned via `Result<T>` (see `SHARED_TYPES.md` S1.5) — never t
 
 ## 10. Rust Trait (v5 Alignment)
 
-Types from `SHARED_TYPES.md` S25 (Rust Equivalents) are used directly. Only contract-local Rust types are defined here.
+Types from `SHARED_TYPES.md` §25 (Rust Equivalents) are used directly. Only contract-local Rust types are defined here.
 
 ```rust
 use std::future::Future;
 
-// Shared types imported from SHARED_TYPES S25:
+// Shared types imported from SHARED_TYPES §25:
 // ClaimId, AgentId, EvaluationId, PromotionDecisionId, SessionId,
 // TGPTechniqueStatus, TGPRetiredReason, TechniqueProvenanceKind
 
@@ -758,13 +758,13 @@ pub trait AgentIntelligenceBridge: Send + Sync {
 
 | Client Method | Limen Internal | Protocol | Notes |
 |---|---|---|---|
-| `extractTechnique` | SC-11 (assert_claim) with `technique.*` predicate | TGP S4 | Creates claim with status=candidate |
+| `extractTechnique` | §C-11 (assert_claim) with `technique.*` predicate | TGP S4 | Creates claim with status=candidate |
 | `evaluateTechnique` | TGP evaluation record + confidence update via SC-14 | TGP S6 | Updates success_rate, may trigger transition |
 | `promoteTechnique` | TGP promotion decision + SC-11 status claim + SC-12 supersedes edge | TGP S7 | Verifies thresholds server-side |
-| `suspendTechnique` | SC-11 status claim + SC-12 supersedes edge | TGP S5 (I2) | Records suspension reason |
-| `retireTechnique` | SC-11 terminal status claim + SC-12 supersedes edge | TGP S5 (I2) | Irreversible |
-| `getActiveTechniques` | SC-13 (query_claims) with technique filter | TGP + CCP | Filtered by agent context |
-| `transferTechnique` | SC-11 (new claim in target) + relationship | TGP S8 | Confidence capped at 0.5 |
+| `suspendTechnique` | §C-11 status claim + SC-12 supersedes edge | TGP S5 (I2) | Records suspension reason |
+| `retireTechnique` | §C-11 terminal status claim + SC-12 supersedes edge | TGP S5 (I2) | Irreversible |
+| `getActiveTechniques` | §C-13 (query_claims) with technique filter | TGP + CCP | Filtered by agent context |
+| `transferTechnique` | §C-11 (new claim in target) + relationship | TGP S8 | Confidence capped at 0.5 |
 | `getHealthReport` | Cognitive Engine health scan (read-only aggregation) | Cognitive S3 | Point-in-time snapshot |
 | `consolidate` | Cognitive Engine merge + SC-12 `relate_claims` | Cognitive S4 | Creates supersedes relationships |
 | `detectGaps` | Cognitive Engine gap analysis (predicate coverage) | Cognitive S5 | Advisory only |
@@ -772,8 +772,8 @@ pub trait AgentIntelligenceBridge: Send + Sync {
 | `getImportanceMap` | ImportanceScore computation per claim | Cognitive S7 | Uses access patterns + graph |
 | `triggerSelfHeal` | Cascade + repair + conflict resolution pipeline | CCP + Cognitive | Composite operation |
 | `invalidateEvidence` | Evidence retraction -> cascade to dependent claims | CCP S9 | Deterministic cascade |
-| `repairStaleBeliefs` | Bulk archive/refresh of aged claims via FSRS check | CCP + FSRS | Strategy-dependent behavior |
-| `resolveConflict` | SC-12 `relate_claims` (supersedes) + optional `retract_claim` | CCP S8 | Creates audit trail |
+| `repairStaleBeliefs` | Bulk archive/refresh of aged claims via FSRS check | CCP + FSRS | §trategy-dependent behavior |
+| `resolveConflict` | §C-12 `relate_claims` (supersedes) + optional `retract_claim` | CCP S8 | Creates audit trail |
 
 ---
 
@@ -799,7 +799,7 @@ pub trait AgentIntelligenceBridge: Send + Sync {
 
 10. **Gap detection is advisory.** Gaps suggest actions but do not mandate them. No automatic claim creation from gap detection. Agent decides what to act on.
 
-11. **Session and governance scope.** All operations require valid `OperationContext` (see `SHARED_TYPES.md` S1.3). Governance (clearanceLevel, permissions) is checked before every mutating operation. Read operations require `query_claims`; technique mutation requires `assert_claim`; cognitive administration requires `manage_cognitive`.
+11. **Session and governance scope.** All operations require valid `OperationContext` (see `SHARED_TYPES.md` §1.3). Governance (clearanceLevel, permissions) is checked before every mutating operation. Read operations require `query_claims`; technique mutation requires `assert_claim`; cognitive administration requires `manage_cognitive`.
 
 12. **Narrative threads are derived.** Threads are computed from claim relationships and temporal clustering. They are not separately stored entities. No thread CRUD — threads exist as query results.
 
@@ -863,10 +863,10 @@ pub trait AgentIntelligenceBridge: Send + Sync {
 | Unit | Cascade determinism: same graph + same invalidation = same result (property test) |
 | Integration | Full technique lifecycle: extract -> evaluate x3 -> promote -> suspend -> evaluate x2 -> reactivate |
 | Integration | Transfer lifecycle: extract -> promote -> transfer -> evaluate in new context -> promote |
-| Integration | Self-heal pipeline: seed stale claims -> trigger heal -> verify archives + cascades |
+| Integration | §elf-heal pipeline: seed stale claims -> trigger heal -> verify archives + cascades |
 | Integration | Conflict detection and resolution with all 6 strategies |
 | Property | Consolidation idempotency (fast-check) |
-| Property | State machine never enters invalid state under random operation sequences |
+| Property | §tate machine never enters invalid state under random operation sequences |
 | Property | Health score always in [0.0, 1.0] regardless of input distribution |
 | Mutation | All invariants independently killable — no surviving mutants on governance checks |
 

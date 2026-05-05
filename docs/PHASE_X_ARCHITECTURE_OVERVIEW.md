@@ -172,6 +172,21 @@ Limen becomes the universal governed memory and audit layer for all AI coding ag
 
 ## 3. Integration with Limen Core
 
+### 3.0 Limen Core System Call Reference
+
+Phase X contracts delegate to Limen Core via numbered system calls (defined in the Limen Specification §10). Quick reference for implementers:
+
+| Syscall | Operation | Spec Ref | Input → Output |
+|---|---|---|---|
+| SC-11 | `assert_claim` | CCP §10 | `ClaimCreateInput → AssertClaimOutput` |
+| SC-12 | `relate_claims` | CCP §8 | `RelationshipCreateInput → RelateClaimsOutput` |
+| SC-13 | `query_claims` | CCP §10.3 | `ClaimQueryInput → ClaimQueryResult` |
+| SC-14 | `write_working_memory` | WMP §5.2 | `WriteWorkingMemoryInput → WriteWorkingMemoryOutput` |
+| SC-15 | `read_working_memory` | WMP §5.3 | `ReadWorkingMemoryInput → ReadWorkingMemoryOutput` |
+| SC-16 | `discard_working_memory` | WMP §5.4 | `DiscardWorkingMemoryInput → void` |
+
+Full syscall definitions: `src/kernel/interfaces/` in the Limen codebase.
+
 ### 3.1 CCP (Claim Protocol) Integration
 
 - `LimenAgentClient.remember()` delegates to SC-11 (`assert_claim`) with `grounding_mode: runtime_witness` and agent-supplied reasoning

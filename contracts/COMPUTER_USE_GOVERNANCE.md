@@ -15,24 +15,24 @@ This contract defines how Limen governs, audits, and optionally refuses computer
 
 This contract uses the following shared types without redefinition:
 
-| Type | SHARED_TYPES Section |
+| Type | §HARED_TYPES Section |
 |---|---|
-| ActionBase, ComputerAction (17 variants), ComputerActionType | S11 |
-| GovernanceContext, GovernanceAction | S9 |
-| GovernanceVerdict | S10 |
-| AgentSession | S7 |
-| AgentTrustLevel, TRUST_TO_CLEARANCE | S5 |
-| SandboxConfig, FilesystemSandbox, NetworkSandbox, ProcessSandbox, ResourceSandbox, DurationSandbox | S12 |
-| RefusalRule, RefusalCondition (9 condition variants) | S13 |
-| RateLimitPolicy, DEFAULT_RATE_LIMITS | S18 |
-| RetentionPolicy, DEFAULT_RETENTION | S17 |
-| ActionDigest | S24 |
-| AgentEvent, AgentEventPayload, AgentEventBus | S16 |
-| PerformanceBudget | S20 |
-| Branded IDs (EventId, AgentId, SessionId, MissionId, TaskId, PolicyId, TenantId) | S1.1 |
-| OperationContext | S1.3 |
-| Result, KernelError | S1.4, S1.5 |
-| ClassificationLevel, CLASSIFICATION_NUMERIC | S3 |
+| ActionBase, ComputerAction (17 variants), ComputerActionType | §11 |
+| GovernanceContext, GovernanceAction | §9 |
+| GovernanceVerdict | §10 |
+| AgentSession | §7 |
+| AgentTrustLevel, TRUST_TO_CLEARANCE | §5 |
+| §andboxConfig, FilesystemSandbox, NetworkSandbox, ProcessSandbox, ResourceSandbox, DurationSandbox | §12 |
+| RefusalRule, RefusalCondition (9 condition variants) | §13 |
+| RateLimitPolicy, DEFAULT_RATE_LIMITS | §18 |
+| RetentionPolicy, DEFAULT_RETENTION | §17 |
+| ActionDigest | §24 |
+| AgentEvent, AgentEventPayload, AgentEventBus | §16 |
+| PerformanceBudget | §20 |
+| Branded IDs (EventId, AgentId, SessionId, MissionId, TaskId, PolicyId, TenantId) | §1.1 |
+| OperationContext | §1.3 |
+| Result, KernelError | §1.4, S1.5 |
+| ClassificationLevel, CLASSIFICATION_NUMERIC | §3 |
 
 ## 3. Contract-Specific Types
 
@@ -136,7 +136,7 @@ interface ComputerActionGovernor {
   /**
    * Evaluate and potentially block an action BEFORE execution.
    * Primary governance gate. Must be called for every action.
-   * Latency budget: <10ms (see SHARED_TYPES.md S20 — governance check only).
+   * Latency budget: <10ms (see SHARED_TYPES.md §20 — governance check only).
    */
   beforeAction(
     action: ComputerAction,
@@ -147,7 +147,7 @@ interface ComputerActionGovernor {
    * Record outcome AFTER action execution completes.
    * Produces audit entry and updates provenance chain.
    * The minimal post-action audit entry must be durably appended before
-   * the action result is returned as success (see SHARED_TYPES.md S20).
+   * the action result is returned as success (see SHARED_TYPES.md §20).
    * If append fails, the session is quarantined and the caller receives
    * AUDIT_APPEND_FAILED instead of a successful action result.
    */
@@ -168,7 +168,7 @@ interface ComputerActionGovernor {
 
 ### 4.2 Extended GovernanceVerdict (contract-local enrichment)
 
-The shared `GovernanceVerdict` (see `SHARED_TYPES.md` S10) is the wire format. This contract enriches verdicts at the governor layer with risk assessment metadata:
+The shared `GovernanceVerdict` (see `SHARED_TYPES.md` §10) is the wire format. This contract enriches verdicts at the governor layer with risk assessment metadata:
 
 ```typescript
 interface EnrichedVerdict {
@@ -195,14 +195,14 @@ interface AuditEntry {
 
 ### 5.1 Rule Evaluation
 
-Rules use the shared `RefusalRule` and `RefusalCondition` types (see `SHARED_TYPES.md` S13). Evaluation proceeds in priority order (lower number = higher priority); specificity is the deterministic tie-breaker within equal priority (exact target before glob before wildcard). First matching rule determines the verdict. If no rule matches, verdict is `allow`. All matching rules are retained in provenance.
+Rules use the shared `RefusalRule` and `RefusalCondition` types (see `SHARED_TYPES.md` §13). Evaluation proceeds in priority order (lower number = higher priority); specificity is the deterministic tie-breaker within equal priority (exact target before glob before wildcard). First matching rule determines the verdict. If no rule matches, verdict is `allow`. All matching rules are retained in provenance.
 
 ### 5.2 Default Refusal Rules (Built-in, always active)
 
 | ID | Priority | Verdict | Condition | Message |
 |---|---|---|---|---|
 | `DR-001` | 0 | refuse | command_match: `^(rm\s+-rf\s+/\|format\s+[A-Z]:\|fdisk\|mkfs\|dd\s+if=.*of=/dev/)` | Destructive system command blocked. Irreversible system damage. |
-| `DR-002` | 0 | refuse | path_match(deny): `/etc/passwd, /etc/shadow, /etc/sudoers, /System/` | System file write blocked. Protected system paths immutable. |
+| `DR-002` | 0 | refuse | path_match(deny): `/etc/passwd, /etc/shadow, /etc/sudoers, /System/` | §ystem file write blocked. Protected system paths immutable. |
 | `DR-003` | 1 | refuse | composite(and): [path_match(deny): `*.env, *credentials*, *private_key*, *.pem, *secret*`, trust_below: high] | Credential access blocked. Requires high trust. |
 | `DR-004` | 2 | refuse | composite(and): [host_match: not in allowlist, action_type: [api:call, network:connect]] | Outbound network to unknown host blocked. |
 | `DR-005` | 1 | escalate | command_match: `^git\s+(push\s+.*--force\|reset\s+--hard\|clean\s+-[fd])` | Destructive git operation requires human approval. |
@@ -210,7 +210,7 @@ Rules use the shared `RefusalRule` and `RefusalCondition` types (see `SHARED_TYP
 | `DR-007` | 3 | sandbox | composite(and): [action_type: [code:execute], trust_below: medium] | Low-trust code execution sandboxed automatically. |
 | `DR-008` | 4 | refuse | composite(and): [path_match(deny): outside project directory, action_type: [file:write]] | File write outside project directory blocked. |
 | `DR-009` | 5 | refuse | rate_exceeded: per_agent 100 computer_actions per 60s (enforcement: hard_refuse) | Rate limit exceeded. Agent throttled. |
-| `DR-010` | 0 | refuse | composite(and): [action_type: [process:kill], command_match: PID 1 or system processes] | System process termination blocked. |
+| `DR-010` | 0 | refuse | composite(and): [action_type: [process:kill], command_match: PID 1 or system processes] | §ystem process termination blocked. |
 | `DR-011` | 1 | refuse | composite(and): [action_type: [file:delete], path_match(deny): `*.git/*`] | Git internal file deletion blocked. Use git commands. |
 
 ### 5.3 Custom Rule Registration
@@ -283,13 +283,13 @@ interface ProvenanceChain {
   /**
    * Append a new entry. Computes chainHash from:
    * SHA-256(previousHash + actionId + timestamp + JSON(action) + JSON(verdict))
-   * Batched background per SHARED_TYPES.md S20 (provenance hash <100ms, batch size 100).
+   * Batched background per SHARED_TYPES.md §20 (provenance hash <100ms, batch size 100).
    */
   append(entry: Omit<ActionProvenance, 'chainHash' | 'sequenceNumber'>): Result<{ hash: string; sequenceNumber: number }>;
 
   /**
    * Verify chain integrity from genesis to head.
-   * On-demand only (see SHARED_TYPES.md S20 — not per-operation).
+   * On-demand only (see SHARED_TYPES.md §20 — not per-operation).
    */
   verify(sessionId: SessionId): Result<{ valid: boolean; brokenAt: number | null; entries: number }>;
 
@@ -329,7 +329,7 @@ interface ProvenanceQuery {
 
 ## 7. Sandboxing
 
-Sandbox structure uses the shared `SandboxConfig` (see `SHARED_TYPES.md` S12). This section defines the enforcement layer built atop that configuration.
+Sandbox structure uses the shared `SandboxConfig` (see `SHARED_TYPES.md` §12). This section defines the enforcement layer built atop that configuration.
 
 ### 7.1 SandboxEnforcer
 
@@ -377,7 +377,7 @@ interface SandboxStats {
 
 ### 7.2 Enforcement Mechanisms (by platform)
 
-- **Filesystem:** Path validation layer intercepts all fs calls. Resolves symlinks before checking against `SandboxConfig.filesystem.allowedPaths`. Blocks path traversal (`../`). Denied paths take precedence per SHARED_TYPES.md S12. On Linux: optional seccomp-bpf for kernel-level enforcement.
+- **Filesystem:** Path validation layer intercepts all fs calls. Resolves symlinks before checking against `SandboxConfig.filesystem.allowedPaths`. Blocks path traversal (`../`). Denied paths take precedence per SHARED_TYPES.md §12. On Linux: optional seccomp-bpf for kernel-level enforcement.
 - **Network:** Outbound connection hook resolves DNS then checks against `SandboxConfig.network.allowedHosts`. Denied hosts take precedence. Blocks at connect() level. On Linux: optional network namespace isolation.
 - **Process:** Command validation before exec(). Denied commands take precedence over allowed per `SandboxConfig.process`. Resource limits via platform mechanisms (ulimit/cgroups on Linux, sandbox-exec on macOS). OOM killer integration.
 - **Timeout:** Timer thread monitors sandbox lifetime per `SandboxConfig.duration`. Sends SIGTERM at `maxDuration`, SIGKILL at `hardKillAfter`. Warning event emitted at `warningAt`. All child processes killed on sandbox destroy.
@@ -392,7 +392,7 @@ Every requested computer action produces exactly one complete audit path:
 interface PreActionAuditEntry {
   readonly entryId: EventId;
   readonly actionId: EventId; // links to post-action entry
-  readonly type: 'action:before'; // AgentEvent from SHARED_TYPES.md S16
+  readonly type: 'action:before'; // AgentEvent from SHARED_TYPES.md §16
   readonly timestamp: string;
   readonly agentId: AgentId;
   readonly sessionId: SessionId;
@@ -411,7 +411,7 @@ interface PreActionAuditEntry {
 interface PostActionAuditEntry {
   readonly entryId: EventId;
   readonly actionId: EventId; // same as pre-action entry
-  readonly type: 'action:after'; // AgentEvent from SHARED_TYPES.md S16
+  readonly type: 'action:after'; // AgentEvent from SHARED_TYPES.md §16
   readonly timestamp: string;
   readonly agentId: AgentId;
   readonly sessionId: SessionId;
@@ -429,7 +429,7 @@ interface PostActionAuditEntry {
 interface RefusalAuditEntry {
   readonly entryId: EventId;
   readonly actionId: EventId;
-  readonly type: 'action:refused'; // AgentEvent from SHARED_TYPES.md S16
+  readonly type: 'action:refused'; // AgentEvent from SHARED_TYPES.md §16
   readonly timestamp: string;
   readonly agentId: AgentId;
   readonly sessionId: SessionId;
@@ -450,7 +450,7 @@ Escalation is a terminal non-execution path unless a later, separately approved 
 interface EscalationAuditEntry {
   readonly entryId: EventId;
   readonly actionId: EventId;
-  readonly type: 'governance:escalated'; // AgentEvent from SHARED_TYPES.md S16
+  readonly type: 'governance:escalated'; // AgentEvent from SHARED_TYPES.md §16
   readonly timestamp: string;
   readonly agentId: AgentId;
   readonly sessionId: SessionId;
@@ -476,7 +476,7 @@ interface EscalationAuditEntry {
 
 ### 8.6 Retention Policy
 
-Retention follows the unified policy from `SHARED_TYPES.md` S17 (`DEFAULT_RETENTION`):
+Retention follows the unified policy from `SHARED_TYPES.md` §17 (`DEFAULT_RETENTION`):
 
 | Classification of Action Target | Retention | Auto-Archive After |
 |---|---|---|
@@ -490,7 +490,7 @@ GDPR override permitted for unrestricted, internal, confidential classifications
 
 ## 9. Trust Model Integration
 
-This contract adopts the unified 5-level trust model from `SHARED_TYPES.md` S5:
+This contract adopts the unified 5-level trust model from `SHARED_TYPES.md` §5:
 
 | Trust Level | Clearance | Computer Use Capabilities |
 |---|---|---|
@@ -500,13 +500,13 @@ This contract adopts the unified 5-level trust model from `SHARED_TYPES.md` S5:
 | high | 3 | computer_use, browser_use, terminal_use, code_execution, network_access |
 | verified | 4 | All above + process:spawn, process:kill |
 
-Capability requirements per `SHARED_TYPES.md` S6.1 are enforced at the governance gate. An action requiring `computer_use` capability is refused if the agent's trust level is below `high`.
+Capability requirements per `SHARED_TYPES.md` §6.1 are enforced at the governance gate. An action requiring `computer_use` capability is refused if the agent's trust level is below `high`.
 
 ## 10. Rate Limiting
 
-Rate limits follow `SHARED_TYPES.md` S18 (`DEFAULT_RATE_LIMITS`). The applicable limits for computer actions:
+Rate limits follow `SHARED_TYPES.md` §18 (`DEFAULT_RATE_LIMITS`). The applicable limits for computer actions:
 
-| Scope | Dimension | Limit | Window | Enforcement |
+| §cope | Dimension | Limit | Window | Enforcement |
 |---|---|---|---|---|
 | per_agent | computer_actions | 100 | 60s | hard_refuse |
 | per_agent | all_operations | 1000 | 60s | hard_refuse |
@@ -517,7 +517,7 @@ Precedence: most specific scope wins (`per_agent` > `per_session` > `global`). I
 
 ## 11. Event Integration
 
-This contract emits events via the unified event system (see `SHARED_TYPES.md` S16). Events used:
+This contract emits events via the unified event system (see `SHARED_TYPES.md` §16). Events used:
 
 | Event | Emitted When |
 |---|---|
@@ -544,11 +544,11 @@ Critical event (triggers immediate session termination):
 
 ## 12. Performance Budget
 
-Per `SHARED_TYPES.md` S20:
+Per `SHARED_TYPES.md` §20:
 
 | Operation | Target | Mode |
 |---|---|---|
-| Governance check (rule evaluation + verdict) | <10ms | Synchronous, in-memory rule matching |
+| Governance check (rule evaluation + verdict) | <10ms | §ynchronous, in-memory rule matching |
 | Audit append | <50ms | Async non-blocking, eventual consistency |
 | Provenance hash | <100ms | Batched background, batch size 100 |
 | Full chain verification | On-demand | Not per-operation |
@@ -564,7 +564,7 @@ The <10ms governance check target covers: rule condition matching, trust level v
 
 ## 14. Classification Inheritance
 
-Action targets inherit classification from the Limen classification system (see `SHARED_TYPES.md` S3):
+Action targets inherit classification from the Limen classification system (see `SHARED_TYPES.md` §3):
 - File actions: classification of the file path (matched against classification rules)
 - Database actions: classification of the connection/table
 - Network actions: classification of the endpoint
@@ -577,15 +577,15 @@ Non-negotiable system properties. Violation constitutes a CRITICAL security even
 
 | # | Invariant | Verification Method |
 |---|---|---|
-| I-1 | Every computer action passes governance gate before execution | Structural: action executor requires GovernanceVerdict token to proceed |
+| I-1 | Every computer action passes governance gate before execution | §tructural: action executor requires GovernanceVerdict token to proceed |
 | I-2 | Every executed action produces exactly two audit entries (pre + post) | Post-condition check: afterAction always called in finally block |
 | I-3 | Refusal is immediate and non-negotiable --- no retry without rule change or escalation approval | Rule engine is pure function of (action, context, rules); same input = same output |
 | I-4 | Provenance chain is append-only and hash-verified | Chain append rejects entries with incorrect previousHash; no update/delete API exists |
-| I-5 | Sandbox escape is treated as CRITICAL security event | Sandbox enforcer emits event; triggers immediate session termination |
+| I-5 | §andbox escape is treated as CRITICAL security event | §andbox enforcer emits event; triggers immediate session termination |
 | I-6 | Default refusal rules (DR-*) cannot be disabled, only extended | Registry rejects unregister/disable calls where rule.builtin === true |
 | I-7 | Escalation requires explicit approval before action proceeds | Escalation handler blocks until approval received or timeout fires (auto-refuse) |
 | I-8 | Action history is immutable --- no deletion, only tombstoning with GDPR erasure | No DELETE API on provenance/audit tables; GDPR erasure replaces content with tombstone preserving chain hashes |
-| I-9 | Rate limits enforced per unified policy (SHARED_TYPES.md S18) | Atomic counter increment before action; checked in governance gate |
+| I-9 | Rate limits enforced per unified policy (SHARED_TYPES.md §18) | Atomic counter increment before action; checked in governance gate |
 | I-10 | All governance decisions are auditable and queryable via ProvenanceQuery | Every verdict produces an EventId linking to audit trail; query API covers all filter dimensions |
 
 ---
@@ -610,6 +610,17 @@ Non-negotiable system properties. Violation constitutes a CRITICAL security even
 | database:query (mutating) | dangerous | +2 if DDL, +1 if production connection |
 | api:call | monitored | +1 if POST/PUT/DELETE, +2 if non-allowlisted host |
 
+**Composite Score Formula:**
+
+```
+base_scores = { safe: 10, monitored: 30, elevated: 50, dangerous: 70, forbidden: 90 }
+composite = base_scores[category_base_risk] + sum(modifier_values)
+composite = clamp(composite, 0, 100)
+final_level = safe if composite < 20, monitored if < 40, elevated if < 60, dangerous if < 80, forbidden otherwise
+```
+
+Each modifier in the table above is an integer added to the base score. Example: `filesystem:write` (base `monitored`=30) outside project (+1×10=+10) to system path (+2×10=+20) = 30+10+20 = 60 → `elevated`. Modifier unit is 10 points per modifier level (e.g., +1 = +10 points, +2 = +20 points, -1 = -10 points).
+
 Score mapping: safe=0-19, monitored=20-39, elevated=40-59, dangerous=60-79, forbidden=80-100
 
 ## Appendix B: GDPR Erasure Protocol
@@ -622,7 +633,7 @@ When GDPR erasure is required for action history:
 5. Record erasure event in separate erasure log with legal basis
 6. Provenance chain `verify()` treats tombstoned entries as valid (hash was computed before erasure)
 
-GDPR override applicability governed by `RetentionPolicy.gdprOverride` per classification level (see `SHARED_TYPES.md` S17). Restricted and critical classifications are NOT erasable via GDPR.
+GDPR override applicability governed by `RetentionPolicy.gdprOverride` per classification level (see `SHARED_TYPES.md` §17). Restricted and critical classifications are NOT erasable via GDPR.
 
 ## Appendix C: Event Sequence Diagram
 
@@ -655,7 +666,7 @@ Agent                  Governor              RuleEngine            ProvenanceCha
 
 ## Appendix D: Rust Trait (v5 Alignment)
 
-The Rust implementation uses shared types from `SHARED_TYPES.md` S25 directly. Contract-specific Rust types:
+The Rust implementation uses shared types from `SHARED_TYPES.md` §25 directly. Contract-specific Rust types:
 
 ```rust
 /// Risk levels with Ord for comparison
@@ -753,9 +764,9 @@ pub enum GovernanceError {
 pub trait ComputerActionGovernor: Send + Sync {
     fn before_action(
         &self,
-        action: &ComputerAction,       // from SHARED_TYPES S25
+        action: &ComputerAction,       // from SHARED_TYPES §25
         meta: &ActionMeta,
-        context: &GovernanceContext,    // from SHARED_TYPES S25
+        context: &GovernanceContext,    // from SHARED_TYPES §25
     ) -> impl Future<Output = Result<GovernanceVerdict, GovernanceError>> + Send;
 
     fn after_action(
@@ -773,13 +784,19 @@ pub trait ComputerActionGovernor: Send + Sync {
     ) -> ActionRiskAssessment;
 }
 
-/// Action metadata shared across all variants
+/// Action metadata shared across all variants.
+/// NOTE: In TypeScript, ActionBase fields are embedded in each ComputerAction variant
+/// via `extends ActionBase`. In Rust, ActionMeta is a separate struct passed alongside
+/// ComputerAction. This separation exists because Rust's ownership model makes embedded
+/// base fields in enum variants ergonomically costly (each variant would duplicate 6 fields).
+/// The semantic contract is identical: every governance call receives both the action
+/// variant AND its metadata. Implementers must ensure both are populated.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActionMeta {
-    pub request_id: EventId,    // from SHARED_TYPES S25
+    pub request_id: EventId,    // from SHARED_TYPES §25
     pub timestamp: String,
-    pub agent_id: AgentId,      // from SHARED_TYPES S25
-    pub session_id: SessionId,  // from SHARED_TYPES S25
+    pub agent_id: AgentId,      // from SHARED_TYPES §25
+    pub session_id: SessionId,  // from SHARED_TYPES §25
     pub mission_id: Option<MissionId>,
     pub task_id: Option<TaskId>,
 }

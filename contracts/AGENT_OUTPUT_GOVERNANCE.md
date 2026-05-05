@@ -997,7 +997,7 @@ pub struct OutputValidationViolation {
 
 8. **Hook blocking audit.** A hook returning `proceed: false` blocks the operation. An audit entry of classification `internal` is emitted recording: hook ID, hook type, blocking reason, and the operation that was blocked. The caller receives `HOOK_BLOCKED_OPERATION` error.
 
-9. **Plugin installation governance.** Installing a plugin requires `governance_admin` capability (verified trust level). Agents below `verified` trust cannot install plugins. Hooks can be registered by any agent with `memory_write` capability.
+9. **Plugin installation governance.** Installing a plugin requires `governance_admin` capability (`verified` trust level). Agents below `verified` trust cannot install plugins. Hooks can be registered by any agent with `memory_write` capability (`low` trust or above). **Rationale for asymmetry:** Plugins are full lifecycle extensions with access to the PluginContext API (read/write/search/connect), can subscribe to all events, and persist across operations — a compromised plugin can exfiltrate data or corrupt state. Hooks are single-operation interceptors with scoped context (one operation's input/output), no API access, and a 5-second timeout — their blast radius is bounded to one operation. The trust requirement reflects this difference in blast radius.
 
 10. **Telemetry tenant isolation.** All telemetry queries are scoped to the requesting agent's tenant. No cross-tenant aggregation without explicit consent (verified via ConsentContext with purpose `'analytics'`).
 

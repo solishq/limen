@@ -7,6 +7,40 @@
 
 ---
 
+## Table of Contents
+
+- [§1 Limen Core Types](#1-limen-core-types-inherited----not-modified) — Branded IDs, Permission, OperationContext, KernelError, Result
+- [§2 CCP Types](#2-ccp-types-inherited----not-modified) — ObjectType, ClaimStatus, GroundingMode, FreshnessLabel
+- [§3 Classification Types](#3-classification-types-inherited----not-modified) — ClassificationLevel with numeric mapping
+- [§4 Phase X Branded Types](#4-phase-x-branded-types-new) — AgentBranchId, AdapterId, ConsentId, etc.
+- [§5 Trust and Clearance Model](#5-trust-and-clearance-model-unified) — 5-level trust, clearance mapping, capability unlocking
+- [§6 AgentCapability](#6-agentcapability-unified----20-values) — 20-value enum, trust-gated
+- [§7 AgentSession](#7-agentsession-unified) — Canonical session type
+- [§8 Session-to-OperationContext Mapping](#8-agentsession-to-operationcontext-mapping) — derivePermissions, factory
+- [§9 GovernanceContext](#9-governancecontext-unified) — Unified governance input
+- [§10 GovernanceVerdict](#10-governanceverdict-unified) — allow/refuse/escalate/sandbox
+- [§10.2 Memory and Belief Records](#102-canonical-memory-and-belief-records) — AgentMemoryEntry, BeliefState
+- [§10.3 AuditLogEntry](#103-auditlogentry-unified) — Unified audit record
+- [§11 ComputerAction](#11-computeraction-unified----17-variants) — ActionBase + 17 discriminated variants
+- [§12 SandboxConfig](#12-sandboxconfig-unified----rich-version) — Filesystem, Network, Process, Resource, Duration
+- [§13 RefusalRule](#13-refusalrule-unified----rich-version) — Rule + 9 condition variants
+- [§14 MergeStrategy](#14-mergestrategy-unified----with-manual-semantics) — 4 strategies + manual lifecycle
+- [§15 SessionSummary](#15-sessionsummary-unified) — Operation, governance, branch, mission counts
+- [§16 Unified Event System](#16-unified-event-system) — ~70 events, bus interface, handler type
+- [§17 Retention Policy](#17-retention-policy-unified) — Per-classification retention + defaults
+- [§18 Rate Limit Policy](#18-rate-limit-policy-unified) — Per-scope limits + defaults
+- [§19 Consent Integration](#19-consent-integration) — ConsentRequirement, ConsentableOperation
+- [§20 Performance Budget](#20-performance-budget-reconciled) — Governance <10ms, audit <50ms, provenance batched
+- [§21 AgentFramework](#21-agentframework-unified) — 6-value enum
+- [§22 TGP Types](#22-tgp-types-canonical) — Technique status, provenance, evaluation
+- [§23 Multi-Branch Merge Ordering](#23-multi-branch-merge-ordering-deterministic) — Deterministic 5-step algorithm
+- [§24 ActionDigest](#24-actiondigest-for-rate-limiting-and-history) — Lightweight action summary
+- [§25 Rust Equivalents](#25-rust-equivalents) — Full Rust type projections
+- [§26 Type Ownership Index](#26-type-ownership-index) — Cross-reference matrix
+- [§27 Import Directive](#27-import-directive) — Mandatory contract header
+
+---
+
 ## 1. Limen Core Types (Inherited --- Not Modified)
 
 These are Limen Core types that Phase X contracts reference. They are NOT Phase X types and are NOT modifiable by Phase X contracts.
