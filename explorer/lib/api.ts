@@ -1,4 +1,8 @@
-import type { GraphNode, GraphEdge, GraphStats, NodeFilter, QueryRequest } from './types';
+import type {
+  GraphNode, GraphEdge, GraphStats, NodeFilter, QueryRequest,
+  RefusalAnalytics, DailyRefusalCount,
+  BeliefVersion, BeliefBranch, MergeResult,
+} from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -36,5 +40,63 @@ export async function queryNodes(body: QueryRequest): Promise<GraphNode[]> {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Failed to query nodes: ${res.status}`);
+  return res.json();
+}
+
+// --- Refusal Analytics ---
+
+export async function fetchRefusalAnalytics(params?: {
+  tenant_scope?: string;
+  start_date?: string;
+  end_date?: string;
+}): Promise<RefusalAnalytics> {
+  const searchParams = new URLSearchParams();
+  if (params?.tenant_scope) searchParams.set('tenant_scope', params.tenant_scope);
+  if (params?.start_date) searchParams.set('start_date', params.start_date);
+  if (params?.end_date) searchParams.set('end_date', params.end_date);
+  const url = `${API_BASE}/refusals/analytics?${searchParams.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch refusal analytics: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchRefusalTrends(days?: number): Promise<DailyRefusalCount[]> {
+  const searchParams = new URLSearchParams();
+  if (days !== undefined) searchParams.set('days', String(days));
+  const url = `${API_BASE}/refusals/trends?${searchParams.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch refusal trends: ${res.status}`);
+  return res.json();
+}
+
+// --- Belief Versioning ---
+
+export async function fetchBeliefVersions(beliefId: string): Promise<BeliefVersion[]> {
+  const res = await fetch(`${API_BASE}/beliefs/${encodeURIComponent(beliefId)}/versions`);
+  if (!res.ok) throw new Error(`Failed to fetch belief versions: ${res.status}`);
+  return res.json();
+}
+
+export async function createBranch(beliefId: string, branchName: string): Promise<BeliefBranch> {
+  const res = await fetch(`${API_BASE}/beliefs/${encodeURIComponent(beliefId)}/branches`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: branchName }),
+  });
+  if (!res.ok) throw new Error(`Failed to create branch: ${res.status}`);
+  return res.json();
+}
+
+export async function mergeBranches(
+  source: string,
+  target: string,
+  resolution: string,
+): Promise<MergeResult> {
+  const res = await fetch(`${API_BASE}/beliefs/merge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source_branch: source, target_branch: target, resolution_strategy: resolution }),
+  });
+  if (!res.ok) throw new Error(`Failed to merge branches: ${res.status}`);
   return res.json();
 }

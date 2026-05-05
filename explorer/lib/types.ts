@@ -65,3 +65,48 @@ export interface QueryRequest {
   filters: NodeFilter[];
   limit?: number;
 }
+
+// --- Refusal Analytics ---
+
+export interface DailyRefusalCount {
+  day: string;
+  count: number;
+  rate: number;
+}
+
+export interface RefusalAnalytics {
+  total_refusals: number;
+  refusal_rate: number;
+  top_reasons: [string, number][];
+  by_governance_state: Record<string, number>;
+  by_tenant: Record<string, number>;
+  trend: DailyRefusalCount[];
+  governance_impact_score: number;
+}
+
+// --- Belief Versioning ---
+
+export interface BeliefVersion {
+  version_id: string;
+  belief_id: string;
+  content: unknown;
+  confidence: number;
+  governance_state: string;
+  created_at: string;
+  parent_version: string | null;
+  branch_name: string | null;
+}
+
+export interface BeliefBranch {
+  branch_id: string;
+  name: string;
+  base_version: string;
+  versions: BeliefVersion[];
+  created_at: string;
+}
+
+export interface MergeResult {
+  merged_version: BeliefVersion;
+  conflicts_resolved: number;
+  resolution_strategy: string;
+}
