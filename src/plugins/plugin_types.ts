@@ -222,3 +222,18 @@ export type PluginErrorCode =
 
 /** Maximum plugins per Limen instance (resource containment, I-P8-05) */
 export const MAX_PLUGINS = 50;
+
+// ── Phase 2.6: Hook Type Re-exports ──
+// Hook types are defined in hook_types.ts. Re-exported here for package consumers.
+export type {
+  LimenHook,
+  ClaimAssertionHook,
+  DecayHook,
+  RecallHook,
+  AssertionHookContext,
+  AssertedClaimInfo,
+  RecallBeliefView,
+  RecallQueryContext,
+  HookErrorCode,
+} from './hook_types.js';
+export { DEFAULT_HOOK_PRIORITY } from './hook_types.js';

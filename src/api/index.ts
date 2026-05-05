@@ -216,6 +216,10 @@ import { importKnowledge } from '../exchange/import.js';
 import type { LimenEventName, LimenEventHandler } from '../plugins/plugin_types.js';
 import type { ExportOptions, LimenExportDocument, ImportOptions } from '../exchange/exchange_types.js';
 
+// Phase 2.6: Computational Pipeline Hook Registry
+import { createHookRegistry } from '../plugins/hook_registry.js';
+import type { HookRegistry } from '../plugins/hook_registry.js';
+
 // ============================================================================
 // Vector Search Hydration Helpers (Task 4: compute real values instead of hardcoding)
 // ============================================================================
@@ -253,6 +257,7 @@ export type { Limen, LimenConfig, LimenLogEvent, LimenLogger } from './interface
 export { LimenError } from './errors/limen_error.js';
 export type { LimenErrorCode } from './interfaces/api.js';
 export { resolveDefaults, detectProviders, resolveMasterKey, resolveDataDir } from './defaults.js';
+export { DEFAULT_HOOK_PRIORITY } from '../plugins/hook_types.js';
 
 // Re-export all public API types consumers need
 export type {
@@ -299,6 +304,12 @@ export type {
   LimenPlugin, LimenEventName, LimenEventHandler, LimenEvent,
   PluginMeta, PluginContext, PluginApi, PluginLogger,
   PluginErrorCode,
+  // Phase 2.6: Hook types
+  LimenHook,
+  ClaimAssertionHook, DecayHook, RecallHook,
+  AssertionHookContext, AssertedClaimInfo,
+  RecallBeliefView, RecallQueryContext,
+  HookErrorCode,
   ExportOptions, ExportFormat,
   LimenExportDocument, ExportedClaim, ExportedRelationship, ExportedEvidenceRef,
   ExportMetadata,
@@ -892,12 +903,27 @@ export async function createLimen(
   // getConsentRegistry getter. This mutable binding captures the eventual reference.
   let lazyConsentRegistry: ReturnType<typeof createConsentRegistry> | null = null;
 
+  // Phase 2.6: Create and register computational pipeline hooks (before claimSystem)
+  const hookRegistry: HookRegistry = createHookRegistry({
+    log: (level, category, message, context) => {
+      log({ level: level as 'debug' | 'info' | 'warn' | 'error', category, message, ...(context ? { context } : {}) });
+    },
+  });
+  if (resolvedConfig.hooks && resolvedConfig.hooks.length > 0) {
+    const hookResult = hookRegistry.registerAll(resolvedConfig.hooks);
+    if (!hookResult.ok) {
+      log({ level: 'error', category: 'hook', message: `Hook registration failed: ${hookResult.error.message}` });
+    }
+  }
+
   // CCP claim system (closure-local — DC-P4-406, C-SEC-05)
   // Sprint 1: Real evidence validator replaces accept-all stub (CCP-01, CCP-02)
   const evidenceValidator = createEvidenceValidator();
   const capabilityResultScopeValidator = createCapabilityResultScopeValidator();
 
   const claimSystem = createClaimSystem({
+    // Phase 2.6: Hook registry for assertion/decay interception
+    hookRegistry,
     evidenceValidator,
     audit: kernel.audit,
     eventBus: kernel.events,
@@ -1187,6 +1213,8 @@ export async function createLimen(
       // Ensures recall() returns decay-adjusted effectiveConfidence matching search().
       ...(config?.cognitive?.stability ? { stabilityConfig: config.cognitive.stability } : {}),
       ...(config?.cognitive?.freshness ? { freshnessThresholds: config.cognitive.freshness } : {}),
+      // Phase 2.6: Wire hook registry for decay/recall interception
+      hookRegistry,
     });
 
     log({ level: 'info', category: 'init', message: 'Convenience API initialized', context: { missionId: convInit.missionId, agentId: String(convInit.agentId) } });
@@ -1447,6 +1475,7 @@ export async function createLimen(
       log({ level: 'error', category: 'plugin', message: `Plugin installation failed: ${installResult.error.message}` });
     }
   }
+
 
   // V4-AUD-003: Version derived from package.json, never hardcoded
   const limenVersion = '4.0.0';

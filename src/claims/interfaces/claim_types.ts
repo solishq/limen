@@ -692,6 +692,8 @@ export interface ClaimSystem {
  * Includes existing v3.2 stores for polymorphic FK validation.
  */
 export interface ClaimSystemDeps {
+  /** Phase 2.6: Hook registry for computational pipeline interception. Optional. */
+  readonly hookRegistry?: import('../../plugins/hook_registry.js').HookRegistry;
   /** Evidence source validation — polymorphic FK lookup */
   readonly evidenceValidator: EvidenceSourceValidator;
   /** Audit trail for I-03 atomic auditing */
