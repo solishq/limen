@@ -1,7 +1,7 @@
-# Audit & Visualization Schema Contract v1.1.0
+# Audit & Visualization Schema Contract v1.2.0
 
 **Status:** RATIFIED DESIGN — Pending Implementation
-**Governing:** CDM v2.0 + Contract Compliance v2.0
+**Governing:** CDM v2.1 + Contract Compliance v2.1
 **Scope:** Audit log schema + visualization contracts for agent activity
 
 > **Shared Types:** All cross-contract types referenced in this document are defined in `contracts/SHARED_TYPES.md`. This contract does NOT redefine any shared type. Local types are contract-specific and not used by other contracts.

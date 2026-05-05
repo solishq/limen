@@ -1,9 +1,9 @@
-# Agent Memory Bridge Contract v1.1.0
+# Agent Memory Bridge Contract v1.2.0
 
 **Status:** RATIFIED DESIGN — Pending Implementation
-**Governing:** CDM v2.0 + Contract Compliance v2.0
+**Governing:** CDM v2.1 + Contract Compliance v2.1
 **Scope:** Universal agent-to-Limen memory interface
-**Hash:** Pending (computed at ratification)
+**Contract Hash:** Tracked in `contracts/phase-x.contracts.json`
 **Date:** 2026-05-05
 
 **Shared Types:** All cross-contract types referenced in this document are defined in `contracts/SHARED_TYPES.md`. This contract does NOT redefine any shared type. Local types are contract-specific and not used by other contracts.
@@ -399,10 +399,10 @@ Rust struct equivalents for local-only types (`AgentRecallQuery`, `RecallOptions
 | LimenAgentClient Method | Limen Internal | Gate | Audit Event | Consent Gate |
 |---|---|---|---|---|
 | `remember` | SC-11 `assert_claim` | Governance + confidence ceiling + classification + **consent check** | `memory:created` | Required when content matches personal data predicates (`personal.*`, `user.*`, `identity.*`) or classification is `restricted`/`critical` |
-| `recall` | SC-13 `query_claims` + `search_claims` + FSRS decay | Classification clearance (per unified trust/clearance model §5) | `memory:recalled` (sampled) | No |
+| `recall` | SC-13 `query_claims` with exact/prefix/full-text query modes + FSRS decay | Classification clearance (per unified trust/clearance model §5) | `memory:recalled` (sampled) | No |
 | `forget` | `retract_claim` + cascade evaluation | Governance + ownership | `memory:forgotten` | No |
 | `getBelief` | SC-13 + evidence query + relationship query | Classification clearance (per unified trust/clearance model §5) | None (read-only) | No |
-| `relateBelief` | SC-12 `declare_relationship` | Governance + claim ownership | `governance:allowed` | No |
+| `relateBelief` | SC-12 `relate_claims` | Governance + claim ownership | `governance:allowed` | No |
 | `createBranch` | SC-11 with NonAuthoritativeContext isolation | Session valid + quota | `memory:branch_created` | No |
 | `mergeBranches` | SC-11 (new authoritative claims) + SC-12 (relationships) + retract branch claims | Governance + conflict resolution | `memory:branch_merged` | No |
 | `discardBranch` | Tombstone all branch claims | Session valid + branch ownership | `memory:branch_discarded` | No |

@@ -1,7 +1,7 @@
-# Agent Lifecycle Management Contract v1.1.0
+# Agent Lifecycle Management Contract v1.2.0
 
 **Status:** RATIFIED DESIGN -- Pending Implementation
-**Governing:** CDM v2.0 + Contract Compliance v2.0
+**Governing:** CDM v2.1 + Contract Compliance v2.1
 **Scope:** Agent registration, capability evolution, consent governance, and knowledge exchange
 **Classification:** internal
 
@@ -933,6 +933,6 @@ For existing agents (registered via the thin registration API):
 
 ---
 
-**Contract Hash:** Pending computation on ratification
-**Ratified:** Pending
-**Signatories:** Pending
+**Contract Hash:** Tracked in `contracts/phase-x.contracts.json`
+**Ratified:** Design-ratified; implementation ratification requires manifest hash verification.
+**Signatories:** Founder approval record tracked outside the contract text.

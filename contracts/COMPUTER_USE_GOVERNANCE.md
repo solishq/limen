@@ -1,9 +1,9 @@
-# Computer Use Governance Contract v2.0.0
+# Computer Use Governance Contract v2.1.0
 
 **Status:** RATIFIED DESIGN --- Pending Implementation
-**Governing:** CDM v2.0 + Contract Compliance v2.0
+**Governing:** CDM v2.1 + Contract Compliance v2.1
 **Scope:** Governance, refusal, and audit for all AI agent computer actions
-**Hash:** Pending (computed at implementation gate)
+**Contract Hash:** Tracked in `contracts/phase-x.contracts.json`
 
 > **Shared Types:** All cross-contract types referenced in this document are defined in `contracts/SHARED_TYPES.md`. This contract does NOT redefine any shared type. Local types are contract-specific and not used by other contracts.
 
@@ -195,7 +195,7 @@ interface AuditEntry {
 
 ### 5.1 Rule Evaluation
 
-Rules use the shared `RefusalRule` and `RefusalCondition` types (see `SHARED_TYPES.md` S13). Evaluation proceeds in priority order (lower number = higher priority). First matching rule determines the verdict. If no rule matches, verdict is `allow`.
+Rules use the shared `RefusalRule` and `RefusalCondition` types (see `SHARED_TYPES.md` S13). Evaluation proceeds in priority order (lower number = higher priority); specificity is the deterministic tie-breaker within equal priority (exact target before glob before wildcard). First matching rule determines the verdict. If no rule matches, verdict is `allow`. All matching rules are retained in provenance.
 
 ### 5.2 Default Refusal Rules (Built-in, always active)
 
@@ -384,7 +384,7 @@ interface SandboxStats {
 
 ## 8. Audit Requirements
 
-Every computer action produces exactly two audit entries:
+Every requested computer action produces exactly one complete audit path:
 
 ### 8.1 Pre-Action Audit Entry
 
@@ -446,9 +446,8 @@ interface RefusalAuditEntry {
 
 - Both pre and post entries linked by shared `actionId`
 - Both hash-chained into Limen's append-only audit trail via `chainHash`
-- Pre-action entry written BEFORE action execution begins
-- Post-action entry written AFTER action execution completes (or fails)
-- If action is refused, only a RefusalAuditEntry is produced (no post-action)
+- Allowed or sandboxed executed actions produce `action:before` before execution and `action:after` after execution completes or fails
+- Refused or escalated non-executed actions produce exactly one terminal refusal/escalation audit entry and no post-action entry
 - Minimal pre/post audit entries are durability-critical. Pre-action append completes before execution begins; post-action append completes before success is returned. Hash projection and visualization fanout may run asynchronously after durable append.
 
 ### 8.5 Retention Policy
@@ -546,7 +545,7 @@ Action targets inherit classification from the Limen classification system (see 
 - Database actions: classification of the connection/table
 - Network actions: classification of the endpoint
 - Browser actions: classification of the URL/domain
-- If target classification > agent clearance (derived from trust level via `TRUST_TO_CLEARANCE`), action is REFUSED
+- If target classification > agent clearance (derived from trust level via `TRUST_TO_CLEARANCE`), action verdict is `'refuse'`
 
 ## 15. Invariants
 
@@ -609,7 +608,7 @@ Agent                  Governor              RuleEngine            ProvenanceCha
   |-- requestAction() -->|                      |                      |                    |
   |                      |-- evaluateRisk() --->|                      |                    |
   |                      |<-- RiskAssessment ---|                      |                    |
-  |                      |-- evaluate() ------->|                      |                    |
+  |                      |-- beforeAction() ---->|                      |                    |
   |                      |<-- Verdict ----------|                      |                    |
   |                      |                      |                      |                    |
   |                      |--- [if refuse] ----->|                      |                    |
@@ -781,3 +780,4 @@ pub struct AuditEntry {
 |---|---|---|
 | 1.0.0 | 2026-05-05 | Initial ratification. |
 | 2.0.0 | 2026-05-05 | Deduplicated to reference SHARED_TYPES.md. Adopted unified 5-level trust model, unified retention, unified rate limits, unified event system, unified performance budget. Removed all type redefinitions. |
+| 2.1.0 | 2026-05-05 | Aligned CDM v2.1, canonical verdict naming, refusal/audit cardinality, and manifest hash binding. |

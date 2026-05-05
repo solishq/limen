@@ -1,9 +1,10 @@
 # Phase X: AI Agent Integration Layer — Architecture Overview
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Status:** RATIFIED DESIGN — Pending Implementation
-**Governing:** CDM v2.0 + Contract Compliance v2.0
+**Governing:** CDM v2.1 + Contract Compliance v2.1
 **Date:** May 5, 2026
+**Phase 8 Gate:** `contracts/phase-x.contracts.json` is the machine-readable compliance authority for contract versions, hashes, HB-37/HB-38 coverage, LCI, and monotonicity.
 
 ## 1. Vision
 
@@ -95,10 +96,10 @@ Limen becomes the universal governed memory and audit layer for all AI coding ag
 
 1. Agent requests computer action (file write, command execution, network call) through adapter
 2. Adapter constructs `ComputerAction` object with action type, target, parameters, and requesting agent identity
-3. `ComputerActionGovernor.evaluate()` receives the action with full `OperationContext`
+3. `ComputerActionGovernor.beforeAction()` receives the action with full `OperationContext`
 4. Governor loads applicable `RefusalRule` set from governance configuration (matched by action type, target pattern, agent clearance)
-5. Each matching rule evaluates: if ANY rule triggers, governor produces `GovernanceVerdict.REFUSED` with refusal reasons and stores a v5 Refusal node with provenance edge to triggering rule
-6. If no rules trigger: governor produces `GovernanceVerdict.PERMITTED`, sandbox constraints are applied (filesystem paths, network hosts, resource limits)
+5. Each matching rule evaluates: if ANY rule triggers, governor produces `GovernanceVerdict` with verdict `'refuse'` or `'escalate'` and stores a v5 Refusal node with provenance edge to triggering rule
+6. If no rule triggers: governor produces verdict `'allow'`; if sandbox constraints apply, verdict is `'sandbox'` with filesystem paths, network hosts, and resource limits
 7. Action executes within sandbox boundaries; result captured
 8. Audit entry recorded: action, verdict, execution result, duration, sandbox constraints applied
 9. Hook System fires `action:after` (permitted) or `action:refused` (denied)
@@ -145,7 +146,7 @@ Limen becomes the universal governed memory and audit layer for all AI coding ag
 ### 3.1 CCP (Claim Protocol) Integration
 
 - `LimenAgentClient.remember()` delegates to SC-11 (`assert_claim`) with `grounding_mode: runtime_witness` and agent-supplied reasoning
-- `LimenAgentClient.recall()` delegates to SC-13 (`query_claims`) combined with `search_claims` for full-text matches; results post-processed with FSRS decay
+- `LimenAgentClient.recall()` delegates to SC-13 (`query_claims`) with exact/prefix filters; full-text recall is a query-mode of SC-13, not a separate syscall; results are post-processed with FSRS decay
 - `LimenAgentClient.forget()` delegates to `retract_claim` with reason propagation (incorrect, superseded, expired, manual)
 - `LimenAgentClient.relateBelief()` delegates to SC-12 (`relate_claims`) supporting all four relationship types
 - Governance ceiling enforced at client level: ungrounded claims capped at 0.7 confidence; evidence-grounded claims may reach 0.95
@@ -165,7 +166,7 @@ Limen becomes the universal governed memory and audit layer for all AI coding ag
 - Agent adapters may register as Limen plugins at install time, receiving a hook context with on/off/api/logger
 - Phase X events use the canonical `AgentEvent` union in `SHARED_TYPES.md`: `action:before`, `action:after`, `action:refused`, `session:started`, `session:ended`, `memory:created`, `technique:promoted`, `mission:state_changed`, `context:eviction_complete`, and lifecycle events
 - Hook subscriptions follow existing plugin lifecycle: activated on plugin enable, deactivated on plugin disable
-- Adapters receive Limen core events (`claim:asserted`, `claim:retracted`, `relationship:created`) through the hook bridge for reactive behavior
+- Adapters may observe Limen Core hook events through the hook bridge for reactive behavior. Core event names are not Phase X `AgentEvent` values; the bridge maps them to canonical Phase X events before they enter the agent event bus: claim assertion -> `memory:created`, claim retraction -> `memory:forgotten`, relationship creation -> `governance:allowed` with relationship metadata.
 - Hook handlers cannot suppress audit-bound events; handler failure is captured as audit metadata and does not block the originating operation
 
 ### 3.4 Audit Trail Integration
@@ -183,7 +184,7 @@ Limen becomes the universal governed memory and audit layer for all AI coding ag
 - Refusal edges (EdgeType.Refusal) connect the refused action node to the triggering governance rule node
 - Refusal history is queryable via the belief graph visualization layer: filter by agent, time range, rule category, or action type
 - Refusal rules are loaded from governance configuration at governor initialization and hot-reloadable via the Hook System configuration channel. This notification is not an `AgentEvent` and does not enter the audit event bus unless it changes an active rule version.
-- Rule evaluation order: most-specific first (exact path match before glob pattern before wildcard); first-match-refuses semantics with all matching rules recorded for provenance completeness
+- Rule evaluation order: priority ascending first; specificity is the deterministic tie-breaker within equal priority (exact path before glob before wildcard). The first matching rule determines the verdict while all matching rules are recorded for provenance completeness.
 - Refusal provenance includes: rule ID, rule version, evaluation timestamp, action hash, agent identity — sufficient for full reconstruction
 
 ### 3.6 Belief Versioning Integration
@@ -208,7 +209,7 @@ Limen becomes the universal governed memory and audit layer for all AI coding ag
 ### 4.1 Identity and Authentication
 
 - Every agent receives an `AgentId` (branded string type: `type AgentId = string & { __brand: 'AgentId' }`) assigned at adapter registration
-- `OperationContext` threads agent identity, session ID, clearance level, and timestamp through every operation — no operation executes without a populated context
+- `OperationContext` threads agent identity, session ID, and clearance level through every operation; timestamps come from the injected TimeProvider at the operation/audit layer — no operation executes without a populated context
 - Clearance levels (unrestricted, internal, confidential, restricted, critical) gate access: agents cannot read or write claims above their clearance
 - Session-scoped permissions: capabilities declared at session start are the maximum permissions for that session; no runtime escalation
 - Adapter registration requires capability declaration: the set of operations the adapter may invoke on behalf of its agents

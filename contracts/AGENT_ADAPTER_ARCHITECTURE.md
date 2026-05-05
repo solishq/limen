@@ -1,7 +1,7 @@
-# Agent Adapter Architecture Contract v2.0.0
+# Agent Adapter Architecture Contract v2.1.0
 
 **Status:** RATIFIED DESIGN -- Pending Implementation
-**Governing:** CDM v2.0 + Contract Compliance v2.0
+**Governing:** CDM v2.1 + Contract Compliance v2.1
 **Scope:** Pluggable adapter model for agent framework integration
 
 > **Shared Types:** All cross-contract types referenced in this document are defined in `contracts/SHARED_TYPES.md`. This contract does NOT redefine any shared type. Local types are contract-specific and not used by other contracts.
@@ -614,7 +614,7 @@ type AdapterErrorCode =
   | 'TRANSLATION_FAILED'
   | 'UNKNOWN_TOOL'
   | 'CAPABILITY_NOT_DECLARED'
-  | 'GOVERNANCE_REFUSED'
+  | 'GOVERNANCE_REFUSAL'
   | 'SESSION_NOT_FOUND'
   | 'MAX_SESSIONS_EXCEEDED'
   | 'TRUST_LEVEL_INSUFFICIENT'
@@ -644,7 +644,7 @@ Agent Framework -> Adapter.translateToolCall(toolCall)
       Adapter -> Governor.beforeAction(ComputerAction)
         Governor evaluates against RefusalRules, RateLimitPolicy, trust level
         Returns GovernanceVerdict (See SHARED_TYPES.md §10)
-      If verdict is 'refuse': return Result.err(GOVERNANCE_REFUSED)
+      If verdict is 'refuse': return Result.err(GOVERNANCE_REFUSAL)
       If verdict is 'sandbox': execute within SandboxConfig constraints
       If verdict is 'escalate': return Result.err with escalation info
     Adapter -> LimenAgentClient.<operation>()

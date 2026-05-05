@@ -1,7 +1,7 @@
-# Agent Context Governance Contract v1.1.0
+# Agent Context Governance Contract v1.2.0
 
 **Status:** RATIFIED DESIGN --- Pending Implementation
-**Governing:** CDM v2.0 + Contract Compliance v2.0
+**Governing:** CDM v2.1 + Contract Compliance v2.1
 **Scope:** Context budget management, importance-based eviction, and working memory governance for AI agents
 **Classification:** QAL-3 (agent operational integrity)
 
@@ -948,6 +948,8 @@ pub struct ContextBeliefQuery {
 
 ## 15. Assembly Algorithm
 
+Token counting uses the canonical `TokenEstimator` contract in `SHARED_TYPES.md` §20.1. The estimator uses `provider_native` when the active model exposes a tokenizer, otherwise `o200k_base` for modern OpenAI-compatible models, otherwise `cl100k_base`. Approximate estimates MUST carry `varianceUpperBoundPct <= 10`; items whose upper-bound estimate exceeds remaining budget are excluded and counted in `evictedForAssembly`. Tokenization failure is treated as overflow, never as zero tokens.
+
 ```
 FUNCTION assembleContext(options):
   sections = []
@@ -965,7 +967,11 @@ FUNCTION assembleContext(options):
   IF options.includeWorkingMemory:
     wmEntries = loadWorkingMemory(currentNamespace) SORTED BY priority DESC, updatedAt DESC
     FOR entry IN wmEntries:
-      tokens = estimateTokens(entry)
+      tokenEstimate = TokenEstimator.estimate(entry, activeEncoding)
+      tokens = tokenEstimate.tokens
+      IF tokenEstimate.overflow:
+        evictedForAssembly++
+        CONTINUE
       IF tokens <= remainingBudget:
         sections.push(entry as section at position=2)
         remainingBudget -= tokens
@@ -975,7 +981,11 @@ FUNCTION assembleContext(options):
   IF options.includeBeliefs:
     candidates = rankBeliefs(options.beliefQuery, options.prioritizeRecent, options.includePinnedOnly)
     FOR claim IN candidates SORTED BY importance DESC:
-      tokens = estimateTokens(claim)
+      tokenEstimate = TokenEstimator.estimate(claim, activeEncoding)
+      tokens = tokenEstimate.tokens
+      IF tokenEstimate.overflow:
+        evictedForAssembly++
+        CONTINUE
       IF tokens <= remainingBudget:
         sections.push(claim as section at position=3+)
         remainingBudget -= tokens
@@ -1042,7 +1052,7 @@ Operations on claims with classification higher than the agent's clearance level
 
 ---
 
-**Contract Hash:** Pending (computed on ratification)
+**Contract Hash:** Tracked in `contracts/phase-x.contracts.json`
 **Authored:** 2026-05-05
 **Revised:** 2026-05-05 (v1.1.0 --- shared types deduplication, unified event system, governance gate references)
 **Supersedes:** v1.0.0

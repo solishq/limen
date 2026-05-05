@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "1.0.0",
+  "manifestVersion": "1.0.0",
+  "generatedAt": "2026-05-05T09:30:00+01:00",
+  "governing": "CDM v2.1 + Contract Compliance v2.1",
+  "phase": "Phase X",
+  "status": "builder_remediated_pending_breaker",
+  "hardBansCovered": {
+    "HB-37": "No defense-set regression without compensating control. defenseSetAfter is asserted to be a superset of defenseSetBefore.",
+    "HB-38": "No interface change without contract update. All public contract files are versioned and content-hashed in this manifest."
+  },
+  "contracts": [
+    { "path": "contracts/SHARED_TYPES.md", "contractVersion": "1.1.0", "sha256": "6e48bdb51fd0fbeb3830f7c26f46e587b5b565f1ed90afd7acc9747f57cff28e", "role": "canonical_shared_types" },
+    { "path": "contracts/AGENT_MEMORY_BRIDGE.md", "contractVersion": "1.2.0", "sha256": "fba93429cbb8bc8072e920e2c2446cfaf1c9fd99f48ee2e157beb039ccfbd1bb", "role": "memory_bridge" },
+    { "path": "contracts/COMPUTER_USE_GOVERNANCE.md", "contractVersion": "2.1.0", "sha256": "d1600de34526d13a069fdb1652960ffc061a15fd6706012a8cccc97726566083", "role": "computer_use_governance" },
+    { "path": "contracts/AUDIT_VISUALIZATION_SCHEMA.md", "contractVersion": "1.2.0", "sha256": "4aeb64cd2c61532643a8e84f375cf8237be5d243b8b5de9a6a5460da1836b322", "role": "audit_visualization" },
+    { "path": "contracts/AGENT_ADAPTER_ARCHITECTURE.md", "contractVersion": "2.1.0", "sha256": "fc00a6d68963290bcabb828bd2b07212c5377491e1360363460f646297dbe321", "role": "adapter_architecture" },
+    { "path": "contracts/AGENT_INTELLIGENCE_BRIDGE.md", "contractVersion": "1.2.0", "sha256": "f8185d9bce328bcd0fb6a34ba57fdde1885c327724c4cdb7b31c27ee3a33e8f3", "role": "intelligence_bridge" },
+    { "path": "contracts/AGENT_EXECUTION_GOVERNANCE.md", "contractVersion": "1.2.0", "sha256": "5a7d2d7ced675d45b142afd4bc49345e848f2d91498183968b327427494f0fbd", "role": "execution_governance" },
+    { "path": "contracts/AGENT_CONTEXT_GOVERNANCE.md", "contractVersion": "1.2.0", "sha256": "86320dd1b4a550d471c72c43f25981195630be78c53839997085c2c69e7f5b8d", "role": "context_governance" },
+    { "path": "contracts/AGENT_LIFECYCLE_MANAGEMENT.md", "contractVersion": "1.2.0", "sha256": "8707b6aed58f404227009cae8fed12f5802adc6802c0563fc1bf9b3992eff6ce", "role": "lifecycle_management" },
+    { "path": "docs/PHASE_X_ARCHITECTURE_OVERVIEW.md", "contractVersion": "1.2.0", "sha256": "d54ad2c94a73338539c57c9633dc7f72fae8de138676f577796aee5053be6ed2", "role": "architecture_overview" }
+  ],
+  "defenseSetBefore": [
+    "canonical_shared_types",
+    "five_level_trust_mapping",
+    "operation_context_session_mapping",
+    "durable_audit_before_success",
+    "consent_before_memory_or_transfer",
+    "unified_event_bus",
+    "default_rate_limits",
+    "deterministic_merge_ordering"
+  ],
+  "defenseSetAfter": [
+    "canonical_shared_types",
+    "five_level_trust_mapping",
+    "operation_context_session_mapping",
+    "durable_audit_before_success",
+    "consent_before_memory_or_transfer",
+    "unified_event_bus",
+    "default_rate_limits",
+    "deterministic_merge_ordering",
+    "cdm_v2_1_phase8_manifest",
+    "hb37_defense_set_monotonicity",
+    "hb38_interface_contract_binding",
+    "lci_tau_closure_proof",
+    "canonical_computer_action_verdicts",
+    "canonical_audit_cardinality",
+    "canonical_token_estimator",
+    "syscall_reference_alignment",
+    "operation_context_timestamp_boundary"
+  ],
+  "monotonicityProof": {
+    "claim": "defenseSetAfter is a strict superset of defenseSetBefore; no defense from the previous remediated suite is removed or weakened.",
+    "setRelation": "defenseSetAfter ⊇ defenseSetBefore",
+    "removedDefenses": [],
+    "addedDefenses": [
+      "cdm_v2_1_phase8_manifest",
+      "hb37_defense_set_monotonicity",
+      "hb38_interface_contract_binding",
+      "lci_tau_closure_proof",
+      "canonical_computer_action_verdicts",
+      "canonical_audit_cardinality",
+      "canonical_token_estimator",
+      "syscall_reference_alignment",
+      "operation_context_timestamp_boundary"
+    ],
+    "closure": "Any future interface, defense, or contract hash change must update this manifest before certification."
+  },
+  "lci": {
+    "name": "Phase X Contract Integrity",
+    "assertion": "For every Phase X agent operation, canonical types, governance gates, consent checks, rate limits, and audit obligations compose into one closed contract family with no authority expansion outside Limen Core.",
+    "tau": "tau_PhaseX = CanonicalTypes ∩ CorePermissionMapping ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩ RateLimit ∩ LifecycleState",
+    "tauDerivation": [
+      "CanonicalTypes: all shared cross-contract types are defined only in SHARED_TYPES.md.",
+      "CorePermissionMapping: Phase X permissions are limited to Limen Core Permission strings.",
+      "GovernanceGate: every mutating operation takes OperationContext or GovernanceContext before mutation.",
+      "ConsentGate: personal data storage, transfer, and export require active consent before persistence/export.",
+      "AuditPath: allowed/sandboxed actions have before+after entries; refused/escalated actions have one terminal entry.",
+      "EventBus: Phase X emits only AgentEvent values from SHARED_TYPES.md.",
+      "RateLimit: DEFAULT_RATE_LIMITS are inherited and may only be tightened.",
+      "LifecycleState: terminal and trust state transitions are explicit and audited."
+    ],
+    "closureProof": {
+      "typeClosure": "All cross-contract type names are resolved through SHARED_TYPES.md or are contract-local.",
+      "authorityClosure": "AgentSession maps to OperationContext without adding permissions outside derivePermissions.",
+      "eventClosure": "Core hook events are translated before entering AgentEventBus.",
+      "auditClosure": "No successful side effect is returned before the required durable audit path exists.",
+      "evolutionClosure": "HB-38 requires any interface change to update the owning contract and this manifest hash."
+    }
+  },
+  "phase8Gate": {
+    "machineReadable": true,
+    "versioned": true,
+    "hashesPresent": true,
+    "hb37Covered": true,
+    "hb38Covered": true,
+    "lciPresent": true,
+    "monotonicityPresent": true
+  }
+}

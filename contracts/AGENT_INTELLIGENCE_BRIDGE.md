@@ -1,10 +1,10 @@
-# Agent Intelligence Bridge Contract v1.1.0
+# Agent Intelligence Bridge Contract v1.2.0
 
 **Status:** RATIFIED DESIGN — Pending Implementation
-**Governing:** CDM v2.0 + Contract Compliance v2.0
+**Governing:** CDM v2.1 + Contract Compliance v2.1
 **QAL:** 3 (agent autonomy substrate — incorrect behavior degrades learning quality)
 **Scope:** Technique learning, cognitive health, and self-healing for AI agents
-**Hash:** pending-implementation
+**Contract Hash:** Tracked in `contracts/phase-x.contracts.json`
 **Depends:** TGP v1.0, Cognitive Engine, CCP, FSRS Decay Model
 
 **Shared Types:** All cross-contract types referenced in this document are defined in `contracts/SHARED_TYPES.md`. This contract does NOT redefine any shared type. Local types are contract-specific and not used by other contracts.
@@ -760,20 +760,20 @@ pub trait AgentIntelligenceBridge: Send + Sync {
 |---|---|---|---|
 | `extractTechnique` | SC-11 (assert_claim) with `technique.*` predicate | TGP S4 | Creates claim with status=candidate |
 | `evaluateTechnique` | TGP evaluation record + confidence update via SC-14 | TGP S6 | Updates success_rate, may trigger transition |
-| `promoteTechnique` | TGP promotion decision + SC-14 status field update | TGP S7 | Verifies thresholds server-side |
-| `suspendTechnique` | SC-14 status transition + audit claim | TGP S5 (I2) | Records suspension reason |
-| `retireTechnique` | SC-14 terminal transition + audit claim | TGP S5 (I2) | Irreversible |
+| `promoteTechnique` | TGP promotion decision + SC-11 status claim + SC-12 supersedes edge | TGP S7 | Verifies thresholds server-side |
+| `suspendTechnique` | SC-11 status claim + SC-12 supersedes edge | TGP S5 (I2) | Records suspension reason |
+| `retireTechnique` | SC-11 terminal status claim + SC-12 supersedes edge | TGP S5 (I2) | Irreversible |
 | `getActiveTechniques` | SC-13 (query_claims) with technique filter | TGP + CCP | Filtered by agent context |
 | `transferTechnique` | SC-11 (new claim in target) + relationship | TGP S8 | Confidence capped at 0.5 |
 | `getHealthReport` | Cognitive Engine health scan (read-only aggregation) | Cognitive S3 | Point-in-time snapshot |
-| `consolidate` | Cognitive Engine merge + SC-15 (relationships) | Cognitive S4 | Creates supersedes relationships |
+| `consolidate` | Cognitive Engine merge + SC-12 `relate_claims` | Cognitive S4 | Creates supersedes relationships |
 | `detectGaps` | Cognitive Engine gap analysis (predicate coverage) | Cognitive S5 | Advisory only |
 | `getNarrative` | Cognitive Engine thread construction from relationships | Cognitive S6 | Derived from claim graph |
 | `getImportanceMap` | ImportanceScore computation per claim | Cognitive S7 | Uses access patterns + graph |
 | `triggerSelfHeal` | Cascade + repair + conflict resolution pipeline | CCP + Cognitive | Composite operation |
 | `invalidateEvidence` | Evidence retraction -> cascade to dependent claims | CCP S9 | Deterministic cascade |
 | `repairStaleBeliefs` | Bulk archive/refresh of aged claims via FSRS check | CCP + FSRS | Strategy-dependent behavior |
-| `resolveConflict` | SC-15 (supersedes) + optional SC-12 (retract) | CCP S8 | Creates audit trail |
+| `resolveConflict` | SC-12 `relate_claims` (supersedes) + optional `retract_claim` | CCP S8 | Creates audit trail |
 
 ---
 

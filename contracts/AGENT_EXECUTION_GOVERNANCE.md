@@ -1,7 +1,7 @@
-# Agent Execution Governance Contract v1.1.0
+# Agent Execution Governance Contract v1.2.0
 
 **Status:** RATIFIED DESIGN --- Pending Implementation
-**Governing:** CDM v2.0 + Contract Compliance v2.0
+**Governing:** CDM v2.1 + Contract Compliance v2.1
 **Scope:** Mission lifecycle, task orchestration, budget governance, and execution scheduling for AI agents
 **Classification:** internal
 

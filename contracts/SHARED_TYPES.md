@@ -1,8 +1,9 @@
-# Phase X Shared Types Registry v1.0.0
+# Phase X Shared Types Registry v1.1.0
 
 **Status:** RATIFIED --- Canonical Authority for All Phase X Contracts
-**Governing:** CDM v2.0 + Contract Compliance v2.0
+**Governing:** CDM v2.1 + Contract Compliance v2.1
 **Rule:** Types defined here are the SOLE definitions. All 8 Phase X contracts reference this document. No contract may redefine any shared type listed here. Local types are contract-specific and not used by other contracts.
+**Phase 8 Gate:** Machine-readable status, HB-37/HB-38 coverage, LCI assertion, and monotonicity proof are recorded in `contracts/phase-x.contracts.json`.
 
 ---
 
@@ -1057,6 +1058,26 @@ export interface PerformanceBudget {
 
 This resolves the physical impossibility: governance is fast (in-memory rule matching), the minimal audit record is durably appended before success is returned, and expensive provenance hashing/projection work is batched.
 
+### 20.1 TokenEstimator Contract (UNIFIED)
+
+```typescript
+export type TokenEncoding = 'cl100k_base' | 'o200k_base' | 'provider_native';
+
+export interface TokenEstimate {
+  readonly tokens: number;
+  readonly encoding: TokenEncoding;
+  readonly exact: boolean;
+  readonly varianceUpperBoundPct: number;
+  readonly overflow: boolean;
+}
+
+export interface TokenEstimator {
+  estimate(input: string | Readonly<Record<string, unknown>>, encoding: TokenEncoding): TokenEstimate;
+}
+```
+
+**Validation rules:** `tokens` MUST be a finite non-negative integer. `varianceUpperBoundPct` MUST be <= 10 for approximate estimates and 0 for exact estimates. If tokenization fails or the estimate exceeds the caller budget by more than the variance bound, `overflow` MUST be true and the caller MUST exclude the item rather than truncate silently.
+
 ---
 
 ## 21. AgentFramework (UNIFIED)
@@ -1644,3 +1665,4 @@ Any contract that references a type from this registry MUST use it verbatim. No 
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-05-05 | Initial ratification. All 27 sections canonical. |
+| 1.1.0 | 2026-05-05 | Added CDM v2.1 Phase 8 manifest binding and canonical TokenEstimator contract. |
