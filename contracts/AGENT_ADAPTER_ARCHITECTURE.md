@@ -1,4 +1,4 @@
-# Agent Adapter Architecture Contract v2.1.0
+# Agent Adapter Architecture Contract v2.2.0
 
 **Status:** RATIFIED DESIGN -- Pending Implementation
 **Governing:** CDM v2.1 + Contract Compliance v2.1
@@ -43,6 +43,7 @@ The following types are used by this contract and defined canonically in `SHARED
 | `GovernanceVerdict` | See `SHARED_TYPES.md` §10 |
 | `AgentTrustLevel` (5-level) | See `SHARED_TYPES.md` §5 |
 | `TRUST_TO_CLEARANCE` | See `SHARED_TYPES.md` §5 |
+| `StructuredContent`, `AgentMemoryOptions`, `AgentRecallQuery`, `AgentRecallOptions` | See `SHARED_TYPES.md` §10.2.1 |
 | `RateLimitPolicy` | See `SHARED_TYPES.md` §18 |
 | `ActionDigest` | See `SHARED_TYPES.md` §24 |
 | `RetentionPolicy` | See `SHARED_TYPES.md` §17 |
@@ -180,10 +181,10 @@ type LimenOperation =
   | { readonly type: 'merge_branches'; readonly branchIds: readonly AgentBranchId[]; readonly strategy: MergeStrategy }
   | { readonly type: 'discard_branch'; readonly branchId: AgentBranchId }
   | { readonly type: 'relate'; readonly fromId: ClaimId; readonly toId: ClaimId; readonly relationType: RelationshipType }
-  | { readonly type: 'check_permission'; readonly action: ComputerAction; readonly context?: GovernanceContext };
+  | { readonly type: 'check_permission'; readonly action: ComputerAction; readonly context: GovernanceContext };
 ```
 
-`StructuredContent`, `AgentMemoryOptions`, `AgentRecallQuery`, and `AgentRecallOptions` are Memory Bridge request types. This adapter contract imports and forwards them verbatim; it does not redefine, narrow, or widen their shape.
+`StructuredContent`, `AgentMemoryOptions`, `AgentRecallQuery`, and `AgentRecallOptions` are canonical shared request types owned by `SHARED_TYPES.md` §10.2.1. This adapter contract imports and forwards them verbatim; it does not redefine, narrow, or widen their shape.
 
 ---
 
@@ -447,7 +448,8 @@ pub struct AgentToolCall {
 }
 
 /// Discriminated union of operations the adapter produces.
-/// Uses canonical shared types (MergeStrategy, ClassificationLevel, etc.)
+/// Uses canonical shared types (MergeStrategy, ClassificationLevel,
+/// AgentRecallQuery/AgentRecallOptions, StructuredContent, etc.)
 #[derive(Debug, Clone)]
 pub enum LimenOperation {
     Remember {

@@ -33,6 +33,7 @@ The Memory Bridge contract and this Context Governance contract are complementar
 ```typescript
 import type { ClaimId, MissionId, SessionId, Result } from '@limen/types';
 // Shared types from SHARED_TYPES.md:
+// - OperationContext (SS1.3)
 // - AgentEvent (SS16), AgentEventPayload (SS16.2), AgentEventHandler (SS16.2)
 // - FreshnessLabel (SS2 CCP Types)
 // - ClassificationLevel (SS3)
@@ -40,33 +41,33 @@ import type { ClaimId, MissionId, SessionId, Result } from '@limen/types';
 interface AgentContextClient {
   // Context Budget
   getContextBudget(): Promise<Result<ContextBudget>>;
-  setContextBudget(config: ContextBudgetConfig): Promise<Result<ContextBudget>>;
+  setContextBudget(ctx: OperationContext, config: ContextBudgetConfig): Promise<Result<ContextBudget>>;
   getContextUtilization(): Promise<Result<ContextUtilization>>;
 
   // Importance & Prioritization
   scoreImportance(claimId: ClaimId): Promise<Result<ImportanceScore>>;
   batchScoreImportance(claimIds: readonly ClaimId[]): Promise<Result<ImportanceScoreMap>>;
   getContextRanking(options?: RankingOptions): Promise<Result<ContextRanking>>;
-  pinToContext(claimId: ClaimId, priority: PinPriority): Promise<Result<void>>;
-  unpinFromContext(claimId: ClaimId): Promise<Result<void>>;
+  pinToContext(ctx: OperationContext, claimId: ClaimId, priority: PinPriority): Promise<Result<void>>;
+  unpinFromContext(ctx: OperationContext, claimId: ClaimId): Promise<Result<void>>;
 
   // Eviction
   getEvictionCandidates(count: number): Promise<Result<EvictionCandidate[]>>;
-  evict(claimIds: readonly ClaimId[], reason: string): Promise<Result<EvictionResult>>;
-  setEvictionPolicy(policy: EvictionPolicy): Promise<Result<void>>;
+  evict(ctx: OperationContext, claimIds: readonly ClaimId[], reason: string): Promise<Result<EvictionResult>>;
+  setEvictionPolicy(ctx: OperationContext, policy: EvictionPolicy): Promise<Result<void>>;
   getEvictionPolicy(): Promise<Result<EvictionPolicy>>;
 
   // Working Memory
-  writeWorkingMemory(key: string, value: string, options?: WorkingMemoryOptions): Promise<Result<WorkingMemoryEntry>>;
+  writeWorkingMemory(ctx: OperationContext, key: string, value: string, options?: WorkingMemoryOptions): Promise<Result<WorkingMemoryEntry>>;
   readWorkingMemory(key: string): Promise<Result<WorkingMemoryEntry | null>>;
   listWorkingMemory(options?: WorkingMemoryListOptions): Promise<Result<WorkingMemoryEntry[]>>;
-  discardWorkingMemory(key: string): Promise<Result<void>>;
-  flushWorkingMemory(namespace?: string): Promise<Result<number>>;
+  discardWorkingMemory(ctx: OperationContext, key: string): Promise<Result<void>>;
+  flushWorkingMemory(ctx: OperationContext, namespace?: string): Promise<Result<number>>;
   getWorkingMemoryUsage(): Promise<Result<WorkingMemoryUsage>>;
 
   // Boundary Management
-  registerBoundaryTrigger(trigger: BoundaryTriggerConfig): Promise<Result<string>>;
-  unregisterBoundaryTrigger(triggerId: string): Promise<Result<void>>;
+  registerBoundaryTrigger(ctx: OperationContext, trigger: BoundaryTriggerConfig): Promise<Result<string>>;
+  unregisterBoundaryTrigger(ctx: OperationContext, triggerId: string): Promise<Result<void>>;
   listBoundaryTriggers(): Promise<Result<BoundaryTriggerConfig[]>>;
 
   // Context Assembly
@@ -856,19 +857,19 @@ pub struct ContextSection {
 /// The core trait for agent context governance
 pub trait AgentContextGovernor: Send + Sync {
     fn get_context_budget(&self) -> impl Future<Output = Result<ContextBudget, ContextError>> + Send;
-    fn set_context_budget(&self, config: &ContextBudgetConfig) -> impl Future<Output = Result<ContextBudget, ContextError>> + Send;
+    fn set_context_budget(&self, ctx: &OperationContext, config: &ContextBudgetConfig) -> impl Future<Output = Result<ContextBudget, ContextError>> + Send;
     fn get_utilization(&self) -> impl Future<Output = Result<ContextUtilization, ContextError>> + Send;
     fn score_importance(&self, claim_id: &str) -> impl Future<Output = Result<ImportanceScore, ContextError>> + Send;
     fn batch_score_importance(&self, claim_ids: &[&str]) -> impl Future<Output = Result<Vec<(String, ImportanceScore)>, ContextError>> + Send;
     fn get_context_ranking(&self, options: Option<&RankingOptions>) -> impl Future<Output = Result<ContextRanking, ContextError>> + Send;
-    fn pin_to_context(&self, claim_id: &str, priority: PinPriority) -> impl Future<Output = Result<(), ContextError>> + Send;
-    fn unpin_from_context(&self, claim_id: &str) -> impl Future<Output = Result<(), ContextError>> + Send;
+    fn pin_to_context(&self, ctx: &OperationContext, claim_id: &str, priority: PinPriority) -> impl Future<Output = Result<(), ContextError>> + Send;
+    fn unpin_from_context(&self, ctx: &OperationContext, claim_id: &str) -> impl Future<Output = Result<(), ContextError>> + Send;
     fn get_eviction_candidates(&self, count: u32) -> impl Future<Output = Result<Vec<EvictionCandidate>, ContextError>> + Send;
-    fn evict(&self, claim_ids: &[&str], reason: &str) -> impl Future<Output = Result<EvictionResult, ContextError>> + Send;
-    fn write_working_memory(&self, key: &str, value: &str, options: Option<&WorkingMemoryOptions>) -> impl Future<Output = Result<WorkingMemoryEntry, ContextError>> + Send;
+    fn evict(&self, ctx: &OperationContext, claim_ids: &[&str], reason: &str) -> impl Future<Output = Result<EvictionResult, ContextError>> + Send;
+    fn write_working_memory(&self, ctx: &OperationContext, key: &str, value: &str, options: Option<&WorkingMemoryOptions>) -> impl Future<Output = Result<WorkingMemoryEntry, ContextError>> + Send;
     fn read_working_memory(&self, key: &str) -> impl Future<Output = Result<Option<WorkingMemoryEntry>, ContextError>> + Send;
-    fn discard_working_memory(&self, key: &str) -> impl Future<Output = Result<(), ContextError>> + Send;
-    fn flush_working_memory(&self, namespace: Option<&str>) -> impl Future<Output = Result<u32, ContextError>> + Send;
+    fn discard_working_memory(&self, ctx: &OperationContext, key: &str) -> impl Future<Output = Result<(), ContextError>> + Send;
+    fn flush_working_memory(&self, ctx: &OperationContext, namespace: Option<&str>) -> impl Future<Output = Result<u32, ContextError>> + Send;
     fn assemble_context(&self, options: &ContextAssemblyOptions) -> impl Future<Output = Result<AssembledContext, ContextError>> + Send;
 }
 
@@ -948,7 +949,7 @@ pub struct ContextBeliefQuery {
 
 ## 15. Assembly Algorithm
 
-Token counting uses the canonical `TokenEstimator` contract in `SHARED_TYPES.md` §20.1. The estimator uses `provider_native` when the active model exposes a tokenizer, otherwise `o200k_base` for modern OpenAI-compatible models, otherwise `cl100k_base`. Approximate estimates MUST carry `varianceUpperBoundPct <= 10`; items whose upper-bound estimate exceeds remaining budget are excluded and counted in `evictedForAssembly`. Tokenization failure is treated as overflow, never as zero tokens.
+Token counting uses the canonical `TokenEstimator` contract in `SHARED_TYPES.md` §20.1. The estimator uses `provider_native` when the active model exposes a tokenizer, otherwise `o200k_base` for modern OpenAI-compatible models, otherwise `cl100k_base`. Approximate estimates MUST carry `varianceUpperBoundPct <= 10`; items whose upper-bound estimate exceeds remaining budget are excluded and counted in `evictedForAssembly`. Tokenization failure is treated as estimator overflow, never as zero tokens. Caller-supplied `options.budget` overflow remains the caller's responsibility and is rejected before assembly; estimator overflow only describes inability to produce a safe per-item token estimate.
 
 ```
 FUNCTION assembleContext(options):
@@ -972,9 +973,10 @@ FUNCTION assembleContext(options):
       IF tokenEstimate.overflow:
         evictedForAssembly++
         CONTINUE
-      IF tokens <= remainingBudget:
+      upperBoundTokens = ceil(tokens * (1 + tokenEstimate.varianceUpperBoundPct / 100))
+      IF upperBoundTokens <= remainingBudget:
         sections.push(entry as section at position=2)
-        remainingBudget -= tokens
+        remainingBudget -= upperBoundTokens
       ELSE:
         evictedForAssembly++
 
@@ -986,9 +988,10 @@ FUNCTION assembleContext(options):
       IF tokenEstimate.overflow:
         evictedForAssembly++
         CONTINUE
-      IF tokens <= remainingBudget:
+      upperBoundTokens = ceil(tokens * (1 + tokenEstimate.varianceUpperBoundPct / 100))
+      IF upperBoundTokens <= remainingBudget:
         sections.push(claim as section at position=3+)
-        remainingBudget -= tokens
+        remainingBudget -= upperBoundTokens
       ELSE:
         evictedForAssembly++
 
@@ -998,7 +1001,7 @@ FUNCTION assembleContext(options):
 ## 16. Auto-Eviction Algorithm
 
 ```
-FUNCTION autoEvict(policy, utilization):
+FUNCTION autoEvict(ctx, policy, utilization):
   IF utilization.pressure < policy.thresholds.pressureTrigger:
     RETURN  // no action needed
 
@@ -1028,7 +1031,7 @@ FUNCTION autoEvict(policy, utilization):
     composite: ASC by (0.5*score + 0.3*recency + 0.2*freshness_numeric)
 
   evictionBatch = candidates[0..min(candidates.length, policy.maxEvictionBatch)]
-  EXECUTE evict(evictionBatch)
+  EXECUTE evict(ctx, evictionBatch, 'auto_eviction')
   EMIT 'context:eviction_complete'  // via unified AgentEventBus
 ```
 
@@ -1048,11 +1051,11 @@ FUNCTION autoEvict(policy, utilization):
 | `registerBoundaryTrigger` | `manage_cognitive` | confidential | --- |
 | `assembleContext` | `read_wm` + `query_claims` | unrestricted | --- |
 
-Operations on claims with classification higher than the agent's clearance level produce `GOVERNANCE_REFUSAL` errors. Eviction of `restricted` or `critical` claims requires `manage_cognitive` regardless of eviction strategy. GovernanceAction types reference the unified `GovernanceAction` discriminated union (See `SHARED_TYPES.md` SS9).
+All mutating operations in this table take explicit `OperationContext` at the public interface and derive their `GovernanceAction` from the method row before mutation. Operations on claims with classification higher than the agent's clearance level produce `GOVERNANCE_REFUSAL` errors. Eviction of `restricted` or `critical` claims requires `manage_cognitive` regardless of eviction strategy. GovernanceAction types reference the unified `GovernanceAction` discriminated union (See `SHARED_TYPES.md` SS9).
 
 ---
 
 **Contract Hash:** Tracked in `contracts/phase-x.contracts.json`
 **Authored:** 2026-05-05
-**Revised:** 2026-05-05 (v1.1.0 --- shared types deduplication, unified event system, governance gate references)
-**Supersedes:** v1.0.0
+**Revised:** 2026-05-05 (v1.2.0 --- explicit mutation context, token estimator upper-bound enforcement, shared types deduplication, unified event system)
+**Supersedes:** v1.1.0

@@ -1,4 +1,4 @@
-# Agent Memory Bridge Contract v1.2.0
+# Agent Memory Bridge Contract v1.3.0
 
 **Status:** RATIFIED DESIGN — Pending Implementation
 **Governing:** CDM v2.1 + Contract Compliance v2.1
@@ -19,26 +19,26 @@ Limen is an agent-agnostic governed memory substrate providing belief management
 ```typescript
 interface LimenAgentClient {
   // Memory Operations
-  remember(content: string | StructuredContent, options?: AgentMemoryOptions): Promise<Result<AgentMemoryEntry>>;
+  remember(ctx: GovernanceContext, content: string | StructuredContent, options?: AgentMemoryOptions): Promise<Result<AgentMemoryEntry>>;
   recall(query: AgentRecallQuery, options?: AgentRecallOptions): Promise<Result<AgentMemoryView[]>>;
-  forget(entryId: ClaimId, reason: string): Promise<Result<void>>;
+  forget(ctx: GovernanceContext, entryId: ClaimId, reason: string): Promise<Result<void>>;
 
   // Belief Operations
   getBelief(beliefId: ClaimId): Promise<Result<AgentBeliefState>>;
-  relateBelief(fromId: ClaimId, toId: ClaimId, type: RelationshipType): Promise<Result<RelationshipId>>;
+  relateBelief(ctx: GovernanceContext, fromId: ClaimId, toId: ClaimId, type: RelationshipType): Promise<Result<RelationshipId>>;
 
   // Branch Operations (NonAuthoritative exploration)
-  createBranch(baseBeliefId: ClaimId, description: string): Promise<Result<AgentBranch>>;
-  mergeBranches(branchIds: readonly AgentBranchId[], strategy: MergeStrategy): Promise<Result<MergeResult>>;
-  discardBranch(branchId: AgentBranchId): Promise<Result<void>>;
+  createBranch(ctx: GovernanceContext, baseBeliefId: ClaimId, description: string): Promise<Result<AgentBranch>>;
+  mergeBranches(ctx: GovernanceContext, branchIds: readonly AgentBranchId[], strategy: MergeStrategy): Promise<Result<MergeResult>>;
+  discardBranch(ctx: GovernanceContext, branchId: AgentBranchId): Promise<Result<void>>;
 
   // Session Management
-  startSession(options: AgentSessionOptions): Promise<Result<AgentSession>>;
-  endSession(sessionId: SessionId): Promise<Result<SessionSummary>>;
+  startSession(ctx: OperationContext, options: AgentSessionOptions): Promise<Result<AgentSession>>;
+  endSession(ctx: OperationContext, sessionId: SessionId): Promise<Result<SessionSummary>>;
   getSessionState(sessionId: SessionId): Promise<Result<AgentSessionState>>;
 
   // Governance
-  checkPermission(action: AgentAction, context?: GovernanceContext): Promise<Result<GovernanceDecision>>;
+  checkPermission(action: AgentAction, context: GovernanceContext): Promise<Result<GovernanceDecision>>;
 
   // Events (uses unified event system)
   on(event: AgentEvent, handler: AgentEventHandler): string;
@@ -53,78 +53,32 @@ interface LimenAgentClient {
 - `MergeStrategy` — See `SHARED_TYPES.md` §14
 - `AgentSession` — See `SHARED_TYPES.md` §7
 - `SessionSummary` — See `SHARED_TYPES.md` §15
+- `OperationContext` — See `SHARED_TYPES.md` §1.3
 - `GovernanceContext` — See `SHARED_TYPES.md` §9
+- `StructuredContent`, `AgentMemoryOptions`, `AgentRecallQuery`, `AgentRecallOptions` — See `SHARED_TYPES.md` §10.2.1
 - `AgentEvent`, `AgentEventHandler` — See `SHARED_TYPES.md` §16
 
 ## 3. Data Models
 
 ### 3.1 StructuredContent
 
-```typescript
-interface StructuredContent {
-  readonly subject: string;
-  readonly predicate: string;
-  readonly value: unknown;
-  readonly objectType?: ObjectType; // See SHARED_TYPES.md §2
-}
-```
+Canonical shared type. See `SHARED_TYPES.md` §10.2.1.
 
 ### 3.2 AgentMemoryOptions
 
-```typescript
-interface AgentMemoryOptions {
-  readonly confidence?: number;
-  readonly reasoning?: string;
-  readonly classification?: ClassificationLevel; // See SHARED_TYPES.md §3
-  readonly tags?: readonly string[];
-  readonly category?: string;
-  readonly missionId?: MissionId;
-  readonly taskId?: TaskId;
-  readonly groundingMode?: GroundingMode; // See SHARED_TYPES.md §2
-  readonly retentionDays?: number;
-}
-```
+Canonical shared type. See `SHARED_TYPES.md` §10.2.1.
 
 ### 3.3 AgentMemoryEntry
 
 Canonical shared type. See `SHARED_TYPES.md` §10.2. This contract produces and consumes `AgentMemoryEntry` but does not redefine it.
 
-### 3.4 AgentRecallQuery (CANONICAL)
+### 3.4 AgentRecallQuery
 
-This is the canonical definition of AgentRecallQuery. Other contracts reference subsets of these fields.
-
-```typescript
-interface AgentRecallQuery {
-  readonly text?: string;
-  readonly subject?: string;
-  readonly predicate?: string;
-  readonly tags?: readonly string[];
-  readonly category?: string;
-  readonly freshnessFilter?: FreshnessLabel | readonly FreshnessLabel[];
-  readonly minConfidence?: number;
-  readonly timeRange?: { readonly from: string; readonly to: string };
-  readonly classification?: ClassificationLevel;
-  readonly missionId?: MissionId;
-  readonly taskId?: TaskId;
-  readonly sourceAgentId?: AgentId;
-  readonly includeSuperseded?: boolean;
-  readonly branchId?: AgentBranchId;
-}
-```
+Canonical shared type. See `SHARED_TYPES.md` §10.2.1.
 
 ### 3.5 AgentRecallOptions
 
-```typescript
-interface AgentRecallOptions {
-  readonly limit?: number;
-  readonly offset?: number;
-  readonly includeEvidence?: boolean;
-  readonly includeRelationships?: boolean;
-  readonly searchMode?: 'text' | 'semantic' | 'hybrid';
-  readonly archiveMode?: ArchiveMode; // See SHARED_TYPES.md §2
-  readonly sortBy?: 'relevance' | 'confidence' | 'recency';
-}
-```
+Canonical shared type. See `SHARED_TYPES.md` §10.2.1.
 
 ### 3.6 AgentMemoryView
 
@@ -258,7 +212,7 @@ interface NonAuthoritativeContext {
 ```
 
 **Lifecycle:**
-1. Agent calls `createBranch(baseBeliefId, description)` — engine creates isolated namespace
+1. Agent calls `createBranch(ctx, baseBeliefId, description)` — engine creates isolated namespace
 2. All `remember()` calls within branch context inherit NonAuthoritativeContext constraints
 3. Branch claims are invisible to `recall()` outside the branch unless explicitly included
 4. `mergeBranches()` promotes selected claims to authoritative (confidence re-evaluated, capped at 0.7)
@@ -323,19 +277,20 @@ pub enum AgentError {
 pub trait AgentMemoryBridge: Send + Sync {
     fn remember(
         &self,
+        ctx: &GovernanceContext,
         content: &str,
-        metadata: Option<AgentMetadata>,
-        governance: Option<GovernanceDirective>,
+        options: Option<&AgentMemoryOptions>,
     ) -> impl Future<Output = Result<AgentMemoryEntry, AgentError>> + Send;
 
     fn recall(
         &self,
         query: &AgentRecallQuery,
-        options: Option<RecallOptions>,
+        options: Option<&AgentRecallOptions>,
     ) -> impl Future<Output = Result<Vec<AgentMemoryView>, AgentError>> + Send;
 
     fn forget(
         &self,
+        ctx: &GovernanceContext,
         entry_id: &str,
         reason: &str,
     ) -> impl Future<Output = Result<(), AgentError>> + Send;
@@ -347,6 +302,7 @@ pub trait AgentMemoryBridge: Send + Sync {
 
     fn relate_belief(
         &self,
+        ctx: &GovernanceContext,
         from_id: &str,
         to_id: &str,
         relation_type: RelationshipType, // See SHARED_TYPES.md §25
@@ -354,28 +310,33 @@ pub trait AgentMemoryBridge: Send + Sync {
 
     fn create_branch(
         &self,
+        ctx: &GovernanceContext,
         base_belief_id: &str,
         description: &str,
     ) -> impl Future<Output = Result<AgentBranch, AgentError>> + Send;
 
     fn merge_branches(
         &self,
+        ctx: &GovernanceContext,
         branch_ids: &[String], // AgentBranchId
         strategy: MergeStrategy, // See SHARED_TYPES.md §25
     ) -> impl Future<Output = Result<MergeResult, AgentError>> + Send;
 
     fn discard_branch(
         &self,
+        ctx: &GovernanceContext,
         branch_id: &str,
     ) -> impl Future<Output = Result<(), AgentError>> + Send;
 
     fn start_session(
         &self,
+        ctx: &OperationContext,
         options: AgentSessionOptions,
     ) -> impl Future<Output = Result<AgentSession, AgentError>> + Send;
 
     fn end_session(
         &self,
+        ctx: &OperationContext,
         session_id: &str,
     ) -> impl Future<Output = Result<SessionSummary, AgentError>> + Send;
 
@@ -387,12 +348,12 @@ pub trait AgentMemoryBridge: Send + Sync {
     fn check_permission(
         &self,
         action: &str,
-        context: Option<&GovernanceContext>,
+        context: &GovernanceContext,
     ) -> impl Future<Output = Result<GovernanceDecision, AgentError>> + Send;
 }
 ```
 
-Rust struct equivalents for local-only types (`AgentRecallQuery`, `RecallOptions`, `AgentMemoryView`, `AgentBranch`, `AgentSessionOptions`, `AgentSessionState`, `MergeResult`) mirror the TypeScript interfaces with snake_case fields and `Option<T>` for nullable fields. Shared records (`AgentMemoryEntry`, `AgentBeliefState`, `GovernanceDecision`, `AgentSession`, `SessionSummary`, `GovernanceContext`, `MergeStrategy`, `MergeConflict`, `ManualMergeState`, `ClassificationLevel`, `AgentTrustLevel`, `AgentCapability`, `RelationshipType`) use their Rust equivalents from `SHARED_TYPES.md` §25.
+Rust struct equivalents for local-only types (`AgentMemoryView`, `AgentBranch`, `AgentSessionOptions`, `AgentSessionState`, `MergeResult`) mirror the TypeScript interfaces with snake_case fields and `Option<T>` for nullable fields. Shared records (`StructuredContent`, `AgentMemoryOptions`, `AgentRecallQuery`, `AgentRecallOptions`, `AgentMemoryEntry`, `AgentBeliefState`, `GovernanceDecision`, `AgentSession`, `SessionSummary`, `OperationContext`, `GovernanceContext`, `MergeStrategy`, `MergeConflict`, `ManualMergeState`, `ClassificationLevel`, `AgentTrustLevel`, `AgentCapability`, `RelationshipType`) use their Rust equivalents from `SHARED_TYPES.md` §25.
 
 ## 7. Integration Map
 
@@ -432,10 +393,13 @@ When `remember()` is invoked, the implementation MUST evaluate consent requireme
 ### 8.1 Basic Remember/Recall
 
 ```typescript
-const session = await client.startSession({ agentId, adapterId, trustLevel: 'high' });
+const opCtx = currentOperationContext;
+const governanceCtx = currentGovernanceContext;
+const session = await client.startSession(opCtx, { agentId, adapterId, trustLevel: 'high' });
 if (!session.ok) throw new Error(session.error.code);
 
 const entry = await client.remember(
+  governanceCtx,
   { subject: 'entity:project:alpha', predicate: 'decision.rationale', value: 'Chose CQRS for audit trail requirements' },
   { confidence: 0.7, reasoning: 'Architecture decision after load analysis', classification: 'internal', tags: ['architecture'] }
 );
@@ -455,22 +419,24 @@ if (beliefs.ok) {
 ### 8.2 Branched Exploration
 
 ```typescript
-const branch = await client.createBranch(baseBeliefId, 'Exploring Redis vs Postgres for session store');
+const branch = await client.createBranch(governanceCtx, baseBeliefId, 'Exploring Redis vs Postgres for session store');
 if (!branch.ok) throw new Error(branch.error.code);
 
 // Claims within branch are capped at 0.5, isolated from authoritative graph
 const h1 = await client.remember(
+  governanceCtx,
   { subject: 'entity:decision:session-store', predicate: 'hypothesis.option', value: 'Redis: sub-ms reads, TTL native, but no ACID' },
   { confidence: 0.5, category: 'hypothesis' }
 );
 
 const h2 = await client.remember(
+  governanceCtx,
   { subject: 'entity:decision:session-store', predicate: 'hypothesis.option', value: 'Postgres: ACID, existing infra, 2ms reads acceptable' },
   { confidence: 0.5, category: 'hypothesis' }
 );
 
 // After evaluation, merge winning hypothesis to authoritative
-const result = await client.mergeBranches([branch.value.id], 'evidence_weighted');
+const result = await client.mergeBranches(governanceCtx, [branch.value.id], 'evidence_weighted');
 if (!result.ok && result.error.code === 'BRANCH_CONFLICT') {
   // Handle unresolved conflicts
 }
@@ -480,28 +446,30 @@ if (!result.ok && result.error.code === 'BRANCH_CONFLICT') {
 
 ```typescript
 // Agent A asserts a finding
-const agentA = await clientA.startSession({ agentId: agentAId, adapterId, trustLevel: 'medium' });
+const agentA = await clientA.startSession(opCtx, { agentId: agentAId, adapterId, trustLevel: 'medium' });
 await clientA.remember(
+  governanceCtx,
   { subject: 'entity:service:auth', predicate: 'warning.gotcha', value: 'Token refresh race condition under concurrent requests' },
   { confidence: 0.7, classification: 'internal' }
 );
 
 // Agent B contradicts with evidence
-const agentB = await clientB.startSession({ agentId: agentBId, adapterId, trustLevel: 'medium' });
+const agentB = await clientB.startSession(opCtx, { agentId: agentBId, adapterId, trustLevel: 'medium' });
 const contradiction = await clientB.remember(
+  governanceCtx,
   { subject: 'entity:service:auth', predicate: 'finding.resolved', value: 'Race condition fixed in commit abc123 — mutex on refresh path' },
   { confidence: 0.7, classification: 'internal' }
 );
 
 // Declare relationship — governance evaluates contradiction
-await clientB.relateBelief(contradiction.value.id, agentAClaimId, 'supersedes');
+await clientB.relateBelief(governanceCtx, contradiction.value.id, agentAClaimId, 'supersedes');
 // Agent A's claim now has supersededBy set; effectiveConfidence decays faster
 ```
 
 ### 8.4 Manual Merge with Conflict Resolution
 
 ```typescript
-const result = await client.mergeBranches([branchA.id, branchB.id], 'manual');
+const result = await client.mergeBranches(governanceCtx, [branchA.id, branchB.id], 'manual');
 if (result.ok && result.value.status === 'pending_resolution') {
   // See SHARED_TYPES.md §14.2 for ManualMergeState and resolution semantics
   for (const conflict of result.value.manualMergeState!.conflicts) {
@@ -515,7 +483,7 @@ if (result.ok && result.value.status === 'pending_resolution') {
 1. Agent confidence never exceeds `maxAutoConfidence` (0.7) for programmer-sourced claims
 2. NonAuthoritative claims never exceed 0.5 confidence
 3. All memory operations require a valid, non-expired session
-4. Governance gate fires before every write operation (`remember`, `forget`, `relateBelief`, `createBranch`, `mergeBranches`)
+4. Governance gate fires before every write operation (`remember`, `forget`, `relateBelief`, `createBranch`, `mergeBranches`, `discardBranch`) using the explicit `GovernanceContext` passed to the public method; session start/end use explicit `OperationContext`
 5. Every write operation produces an immutable audit entry with `EventId`
 6. Branch isolation is total — no cross-contamination with authoritative belief state
 7. Session cleanup is guaranteed: unmerged branches discarded, working memory flushed

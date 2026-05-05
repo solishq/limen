@@ -1,4 +1,4 @@
-# Phase X Shared Types Registry v1.1.0
+# Phase X Shared Types Registry v1.2.0
 
 **Status:** RATIFIED --- Canonical Authority for All Phase X Contracts
 **Governing:** CDM v2.1 + Contract Compliance v2.1
@@ -453,6 +453,60 @@ export type AgentBeliefState = BeliefState;
 
 **Example:** A recalled claim with expired decay keeps `confidence: 0.8` but may return `effectiveConfidence: 0.42` and `freshness: 'stale'`.
 
+### 10.2.1 Agent Memory Request Types (CANONICAL)
+
+These request DTOs are shared because adapters construct them and Memory Bridge consumes them. They are owned here to preserve LCI type closure.
+
+```typescript
+export interface StructuredContent {
+  readonly subject: string;
+  readonly predicate: string;
+  readonly value: unknown;
+  readonly objectType?: ObjectType;
+}
+
+export interface AgentMemoryOptions {
+  readonly confidence?: number;
+  readonly reasoning?: string;
+  readonly classification?: ClassificationLevel;
+  readonly tags?: readonly string[];
+  readonly category?: string;
+  readonly missionId?: MissionId;
+  readonly taskId?: TaskId;
+  readonly groundingMode?: GroundingMode;
+  readonly retentionDays?: number;
+}
+
+export interface AgentRecallQuery {
+  readonly text?: string;
+  readonly subject?: string;
+  readonly predicate?: string;
+  readonly tags?: readonly string[];
+  readonly category?: string;
+  readonly freshnessFilter?: FreshnessLabel | readonly FreshnessLabel[];
+  readonly minConfidence?: number;
+  readonly timeRange?: { readonly from: string; readonly to: string };
+  readonly classification?: ClassificationLevel;
+  readonly missionId?: MissionId;
+  readonly taskId?: TaskId;
+  readonly sourceAgentId?: AgentId;
+  readonly includeSuperseded?: boolean;
+  readonly branchId?: AgentBranchId;
+}
+
+export interface AgentRecallOptions {
+  readonly limit?: number;
+  readonly offset?: number;
+  readonly includeEvidence?: boolean;
+  readonly includeRelationships?: boolean;
+  readonly searchMode?: 'text' | 'semantic' | 'hybrid';
+  readonly archiveMode?: ArchiveMode;
+  readonly sortBy?: 'relevance' | 'confidence' | 'recency';
+}
+```
+
+**Validation rules:** `AgentMemoryOptions.confidence` is a requested confidence only; Memory Bridge still enforces confidence ceilings before persistence. `AgentRecallOptions.limit` and `offset` are non-negative integers when present. `AgentRecallQuery.classification` is a maximum requested classification, not authority; read authority derives only from `OperationContext.clearanceLevel`.
+
 ---
 
 ## 10.3 AuditLogEntry (UNIFIED)
@@ -479,6 +533,8 @@ export type AgentAuditEntry = AuditLogEntry;
 **Validation rules:** Audit entries are append-only. `previousHash` MUST match the prior retained entry for the same audit chain. `currentHash` MUST hash the canonical serialized entry excluding `currentHash`. Tombstones may redact `details` but MUST preserve identity, hash chain linkage, event type, timestamp, and classification.
 
 **Example:** A refused terminal action emits `event: 'action:refused'`, a refusal `governanceDecision`, and `classification` inherited from the target resource.
+
+**Escalation terminal mapping:** A non-executed escalation terminal audit entry emits `event: 'governance:escalated'`, an escalation `governanceDecision`, and the same action/risk metadata shape used by refused terminal actions. No `action:escalated` event exists; escalation terminal actions are represented canonically by `governance:escalated`.
 
 ---
 
@@ -1292,6 +1348,56 @@ pub struct BeliefState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StructuredContent {
+    pub subject: String,
+    pub predicate: String,
+    pub value: serde_json::Value,
+    pub object_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentMemoryOptions {
+    pub confidence: Option<f64>,
+    pub reasoning: Option<String>,
+    pub classification: Option<ClassificationLevel>,
+    pub tags: Option<Vec<String>>,
+    pub category: Option<String>,
+    pub mission_id: Option<MissionId>,
+    pub task_id: Option<TaskId>,
+    pub grounding_mode: Option<String>,
+    pub retention_days: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRecallQuery {
+    pub text: Option<String>,
+    pub subject: Option<String>,
+    pub predicate: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub category: Option<String>,
+    pub freshness_filter: Option<Vec<String>>,
+    pub min_confidence: Option<f64>,
+    pub time_range: Option<serde_json::Value>,
+    pub classification: Option<ClassificationLevel>,
+    pub mission_id: Option<MissionId>,
+    pub task_id: Option<TaskId>,
+    pub source_agent_id: Option<AgentId>,
+    pub include_superseded: Option<bool>,
+    pub branch_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRecallOptions {
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+    pub include_evidence: Option<bool>,
+    pub include_relationships: Option<bool>,
+    pub search_mode: Option<String>,
+    pub archive_mode: Option<String>,
+    pub sort_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditLogEntry {
     pub id: EventId,
     pub timestamp: String,
@@ -1592,6 +1698,10 @@ pub enum AgentFramework {
 | GovernanceAction | SHARED_TYPES | Memory Bridge, Computer Use Gov, Adapter Arch, Execution Gov |
 | GovernanceVerdict | SHARED_TYPES | Computer Use Gov, Memory Bridge, Adapter Arch, Audit Viz |
 | GovernanceDecision | SHARED_TYPES | Memory Bridge, Audit Viz, Context Gov, Execution Gov |
+| StructuredContent | SHARED_TYPES | Memory Bridge, Adapter Arch |
+| AgentMemoryOptions | SHARED_TYPES | Memory Bridge, Adapter Arch |
+| AgentRecallQuery | SHARED_TYPES | Memory Bridge, Adapter Arch |
+| AgentRecallOptions | SHARED_TYPES | Memory Bridge, Adapter Arch |
 | AgentMemoryEntry | SHARED_TYPES | Memory Bridge, Audit Viz, Context Gov, Intelligence Bridge |
 | BeliefState / AgentBeliefState | SHARED_TYPES | Memory Bridge, Intelligence Bridge |
 | EvidenceRef | SHARED_TYPES | Memory Bridge, Audit Viz, Intelligence Bridge |
@@ -1666,3 +1776,4 @@ Any contract that references a type from this registry MUST use it verbatim. No 
 |---|---|---|
 | 1.0.0 | 2026-05-05 | Initial ratification. All 27 sections canonical. |
 | 1.1.0 | 2026-05-05 | Added CDM v2.1 Phase 8 manifest binding and canonical TokenEstimator contract. |
+| 1.2.0 | 2026-05-05 | Promoted agent memory request DTOs to shared ownership and canonically mapped terminal escalation audit events. |

@@ -1,4 +1,4 @@
-# Computer Use Governance Contract v2.1.0
+# Computer Use Governance Contract v2.2.0
 
 **Status:** RATIFIED DESIGN --- Pending Implementation
 **Governing:** CDM v2.1 + Contract Compliance v2.1
@@ -442,15 +442,39 @@ interface RefusalAuditEntry {
 }
 ```
 
-### 8.4 Audit Invariants
+### 8.4 Escalation Audit Entry
+
+Escalation is a terminal non-execution path unless a later, separately approved request is submitted. It uses the canonical `governance:escalated` event; no `action:escalated` event is defined.
+
+```typescript
+interface EscalationAuditEntry {
+  readonly entryId: EventId;
+  readonly actionId: EventId;
+  readonly type: 'governance:escalated'; // AgentEvent from SHARED_TYPES.md S16
+  readonly timestamp: string;
+  readonly agentId: AgentId;
+  readonly sessionId: SessionId;
+  readonly tenantId: TenantId;
+  readonly action: ComputerAction;
+  readonly rule: string;
+  readonly reason: string;
+  readonly requiredApproval: 'human' | 'senior_agent';
+  readonly timeout: number | null;
+  readonly riskAssessment: ActionRiskAssessment;
+  readonly chainHash: string;
+}
+```
+
+### 8.5 Audit Invariants
 
 - Both pre and post entries linked by shared `actionId`
 - Both hash-chained into Limen's append-only audit trail via `chainHash`
 - Allowed or sandboxed executed actions produce `action:before` before execution and `action:after` after execution completes or fails
-- Refused or escalated non-executed actions produce exactly one terminal refusal/escalation audit entry and no post-action entry
+- Refused non-executed actions produce exactly one terminal `RefusalAuditEntry` (`action:refused`) and no pre-action or post-action entry
+- Escalated non-executed actions produce exactly one terminal `EscalationAuditEntry` (`governance:escalated`) and no pre-action or post-action entry
 - Minimal pre/post audit entries are durability-critical. Pre-action append completes before execution begins; post-action append completes before success is returned. Hash projection and visualization fanout may run asynchronously after durable append.
 
-### 8.5 Retention Policy
+### 8.6 Retention Policy
 
 Retention follows the unified policy from `SHARED_TYPES.md` S17 (`DEFAULT_RETENTION`):
 
@@ -502,7 +526,7 @@ This contract emits events via the unified event system (see `SHARED_TYPES.md` S
 | `action:refused` | Action refused by governance |
 | `governance:allowed` | Verdict is allow |
 | `governance:refused` | Verdict is refuse |
-| `governance:escalated` | Verdict is escalate |
+| `governance:escalated` | Verdict is escalate; terminal escalation audit entry for non-executed escalations |
 | `governance:sandboxed` | Verdict is sandbox |
 
 Contract-specific event payloads (carried in `AgentEventPayload.data`):
@@ -512,7 +536,7 @@ Contract-specific event payloads (carried in `AgentEventPayload.data`):
 | `action:before` | action, verdict, riskAssessment |
 | `action:after` | action, result, sideEffects, auditEntry |
 | `action:refused` | action, rule, reason, alternatives |
-| `governance:escalated` | action, reason, requiredApproval, timeout |
+| `governance:escalated` | action, rule, reason, requiredApproval, timeout, riskAssessment |
 | `governance:sandboxed` | action, sandboxConfig, reason |
 
 Critical event (triggers immediate session termination):
@@ -781,3 +805,4 @@ pub struct AuditEntry {
 | 1.0.0 | 2026-05-05 | Initial ratification. |
 | 2.0.0 | 2026-05-05 | Deduplicated to reference SHARED_TYPES.md. Adopted unified 5-level trust model, unified retention, unified rate limits, unified event system, unified performance budget. Removed all type redefinitions. |
 | 2.1.0 | 2026-05-05 | Aligned CDM v2.1, canonical verdict naming, refusal/audit cardinality, and manifest hash binding. |
+| 2.2.0 | 2026-05-05 | Added canonical terminal escalation audit schema and explicit refusal/escalation audit cardinality. |

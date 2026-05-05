@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "manifestVersion": "1.0.0",
-  "generatedAt": "2026-05-05T09:30:00+01:00",
+  "generatedAt": "2026-05-05T11:28:24+01:00",
   "governing": "CDM v2.1 + Contract Compliance v2.1",
   "phase": "Phase X",
   "status": "builder_remediated_pending_breaker",
@@ -10,15 +10,15 @@
     "HB-38": "No interface change without contract update. All public contract files are versioned and content-hashed in this manifest."
   },
   "contracts": [
-    { "path": "contracts/SHARED_TYPES.md", "contractVersion": "1.1.0", "sha256": "6e48bdb51fd0fbeb3830f7c26f46e587b5b565f1ed90afd7acc9747f57cff28e", "role": "canonical_shared_types" },
-    { "path": "contracts/AGENT_MEMORY_BRIDGE.md", "contractVersion": "1.2.0", "sha256": "fba93429cbb8bc8072e920e2c2446cfaf1c9fd99f48ee2e157beb039ccfbd1bb", "role": "memory_bridge" },
-    { "path": "contracts/COMPUTER_USE_GOVERNANCE.md", "contractVersion": "2.1.0", "sha256": "d1600de34526d13a069fdb1652960ffc061a15fd6706012a8cccc97726566083", "role": "computer_use_governance" },
+    { "path": "contracts/SHARED_TYPES.md", "contractVersion": "1.2.0", "sha256": "5f0786ccd45bee9055b45dfcb98f975bd8b3d53f63828e9e06cc6adfe954a2e9", "role": "canonical_shared_types" },
+    { "path": "contracts/AGENT_MEMORY_BRIDGE.md", "contractVersion": "1.3.0", "sha256": "f29fb87e75dbd1404e36bb1e6e6fa70ebc02aebd5ea07e77247bc87106e6e123", "role": "memory_bridge" },
+    { "path": "contracts/COMPUTER_USE_GOVERNANCE.md", "contractVersion": "2.2.0", "sha256": "f4e540c792f0f13b98297aad65f4866aa93ff11798f70c9a6f22ff6f9b3ab5aa", "role": "computer_use_governance" },
     { "path": "contracts/AUDIT_VISUALIZATION_SCHEMA.md", "contractVersion": "1.2.0", "sha256": "4aeb64cd2c61532643a8e84f375cf8237be5d243b8b5de9a6a5460da1836b322", "role": "audit_visualization" },
-    { "path": "contracts/AGENT_ADAPTER_ARCHITECTURE.md", "contractVersion": "2.1.0", "sha256": "fc00a6d68963290bcabb828bd2b07212c5377491e1360363460f646297dbe321", "role": "adapter_architecture" },
+    { "path": "contracts/AGENT_ADAPTER_ARCHITECTURE.md", "contractVersion": "2.2.0", "sha256": "739129f0fcd31b2627257671072d01a2b9969e244a570115ccb2d8814b607205", "role": "adapter_architecture" },
     { "path": "contracts/AGENT_INTELLIGENCE_BRIDGE.md", "contractVersion": "1.2.0", "sha256": "f8185d9bce328bcd0fb6a34ba57fdde1885c327724c4cdb7b31c27ee3a33e8f3", "role": "intelligence_bridge" },
     { "path": "contracts/AGENT_EXECUTION_GOVERNANCE.md", "contractVersion": "1.2.0", "sha256": "5a7d2d7ced675d45b142afd4bc49345e848f2d91498183968b327427494f0fbd", "role": "execution_governance" },
-    { "path": "contracts/AGENT_CONTEXT_GOVERNANCE.md", "contractVersion": "1.2.0", "sha256": "86320dd1b4a550d471c72c43f25981195630be78c53839997085c2c69e7f5b8d", "role": "context_governance" },
-    { "path": "contracts/AGENT_LIFECYCLE_MANAGEMENT.md", "contractVersion": "1.2.0", "sha256": "8707b6aed58f404227009cae8fed12f5802adc6802c0563fc1bf9b3992eff6ce", "role": "lifecycle_management" },
+    { "path": "contracts/AGENT_CONTEXT_GOVERNANCE.md", "contractVersion": "1.2.0", "sha256": "3b601a2eb57ea69654437eb1197ef9d39bfacadfde5ac671b4eccdc93dcc67f9", "role": "context_governance" },
+    { "path": "contracts/AGENT_LIFECYCLE_MANAGEMENT.md", "contractVersion": "1.3.0", "sha256": "5954f6fae2fa62db5fc317ec20e48ba12e71636bfd4dbe8c929a203accd486b0", "role": "lifecycle_management" },
     { "path": "docs/PHASE_X_ARCHITECTURE_OVERVIEW.md", "contractVersion": "1.2.0", "sha256": "d54ad2c94a73338539c57c9633dc7f72fae8de138676f577796aee5053be6ed2", "role": "architecture_overview" }
   ],
   "defenseSetBefore": [
@@ -72,7 +72,7 @@
     "assertion": "For every Phase X agent operation, canonical types, governance gates, consent checks, rate limits, and audit obligations compose into one closed contract family with no authority expansion outside Limen Core.",
     "tau": "tau_PhaseX = CanonicalTypes ∩ CorePermissionMapping ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩ RateLimit ∩ LifecycleState",
     "tauDerivation": [
-      "CanonicalTypes: all shared cross-contract types are defined only in SHARED_TYPES.md.",
+      "CanonicalTypes: all shared cross-contract types, including adapter-facing memory request DTOs, are defined only in SHARED_TYPES.md.",
       "CorePermissionMapping: Phase X permissions are limited to Limen Core Permission strings.",
       "GovernanceGate: every mutating operation takes OperationContext or GovernanceContext before mutation.",
       "ConsentGate: personal data storage, transfer, and export require active consent before persistence/export.",
@@ -82,7 +82,7 @@
       "LifecycleState: terminal and trust state transitions are explicit and audited."
     ],
     "closureProof": {
-      "typeClosure": "All cross-contract type names are resolved through SHARED_TYPES.md or are contract-local.",
+      "typeClosure": "All cross-contract type names are resolved through SHARED_TYPES.md; contract-local types are not referenced by other contracts.",
       "authorityClosure": "AgentSession maps to OperationContext without adding permissions outside derivePermissions.",
       "eventClosure": "Core hook events are translated before entering AgentEventBus.",
       "auditClosure": "No successful side effect is returned before the required durable audit path exists.",

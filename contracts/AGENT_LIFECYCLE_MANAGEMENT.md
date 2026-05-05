@@ -1,4 +1,4 @@
-# Agent Lifecycle Management Contract v1.2.0
+# Agent Lifecycle Management Contract v1.3.0
 
 **Status:** RATIFIED DESIGN -- Pending Implementation
 **Governing:** CDM v2.1 + Contract Compliance v2.1
@@ -19,7 +19,7 @@ This contract defines the full lifecycle of AI agents within Limen -- from regis
 
 ```typescript
 import type { AgentId, TenantId, UserId, ClaimId, SessionId, ConsentId, KnowledgePackageId } from 'SHARED_TYPES §1.1, §4';
-import type { Result, KernelError } from 'SHARED_TYPES §1.4, §1.5';
+import type { OperationContext, Result, KernelError } from 'SHARED_TYPES §1.3, §1.4, §1.5';
 import type { ClassificationLevel } from 'SHARED_TYPES §3';
 import type { AgentTrustLevel, CoreTrustLevel, AgentCapability, AgentFramework } from 'SHARED_TYPES §5, §6, §21';
 import type { AgentEvent, AgentEventPayload, AgentEventHandler, AgentEventBus } from 'SHARED_TYPES §16';
@@ -28,33 +28,33 @@ import type { TGPTechniqueStatus } from 'SHARED_TYPES §22';
 
 interface AgentLifecycleClient {
   // Registration & Identity
-  registerAgent(spec: AgentRegistrationSpec): Promise<Result<RegisteredAgent>>;
+  registerAgent(ctx: OperationContext, spec: AgentRegistrationSpec): Promise<Result<RegisteredAgent>>;
   getAgent(agentId: AgentId): Promise<Result<RegisteredAgent>>;
   listAgents(filter?: AgentFilter): Promise<Result<RegisteredAgent[]>>;
-  updateAgent(agentId: AgentId, update: AgentUpdate): Promise<Result<RegisteredAgent>>;
-  decommissionAgent(agentId: AgentId, reason: string): Promise<Result<DecommissionResult>>;
+  updateAgent(ctx: OperationContext, agentId: AgentId, update: AgentUpdate): Promise<Result<RegisteredAgent>>;
+  decommissionAgent(ctx: OperationContext, agentId: AgentId, reason: string): Promise<Result<DecommissionResult>>;
 
   // Capability Management
-  requestCapabilityUpgrade(agentId: AgentId, request: CapabilityRequest): Promise<Result<CapabilityDecision>>;
-  revokeCapability(agentId: AgentId, capability: AgentCapability, reason: string): Promise<Result<void>>;
+  requestCapabilityUpgrade(ctx: OperationContext, agentId: AgentId, request: CapabilityRequest): Promise<Result<CapabilityDecision>>;
+  revokeCapability(ctx: OperationContext, agentId: AgentId, capability: AgentCapability, reason: string): Promise<Result<void>>;
   getCapabilities(agentId: AgentId): Promise<Result<AgentCapabilitySet>>;
   getCapabilityHistory(agentId: AgentId): Promise<Result<CapabilityHistoryEntry[]>>;
 
   // Trust Promotion (trust level elevation)
-  promoteAgent(agentId: AgentId, request: PromotionRequest): Promise<Result<TrustPromotionResult>>;
-  demoteAgent(agentId: AgentId, reason: string): Promise<Result<DemotionResult>>;
+  promoteAgent(ctx: OperationContext, agentId: AgentId, request: PromotionRequest): Promise<Result<TrustPromotionResult>>;
+  demoteAgent(ctx: OperationContext, agentId: AgentId, reason: string): Promise<Result<DemotionResult>>;
   getTrustLevel(agentId: AgentId): Promise<Result<AgentTrustLevel>>;
 
   // Consent Governance
-  registerConsent(agentId: AgentId, consent: AgentConsentRecord): Promise<Result<ConsentId>>;
-  revokeConsent(consentId: ConsentId, reason: string): Promise<Result<ConsentRevocationResult>>;
+  registerConsent(ctx: OperationContext, agentId: AgentId, consent: AgentConsentRecord): Promise<Result<ConsentId>>;
+  revokeConsent(ctx: OperationContext, consentId: ConsentId, reason: string): Promise<Result<ConsentRevocationResult>>;
   checkConsent(agentId: AgentId, operation: ConsentableOperation): Promise<Result<ConsentDecision>>;
   listConsents(agentId: AgentId): Promise<Result<AgentConsentRecord[]>>;
 
   // Knowledge Exchange
-  exportKnowledge(agentId: AgentId, options: KnowledgeExportOptions): Promise<Result<KnowledgePackage>>;
-  importKnowledge(agentId: AgentId, pkg: KnowledgePackage, options?: KnowledgeImportOptions): Promise<Result<KnowledgeImportResult>>;
-  transferKnowledge(fromAgentId: AgentId, toAgentId: AgentId, options: KnowledgeTransferOptions): Promise<Result<KnowledgeTransferResult>>;
+  exportKnowledge(ctx: OperationContext, agentId: AgentId, options: KnowledgeExportOptions): Promise<Result<KnowledgePackage>>;
+  importKnowledge(ctx: OperationContext, agentId: AgentId, pkg: KnowledgePackage, options?: KnowledgeImportOptions): Promise<Result<KnowledgeImportResult>>;
+  transferKnowledge(ctx: OperationContext, fromAgentId: AgentId, toAgentId: AgentId, options: KnowledgeTransferOptions): Promise<Result<KnowledgeTransferResult>>;
 
   // Events (delegates to unified AgentEventBus -- see SHARED_TYPES §16)
   on(event: AgentEvent, handler: AgentEventHandler): string;
@@ -779,6 +779,7 @@ pub enum LifecycleError {
 pub trait AgentLifecycleManager: Send + Sync {
     fn register_agent(
         &self,
+        ctx: &OperationContext,
         spec: &AgentRegistrationSpec,
     ) -> impl Future<Output = Result<RegisteredAgent, LifecycleError>> + Send;
 
@@ -789,24 +790,28 @@ pub trait AgentLifecycleManager: Send + Sync {
 
     fn update_agent(
         &self,
+        ctx: &OperationContext,
         agent_id: &str,
         update: &AgentUpdate,
     ) -> impl Future<Output = Result<RegisteredAgent, LifecycleError>> + Send;
 
     fn decommission_agent(
         &self,
+        ctx: &OperationContext,
         agent_id: &str,
         reason: &str,
     ) -> impl Future<Output = Result<DecommissionResult, LifecycleError>> + Send;
 
     fn request_capability(
         &self,
+        ctx: &OperationContext,
         agent_id: &str,
         request: &CapabilityRequest,
     ) -> impl Future<Output = Result<CapabilityDecision, LifecycleError>> + Send;
 
     fn revoke_capability(
         &self,
+        ctx: &OperationContext,
         agent_id: &str,
         capability: &AgentCapability,
         reason: &str,
@@ -814,12 +819,14 @@ pub trait AgentLifecycleManager: Send + Sync {
 
     fn promote_agent(
         &self,
+        ctx: &OperationContext,
         agent_id: &str,
         request: &PromotionRequest,
     ) -> impl Future<Output = Result<TrustPromotionResult, LifecycleError>> + Send;
 
     fn demote_agent(
         &self,
+        ctx: &OperationContext,
         agent_id: &str,
         reason: &str,
     ) -> impl Future<Output = Result<DemotionResult, LifecycleError>> + Send;
@@ -832,12 +839,14 @@ pub trait AgentLifecycleManager: Send + Sync {
 
     fn export_knowledge(
         &self,
+        ctx: &OperationContext,
         agent_id: &str,
         options: &KnowledgeExportOptions,
     ) -> impl Future<Output = Result<KnowledgePackage, LifecycleError>> + Send;
 
     fn import_knowledge(
         &self,
+        ctx: &OperationContext,
         agent_id: &str,
         package: &KnowledgePackage,
         options: Option<&KnowledgeImportOptions>,
@@ -859,6 +868,7 @@ pub trait AgentLifecycleManager: Send + Sync {
 10. **Consent Expiry Enforcement** -- Expired consent blocks new operations automatically. A background sweep marks expired consents; runtime checks enforce at operation time.
 11. **Derived Statistics** -- AgentStatistics are computed from the audit trail on read. No separate counter storage that could drift from truth.
 12. **Universal Audit** -- All lifecycle state changes produce an audit entry containing: actor (who), action (what), target (whom), timestamp (when), reason (why), and outcome (result).
+13. **Explicit Mutation Context** -- Every public lifecycle mutation takes `OperationContext` before state changes; the actor, tenant, permissions, session, and clearance used for governance are never derived from ambient adapter state.
 
 ## 14. Behavioral Contracts
 
