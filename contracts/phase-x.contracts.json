@@ -4,7 +4,7 @@
   "generatedAt": "2026-05-05T13:22:00+01:00",
   "governing": "CDM v2.1 + Contract Compliance v2.1",
   "phase": "Phase X",
-  "status": "final_completion_pending_breaker",
+  "status": "complete",
   "hardBansCovered": {
     "HB-37": "No defense-set regression without compensating control. defenseSetAfter is asserted to be a superset of defenseSetBefore.",
     "HB-38": "No interface change without contract update. All public contract files are versioned and content-hashed in this manifest."
@@ -13,7 +13,7 @@
     {
       "path": "contracts/SHARED_TYPES.md",
       "contractVersion": "1.3.0",
-      "sha256": "7adb6a59f44c5246f8d5e331474a93fbbf40477b26564672fc572d9343f5033c",
+      "sha256": "0a6e8bc52973656450a80b900cd69052cf03907babd32cf699ba309b699ac0b8",
       "role": "canonical_shared_types"
     },
     {
@@ -25,7 +25,7 @@
     {
       "path": "contracts/COMPUTER_USE_GOVERNANCE.md",
       "contractVersion": "2.2.0",
-      "sha256": "f4e540c792f0f13b98297aad65f4866aa93ff11798f70c9a6f22ff6f9b3ab5aa",
+      "sha256": "4fc9cea15f7201ebf96df9f5fc86197763d754655d053246f39bdf1f0a16dea3",
       "role": "computer_use_governance"
     },
     {
@@ -43,7 +43,7 @@
     {
       "path": "contracts/AGENT_INTELLIGENCE_BRIDGE.md",
       "contractVersion": "1.2.0",
-      "sha256": "f8185d9bce328bcd0fb6a34ba57fdde1885c327724c4cdb7b31c27ee3a33e8f3",
+      "sha256": "34a0bb0d06cf77758d62b23de8ed4a1ad3b2b47d8b09eadcbb332d3354338c1d",
       "role": "intelligence_bridge"
     },
     {
@@ -67,7 +67,7 @@
     {
       "path": "docs/PHASE_X_ARCHITECTURE_OVERVIEW.md",
       "contractVersion": "1.3.0",
-      "sha256": "5c418dc4ccef80b61907d614a5bc14f012704519fa99e2bf96853fb5c3a83872",
+      "sha256": "7292b247d518e1435a1432c1b974d48b38cfe9fccd06ba26d9d189701c92e2bb",
       "role": "architecture_overview"
     },
     {
@@ -85,7 +85,7 @@
     {
       "path": "contracts/AGENT_OUTPUT_GOVERNANCE.md",
       "contractVersion": "1.0.0",
-      "sha256": "b0f39222e44ae97c83a82d3c9b966264327246be89412ae8fb1950e1d5e06088",
+      "sha256": "b330de27349ecf386631142d13db18ccf2bc26eea1e22c2a56d8d29eb4ab581d",
       "role": "output_governance"
     }
   ],
