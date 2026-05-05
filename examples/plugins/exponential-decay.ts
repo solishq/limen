@@ -26,8 +26,9 @@ export interface ExponentialDecayOptions {
 }
 
 export function exponentialDecay(options: ExponentialDecayOptions = {}): LimenHook {
-  const halfLifeDays = options.halfLifeDays ?? 30;
-  const floor = options.floor ?? 0.01;
+  // F-010 fix: Clamp halfLifeDays to positive value
+  const halfLifeDays = Math.max(0.001, options.halfLifeDays ?? 30);
+  const floor = Math.max(0, Math.min(1, options.floor ?? 0.01));
   const lambda = Math.LN2 / halfLifeDays;
 
   return {

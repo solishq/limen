@@ -128,7 +128,7 @@ export interface RecallHook {
  * A Limen computational pipeline hook.
  *
  * Hooks are registered via LimenConfig.hooks[] and installed during
- * createLimen(), alongside plugins. They share the same MAX_PLUGINS limit.
+ * createLimen(), alongside plugins. Hook limit is independent (MAX_HOOKS = 50).
  *
  * Unlike plugins (which subscribe to events), hooks intercept computation:
  *   - claimAssertion: modify/reject claims before persistence

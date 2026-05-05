@@ -32,7 +32,8 @@ export function confidenceVerifier(options: ConfidenceVerifierOptions = {}): Lim
         if (exemptPredicates.has(claim.predicate)) {
           return claim;
         }
-        if (claim.confidence < minConfidence) {
+        // F-009 fix: NaN fails the check (NaN >= x is false)
+        if (!(claim.confidence >= minConfidence)) {
           return null; // Reject — pipeline returns HOOK_REJECTED
         }
         return claim;

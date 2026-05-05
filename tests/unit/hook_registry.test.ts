@@ -386,12 +386,12 @@ describe('HookRegistry', () => {
         makeHook({
           meta: { name: 'decay-2', version: '1.0.0' },
           priority: 2,
-          decay: { computeDecay: () => 0.9 },
+          decay: { computeDecay: () => 0.7 },
         }),
       ]);
 
       const result = registry.computeDecay(0.8, 86400000, 7);
-      assert.equal(result, 0.9); // Last by priority wins
+      assert.equal(result, 0.7); // Last by priority wins (must be <= confidence)
     });
   });
 

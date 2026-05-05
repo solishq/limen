@@ -8,11 +8,13 @@
  *
  * Invariants:
  *   - Hooks execute in priority order (lower number first, registration order for ties)
- *   - Error isolation: every hook call wrapped in try/catch
- *   - Max hooks limit shared with MAX_PLUGINS (resource containment)
+ *   - Error isolation: every hook call AND property access wrapped in try/catch
+ *   - Max hooks limit is per-type (independent from plugins)
  *   - beforeAssert null return = pipeline rejection (HOOK_REJECTED)
- *   - Decay hooks: last one wins (chain replacement)
- *   - Recall hooks: chain (output of one = input of next)
+ *   - beforeAssert return validated for required fields
+ *   - Decay hooks: highest priority number wins (last in sorted order)
+ *   - Decay return clamped to [0, confidence] — NaN/Infinity/negative/amplification rejected
+ *   - Recall hooks: chain (output of one = input of next), defensive copy before each
  */
 
 import type { Result } from '../kernel/interfaces/index.js';
@@ -25,7 +27,14 @@ import type {
   RecallQueryContext,
 } from './hook_types.js';
 import { DEFAULT_HOOK_PRIORITY } from './hook_types.js';
-import { MAX_PLUGINS } from './plugin_types.js';
+
+// ── Constants ──
+
+/** Maximum hooks per registry instance (independent from plugin limit) */
+export const MAX_HOOKS = 50;
+
+/** Maximum length for hook meta.name */
+const MAX_NAME_LENGTH = 256;
 
 // ── Result Helpers ──
 
@@ -60,6 +69,7 @@ export interface HookRegistry {
    * Execute beforeAssert hooks in priority order.
    * Returns modified input, or null if any hook rejected.
    * Error-isolated: a throwing hook is skipped, pipeline continues.
+   * Return value validated for required fields.
    */
   executeBeforeAssert(input: ClaimCreateInput, ctx: AssertionHookContext): Result<ClaimCreateInput | null>;
 
@@ -72,14 +82,15 @@ export interface HookRegistry {
 
   /**
    * Compute decay using registered hook, or return null if no decay hook.
-   * If multiple hooks define computeDecay, the last one (by priority) wins.
+   * If multiple hooks define computeDecay, the one with highest priority number wins.
+   * Return value clamped to [0, confidence]. NaN/Infinity/negative → null (fallback).
    * Error-isolated: falls back to null (caller uses default decay).
    */
   computeDecay(confidence: number, ageMs: number, stabilityDays: number): number | null;
 
   /**
    * Transform recall results through registered hooks in priority order.
-   * Hooks chain: output of one = input of next.
+   * Hooks chain: output of one = input of next. Defensive copy before each.
    * Error-isolated: a throwing hook is skipped, previous result preserved.
    * Returns null if no recall hooks registered.
    */
@@ -115,6 +126,21 @@ export interface HookRegistryDeps {
 interface RegisteredHook {
   readonly hook: LimenHook;
   readonly priority: number;
+  // Pre-resolved hook capabilities (safe from getter traps)
+  readonly hasAssertion: boolean;
+  readonly hasDecay: boolean;
+  readonly hasRecall: boolean;
+}
+
+// ── Safe Property Access ──
+
+/** Safely access a property that might be a throwing getter */
+function safeGet<T>(fn: () => T, fallback: T): T {
+  try {
+    return fn();
+  } catch {
+    return fallback;
+  }
 }
 
 // ── Factory ──
@@ -148,65 +174,113 @@ export function createHookRegistry(deps: HookRegistryDeps): HookRegistry {
 
   function getAssertionHooks(): RegisteredHook[] {
     if (!sortedAssertionHooks) {
-      sortedAssertionHooks = getSortedByPriority(
-        h => h.hook.claimAssertion !== undefined,
-      );
+      sortedAssertionHooks = getSortedByPriority(h => h.hasAssertion);
     }
     return sortedAssertionHooks;
   }
 
   function getDecayHooks(): RegisteredHook[] {
     if (!sortedDecayHooks) {
-      sortedDecayHooks = getSortedByPriority(
-        h => h.hook.decay?.computeDecay !== undefined,
-      );
+      sortedDecayHooks = getSortedByPriority(h => h.hasDecay);
     }
     return sortedDecayHooks;
   }
 
   function getRecallHooks(): RegisteredHook[] {
     if (!sortedRecallHooks) {
-      sortedRecallHooks = getSortedByPriority(
-        h => h.hook.recall?.onRecall !== undefined,
-      );
+      sortedRecallHooks = getSortedByPriority(h => h.hasRecall);
     }
     return sortedRecallHooks;
+  }
+
+  /**
+   * Validate that a beforeAssert return value has required ClaimCreateInput fields.
+   * Does NOT re-run all 23 validation guards — those run downstream.
+   * Guards against hooks returning partial/garbage objects.
+   */
+  function validateAssertReturn(value: unknown): value is ClaimCreateInput {
+    if (value === null || typeof value !== 'object') return false;
+    const v = value as Record<string, unknown>;
+    if (typeof v.subject !== 'string' || v.subject.length === 0) return false;
+    if (typeof v.predicate !== 'string' || v.predicate.length === 0) return false;
+    if (v.object === null || typeof v.object !== 'object') return false;
+    if (typeof v.confidence !== 'number' || !Number.isFinite(v.confidence)) return false;
+    if (v.confidence < 0 || v.confidence > 1) return false;
+    if (typeof v.groundingMode !== 'string' || v.groundingMode.length === 0) return false;
+    return true;
+  }
+
+  /**
+   * Validate hook name: non-empty, reasonable length, no control characters.
+   */
+  function validateName(name: string): boolean {
+    if (name.length > MAX_NAME_LENGTH) return false;
+    // eslint-disable-next-line no-control-regex
+    if (/[\x00-\x1f\x7f]/.test(name)) return false;
+    return true;
   }
 
   return {
     registerAll(hooks) {
       if (!hooks || hooks.length === 0) return ok(undefined);
 
-      // Resource containment: shared limit with plugins
-      if (hooks.length > MAX_PLUGINS) {
-        return err('HOOK_MAX_EXCEEDED', `Cannot register ${hooks.length} hooks. Maximum is ${MAX_PLUGINS}.`);
+      // F-005 fix: Check cumulative total, not just batch size
+      if (registered.length + hooks.length > MAX_HOOKS) {
+        return err('HOOK_MAX_EXCEEDED', `Cannot register ${hooks.length} hooks. Current: ${registered.length}. Maximum: ${MAX_HOOKS}.`);
       }
 
       for (const hook of hooks) {
-        // Validate meta
-        if (!hook.meta?.name || typeof hook.meta.name !== 'string' || hook.meta.name.trim() === '') {
-          log('error', 'hook', 'Hook has invalid meta: missing or empty name', { meta: hook.meta as unknown as Record<string, unknown> });
+        // Validate meta — wrapped in try/catch for getter trap safety (F-002)
+        let name: string;
+        let version: string;
+        try {
+          name = hook.meta?.name as string;
+          version = hook.meta?.version as string;
+        } catch (accessError) {
+          log('error', 'hook', `Hook meta access threw: ${accessError instanceof Error ? accessError.message : String(accessError)}`);
           continue;
         }
-        if (!hook.meta?.version || typeof hook.meta.version !== 'string' || hook.meta.version.trim() === '') {
-          log('error', 'hook', `Hook '${hook.meta.name}' has invalid meta: missing or empty version`, { meta: hook.meta as unknown as Record<string, unknown> });
+
+        if (!name || typeof name !== 'string' || name.trim() === '') {
+          log('error', 'hook', 'Hook has invalid meta: missing or empty name');
+          continue;
+        }
+        if (!version || typeof version !== 'string' || version.trim() === '') {
+          log('error', 'hook', `Hook '${name}' has invalid meta: missing or empty version`);
+          continue;
+        }
+
+        // F-008 fix: Validate name content
+        if (!validateName(name)) {
+          log('error', 'hook', `Hook '${name.slice(0, 50)}...' has invalid name: too long or contains control characters`);
           continue;
         }
 
         // Name uniqueness
-        if (registered.some(r => r.hook.meta.name === hook.meta.name)) {
-          log('error', 'hook', `Hook name '${hook.meta.name}' already registered. Skipping duplicate.`);
+        if (registered.some(r => r.hook.meta.name === name)) {
+          log('error', 'hook', `Hook name '${name}' already registered. Skipping duplicate.`);
           continue;
         }
 
-        const priority = hook.priority ?? DEFAULT_HOOK_PRIORITY;
-        registered.push({ hook, priority });
+        // F-007 fix: Validate priority
+        const rawPriority = hook.priority ?? DEFAULT_HOOK_PRIORITY;
+        const priority = Number.isFinite(rawPriority) ? rawPriority : DEFAULT_HOOK_PRIORITY;
+        if (!Number.isFinite(rawPriority)) {
+          log('warn', 'hook', `Hook '${name}' has non-finite priority (${rawPriority}), using default ${DEFAULT_HOOK_PRIORITY}`);
+        }
+
+        // F-002 fix: Pre-resolve capabilities safely (avoids getter traps in hot path)
+        const hasAssertion = safeGet(() => hook.claimAssertion !== undefined, false);
+        const hasDecay = safeGet(() => hook.decay?.computeDecay !== undefined, false);
+        const hasRecall = safeGet(() => hook.recall?.onRecall !== undefined, false);
+
+        registered.push({ hook, priority, hasAssertion, hasDecay, hasRecall });
         invalidateCaches();
 
-        log('info', 'hook', `Hook '${hook.meta.name}@${hook.meta.version}' registered (priority: ${priority})`, {
-          hasAssertion: hook.claimAssertion !== undefined,
-          hasDecay: hook.decay?.computeDecay !== undefined,
-          hasRecall: hook.recall?.onRecall !== undefined,
+        log('info', 'hook', `Hook '${name}@${version}' registered (priority: ${priority})`, {
+          hasAssertion,
+          hasDecay,
+          hasRecall,
         });
       }
 
@@ -218,10 +292,10 @@ export function createHookRegistry(deps: HookRegistryDeps): HookRegistry {
       let current: ClaimCreateInput = input;
 
       for (const entry of hooks) {
-        const beforeFn = entry.hook.claimAssertion?.beforeAssert;
-        if (!beforeFn) continue;
-
         try {
+          const beforeFn = entry.hook.claimAssertion?.beforeAssert;
+          if (!beforeFn) continue;
+
           const result = beforeFn(current, ctx);
           if (result === null) {
             log('info', 'hook', `Hook '${entry.hook.meta.name}' rejected claim assertion`, {
@@ -229,6 +303,14 @@ export function createHookRegistry(deps: HookRegistryDeps): HookRegistry {
               predicate: current.predicate,
             });
             return ok(null);
+          }
+          // F-001 fix: Validate the returned value has required fields
+          if (!validateAssertReturn(result)) {
+            log('warn', 'hook', `Hook '${entry.hook.meta.name}' beforeAssert returned invalid ClaimCreateInput — skipping`, {
+              hookName: entry.hook.meta.name,
+            });
+            // Skip this hook's modification, continue with previous current
+            continue;
           }
           current = result;
         } catch (hookError) {
@@ -246,10 +328,9 @@ export function createHookRegistry(deps: HookRegistryDeps): HookRegistry {
       const hooks = getAssertionHooks();
 
       for (const entry of hooks) {
-        const afterFn = entry.hook.claimAssertion?.afterAssert;
-        if (!afterFn) continue;
-
         try {
+          const afterFn = entry.hook.claimAssertion?.afterAssert;
+          if (!afterFn) continue;
           afterFn(claim, ctx);
         } catch (hookError) {
           log('warn', 'hook', `Hook '${entry.hook.meta.name}' afterAssert error: ${hookError instanceof Error ? hookError.message : String(hookError)}`, {
@@ -264,13 +345,20 @@ export function createHookRegistry(deps: HookRegistryDeps): HookRegistry {
       const hooks = getDecayHooks();
       if (hooks.length === 0) return null;
 
-      // Last hook wins (highest priority number among sorted = last in array)
+      // Highest priority number wins (last in sorted-by-priority array)
       const lastHook = hooks[hooks.length - 1]!;
-      const decayFn = lastHook.hook.decay?.computeDecay;
-      if (!decayFn) return null;
 
       try {
-        return decayFn(confidence, ageMs, stabilityDays);
+        const decayFn = lastHook.hook.decay?.computeDecay;
+        if (!decayFn) return null;
+
+        const raw = decayFn(confidence, ageMs, stabilityDays);
+
+        // F-003 fix: Clamp return value — reject NaN, Infinity, negative, amplification
+        if (!Number.isFinite(raw)) return null;
+        if (raw < 0) return null;
+        if (raw > confidence) return null;
+        return raw;
       } catch (hookError) {
         log('warn', 'hook', `Hook '${lastHook.hook.meta.name}' computeDecay error: ${hookError instanceof Error ? hookError.message : String(hookError)}`, {
           hookName: lastHook.hook.meta.name,
@@ -287,11 +375,19 @@ export function createHookRegistry(deps: HookRegistryDeps): HookRegistry {
       let current: RecallBeliefView[] = beliefs;
 
       for (const entry of hooks) {
-        const recallFn = entry.hook.recall?.onRecall;
-        if (!recallFn) continue;
-
         try {
-          current = recallFn(current, query);
+          const recallFn = entry.hook.recall?.onRecall;
+          if (!recallFn) continue;
+
+          // F-004 fix: Defensive copy before passing to hook
+          const snapshot = [...current];
+          const result = recallFn(snapshot, query);
+          // Only accept arrays
+          if (Array.isArray(result)) {
+            current = result;
+          } else {
+            log('warn', 'hook', `Hook '${entry.hook.meta.name}' onRecall returned non-array — skipping`);
+          }
         } catch (hookError) {
           log('warn', 'hook', `Hook '${entry.hook.meta.name}' onRecall error: ${hookError instanceof Error ? hookError.message : String(hookError)}`, {
             hookName: entry.hook.meta.name,
