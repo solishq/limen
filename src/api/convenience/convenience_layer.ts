@@ -43,6 +43,9 @@ import type {
   SearchResult,
 } from './convenience_types.js';
 
+import type { HookRegistry } from '../../plugins/hook_registry.js';
+import type { RecallBeliefView, RecallQueryContext } from '../../plugins/hook_types.js';
+
 import {
   VALID_RELATIONSHIP_TYPES,
   VALID_CATEGORIES,
@@ -110,6 +113,11 @@ export interface ConvenienceLayerDeps {
    * v3.0.0 WG-04: Freshness thresholds for query-time freshness classification.
    */
   readonly freshnessThresholds?: FreshnessThresholds;
+  /**
+   * Phase 2.6: Hook registry for computational pipeline interception.
+   * Optional — if absent, all pipelines behave identically to pre-hook behavior.
+   */
+  readonly hookRegistry?: HookRegistry;
 }
 
 /**
@@ -138,7 +146,7 @@ export interface ConvenienceLayer {
  * Closure captures deps -- survives Object.freeze (I-CONV-15).
  */
 export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceLayer {
-  const { claims, getConnection, time, missionId, taskId, maxAutoConfidence, stabilityConfig, freshnessThresholds } = deps;
+  const { claims, getConnection, time, missionId, taskId, maxAutoConfidence, stabilityConfig, freshnessThresholds, hookRegistry } = deps;
 
   /**
    * Compute effective confidence, applying the maxAutoConfidence cap
@@ -310,9 +318,15 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
       const beliefs: BeliefView[] = items.map(item => {
         const queryStabilityDays = resolveStability(item.claim.predicate, stabilityConfig);
         const ageMs = computeAgeMs(item.claim.validAt, nowMs);
-        const decayFactor = computeDecayFactor(ageMs, queryStabilityDays);
+        // Phase 2.6: Allow decay hook to replace default computation
+        const hookDecay = hookRegistry?.hasDecayHook
+          ? hookRegistry.computeDecay(item.claim.confidence, ageMs, queryStabilityDays)
+          : null;
+        const decayFactor = hookDecay !== null ? hookDecay : computeDecayFactor(ageMs, queryStabilityDays);
         const cascadePen = computeCascadePenalty(conn, item.claim.id as string);
-        const effConf = item.claim.confidence * decayFactor * cascadePen;
+        const effConf = hookDecay !== null
+          ? decayFactor * cascadePen
+          : item.claim.confidence * decayFactor * cascadePen;
 
         // Reclassify freshness at query time
         const lastAccessMs = item.claim.lastAccessedAt
@@ -346,6 +360,23 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
           reviewNeeded: item.reviewNeeded,
         };
       });
+
+      // Phase 2.6: Apply recall hooks to transform results
+      if (hookRegistry?.hasRecallHook) {
+        const query: RecallQueryContext = {
+          subject,
+          predicate,
+          minConfidence: options?.minConfidence,
+          limit: options?.limit,
+        };
+        const transformed = hookRegistry.transformRecall(
+          beliefs as unknown as RecallBeliefView[],
+          query,
+        );
+        if (transformed !== null) {
+          return ok(transformed as unknown as BeliefView[]);
+        }
+      }
 
       return ok(beliefs);
     },

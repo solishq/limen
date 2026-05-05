@@ -63,6 +63,7 @@ import type { TenantScopedConnection } from '../../kernel/tenant/tenant_scope.js
 import { classifyFreshness } from '../../cognitive/freshness.js';
 import { resolveStability } from '../../cognitive/stability.js';
 import { scanClaimContent } from '../../security/claim_scanner.js';
+import type { AssertionHookContext, AssertedClaimInfo } from '../../plugins/hook_types.js';
 import { checkPoisoning } from '../../security/poisoning_defense.js';
 import { DEFAULT_SECURITY_POLICY } from '../../security/security_types.js';
 import type { ContentScanResult } from '../../security/security_types.js';
@@ -650,7 +651,13 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
 
         // Phase 3: Compute decay
         const ageMs = computeAgeMs(claim.validAt, nowMs);
-        const decayConf = computeEffectiveConfidence(claim.confidence, ageMs, claim.stability);
+        // Phase 2.6: Allow decay hook to replace default computation
+        const hookDecayResult = deps.hookRegistry?.hasDecayHook
+          ? deps.hookRegistry.computeDecay(claim.confidence, ageMs, claim.stability)
+          : null;
+        const decayConf = hookDecayResult !== null
+          ? hookDecayResult
+          : computeEffectiveConfidence(claim.confidence, ageMs, claim.stability);
 
         // Phase 4 I-P4-05: Compose cascade penalty with decay
         // effective_confidence = confidence * decayFactor * cascadePenalty
@@ -900,7 +907,13 @@ function createClaimStoreImpl(deps: ClaimSystemDeps): ClaimStore {
 
           // Phase 3: Compute decay and effective confidence (I-P3-02, I-P3-08)
           const ageMs = computeAgeMs(claim.validAt, nowMs);
-          const decayConf = computeEffectiveConfidence(claim.confidence, ageMs, claim.stability);
+          // Phase 2.6: Allow decay hook to replace default computation
+          const hookSearchDecay = deps.hookRegistry?.hasDecayHook
+            ? deps.hookRegistry.computeDecay(claim.confidence, ageMs, claim.stability)
+            : null;
+          const decayConf = hookSearchDecay !== null
+            ? hookSearchDecay
+            : computeEffectiveConfidence(claim.confidence, ageMs, claim.stability);
 
           // Phase 4 I-P4-05: Compose cascade penalty with decay
           // v2.1.0: conn is TenantScopedConnection at runtime (API layer wraps it).
@@ -1679,8 +1692,24 @@ function createAssertClaimHandlerImpl(
           wmpSourcingStatus = captureResult.value.sourcingStatus;
         }
 
+        // 14b. Phase 2.6: beforeAssert hooks — can modify or reject the claim
+        let hookInput = input;
+        if (deps.hookRegistry?.hasAssertionHook) {
+          const hookCtx: AssertionHookContext = {
+            agentId: ctx.agentId,
+            tenantId: ctx.tenantId,
+            missionId: input.missionId ?? null,
+          };
+          const hookResult = deps.hookRegistry.executeBeforeAssert(input, hookCtx);
+          if (!hookResult.ok) return hookResult as Result<AssertClaimOutput>;
+          if (hookResult.value === null) {
+            return err('HOOK_REJECTED', 'Claim assertion rejected by hook', 'Phase-2.6');
+          }
+          hookInput = hookResult.value;
+        }
+
         // 15. Create claim
-        const createResult = stores.store.create(conn, ctx, input);
+        const createResult = stores.store.create(conn, ctx, hookInput);
         if (!createResult.ok) return propagateError<AssertClaimOutput>(createResult);
         const claim = createResult.value;
 
@@ -1789,6 +1818,26 @@ function createAssertClaimHandlerImpl(
               },
             });
           }
+        }
+
+        // 17c. Phase 2.6: afterAssert hooks — notification only
+        if (deps.hookRegistry?.hasAssertionHook) {
+          const hookCtx: AssertionHookContext = {
+            agentId: ctx.agentId,
+            tenantId: ctx.tenantId,
+            missionId: hookInput.missionId ?? null,
+          };
+          const assertedInfo: AssertedClaimInfo = {
+            id: claim.id as string,
+            subject: claim.subject,
+            predicate: claim.predicate,
+            objectValue: String(claim.object.value),
+            confidence: claim.confidence,
+            groundingMode: claim.groundingMode,
+            validAt: claim.validAt,
+            createdAt: claim.createdAt,
+          };
+          deps.hookRegistry.executeAfterAssert(assertedInfo, hookCtx);
         }
 
         // 18. Audit entry (I-03: same transaction)

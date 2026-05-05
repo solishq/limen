@@ -1,0 +1,99 @@
+# ============================================================================
+# Limen MCP Server — Docker Compose Self-Host Configuration
+# ============================================================================
+#
+# Quick start:
+#   1. cp .env.example .env && edit .env
+#   2. Generate a master key: openssl rand -hex 32 > master.key
+#   3. docker compose up -d
+#
+# The MCP server communicates via stdio transport. Connect your MCP client
+# by attaching to the container's stdin/stdout.
+#
+# Profiles:
+#   default  — limen-mcp only
+#   monitor  — adds Prometheus + Grafana sidecars
+# ============================================================================
+
+services:
+  limen-mcp:
+    build:
+      context: ..
+      dockerfile: self-host/Dockerfile
+    container_name: limen-mcp
+    restart: unless-stopped
+
+    # Stdio transport — keep stdin open for MCP client attachment
+    stdin_open: true
+
+    env_file:
+      - .env
+
+    environment:
+      - LIMEN_DATA_DIR=/data
+      - LIMEN_MASTER_KEY_PATH=/run/secrets/master_key
+      - NODE_ENV=production
+
+    volumes:
+      # SQLite data persistence — survives container restarts and rebuilds
+      - limen-data:/data
+
+    secrets:
+      - master_key
+
+    # Health check verifies the Limen engine is operational
+    # (defined in Dockerfile HEALTHCHECK, compose inherits it)
+
+    # Resource limits — adjust based on workload
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+
+  # --------------------------------------------------------------------------
+  # Optional: Monitoring Stack (activate with --profile monitor)
+  # --------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: limen-prometheus
+    profiles:
+      - monitor
+    restart: unless-stopped
+    volumes:
+      - prometheus-data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: limen-grafana
+    profiles:
+      - monitor
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+
+secrets:
+  master_key:
+    # Master key file — generate with: openssl rand -hex 32 > master.key
+    # Or override via LIMEN_MASTER_KEY env var (hex-encoded) for keyless deploys
+    file: ${LIMEN_MASTER_KEY_FILE:-./master.key}
+
+volumes:
+  limen-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local

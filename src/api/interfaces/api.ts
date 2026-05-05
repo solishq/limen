@@ -56,6 +56,8 @@ import type { CognitiveNamespace } from '../cognitive/cognitive_api.js';
 import type {
   LimenPlugin, LimenEventName, LimenEventHandler,
 } from '../../plugins/plugin_types.js';
+// Phase 2.6: Computational Pipeline Hook types
+import type { LimenHook } from '../../plugins/hook_types.js';
 import type {
   ExportOptions, LimenExportDocument, ImportOptions, ImportResult,
 } from '../../exchange/exchange_types.js';
@@ -172,6 +174,20 @@ export type {
   PluginMeta, PluginContext, PluginApi, PluginLogger,
   PluginErrorCode,
 } from '../../plugins/plugin_types.js';
+
+// Phase 2.6: Computational Pipeline Hook types
+export type {
+  LimenHook,
+  ClaimAssertionHook,
+  DecayHook,
+  RecallHook,
+  AssertionHookContext,
+  AssertedClaimInfo,
+  RecallBeliefView,
+  RecallQueryContext,
+  HookErrorCode,
+} from '../../plugins/hook_types.js';
+export { DEFAULT_HOOK_PRIORITY } from '../../plugins/hook_types.js';
 export type {
   ExportOptions, ExportFormat,
   LimenExportDocument, ExportedClaim, ExportedRelationship, ExportedEvidenceRef,
@@ -360,6 +376,15 @@ export interface LimenConfig {
    * Keys are plugin names. Values passed to PluginContext.config.
    */
   readonly pluginConfig?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+
+  /**
+   * Phase 2.6: Computational pipeline hooks.
+   * Installed in priority order during construction.
+   * Unlike plugins (event-based), hooks intercept core computations:
+   * claim assertion, decay, and recall.
+   * Share MAX_PLUGINS limit with plugins for resource containment.
+   */
+  readonly hooks?: readonly LimenHook[];
 
   /**
    * CF-021: Structured logging callback.
