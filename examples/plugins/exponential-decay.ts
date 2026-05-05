@@ -14,6 +14,9 @@
  *   });
  */
 
+// NOTE: In your own project, import from the package:
+//   import type { LimenHook } from 'limen-ai';
+// Source-relative import used here for development only.
 import type { LimenHook } from '../../src/plugins/hook_types.js';
 
 const MS_PER_DAY = 86_400_000;

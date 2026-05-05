@@ -11,6 +11,9 @@
  *   });
  */
 
+// NOTE: In your own project, import from the package:
+//   import type { LimenHook } from 'limen-ai';
+// Source-relative import used here for development only.
 import type { LimenHook } from '../../src/plugins/hook_types.js';
 
 export interface ConfidenceVerifierOptions {

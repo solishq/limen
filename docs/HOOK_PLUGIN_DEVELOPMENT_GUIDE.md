@@ -56,6 +56,13 @@ const limen = await createLimen({
 
 Hooks are registered during `createLimen()`, before `Object.freeze()`.
 
+## Important: Execution Semantics Differ by Hook Type
+
+- **Assertion hooks** and **Recall hooks**: ALL registered hooks run, chaining in priority order.
+- **Decay hooks**: Only the hook with the **highest priority number** wins. Others are ignored. This is "last wins" — not "all chain."
+
+This asymmetry exists because multiple decay formulas cannot compose meaningfully (applying two independent decay functions would double-decay), while assertion checks and recall transforms compose naturally.
+
 ## Hook Types
 
 ### 1. Claim Assertion Hook
