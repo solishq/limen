@@ -1,4 +1,4 @@
-# Agent Context Governance Contract v1.2.0
+# Agent Context Governance Contract v1.2.1
 
 **Status:** RATIFIED DESIGN --- Pending Implementation
 **Governing:** CDM v2.1 + Contract Compliance v2.1
@@ -804,6 +804,20 @@ pub struct EvictionResult {
     pub evicted_entries: Vec<(String, EvictionReason)>,
 }
 
+pub struct EvictionPolicy {
+    pub strategy: String,
+    pub thresholds: EvictionThresholds,
+    pub protected_domains: Option<Vec<String>>,
+    pub protected_classifications: Option<Vec<ClassificationLevel>>,
+    pub max_eviction_batch: u32,
+}
+
+pub struct EvictionThresholds {
+    pub auto_evict_below_importance: f64,
+    pub auto_evict_stale_after_days: u32,
+    pub pressure_trigger: ContextPressure,
+}
+
 pub struct WorkingMemoryEntry {
     pub key: String,
     pub value: String,
@@ -814,6 +828,19 @@ pub struct WorkingMemoryEntry {
     pub access_count: u64,
     pub last_accessed_at: String,
     pub mutation_position: u64,
+}
+
+pub struct BoundaryTriggerConfig {
+    pub id: Option<String>,
+    pub trigger_type: String,
+    pub action: String,
+    pub condition: Option<BoundaryCondition>,
+}
+
+pub struct BoundaryCondition {
+    pub pressure: Option<ContextPressure>,
+    pub namespace: Option<String>,
+    pub min_age: Option<u64>,
 }
 
 pub struct ContextRanking {
@@ -866,10 +893,15 @@ pub trait AgentContextGovernor: Send + Sync {
     fn unpin_from_context(&self, ctx: &OperationContext, claim_id: &str) -> impl Future<Output = Result<(), ContextError>> + Send;
     fn get_eviction_candidates(&self, count: u32) -> impl Future<Output = Result<Vec<EvictionCandidate>, ContextError>> + Send;
     fn evict(&self, ctx: &OperationContext, claim_ids: &[&str], reason: &str) -> impl Future<Output = Result<EvictionResult, ContextError>> + Send;
+    fn set_eviction_policy(&self, ctx: &OperationContext, policy: &EvictionPolicy) -> impl Future<Output = Result<(), ContextError>> + Send;
+    fn get_eviction_policy(&self) -> impl Future<Output = Result<EvictionPolicy, ContextError>> + Send;
     fn write_working_memory(&self, ctx: &OperationContext, key: &str, value: &str, options: Option<&WorkingMemoryOptions>) -> impl Future<Output = Result<WorkingMemoryEntry, ContextError>> + Send;
     fn read_working_memory(&self, key: &str) -> impl Future<Output = Result<Option<WorkingMemoryEntry>, ContextError>> + Send;
     fn discard_working_memory(&self, ctx: &OperationContext, key: &str) -> impl Future<Output = Result<(), ContextError>> + Send;
     fn flush_working_memory(&self, ctx: &OperationContext, namespace: Option<&str>) -> impl Future<Output = Result<u32, ContextError>> + Send;
+    fn register_boundary_trigger(&self, ctx: &OperationContext, trigger: &BoundaryTriggerConfig) -> impl Future<Output = Result<String, ContextError>> + Send;
+    fn unregister_boundary_trigger(&self, ctx: &OperationContext, trigger_id: &str) -> impl Future<Output = Result<(), ContextError>> + Send;
+    fn list_boundary_triggers(&self) -> impl Future<Output = Result<Vec<BoundaryTriggerConfig>, ContextError>> + Send;
     fn assemble_context(&self, options: &ContextAssemblyOptions) -> impl Future<Output = Result<AssembledContext, ContextError>> + Send;
 }
 
@@ -959,10 +991,17 @@ FUNCTION assembleContext(options):
   IF options.includeMissionContext:
     missionSections = loadMissionContext(currentMission)
     FOR section IN missionSections SORTED BY position ASC:
-      IF section.tokens <= remainingBudget:
+      tokenEstimate = TokenEstimator.estimate(section, activeEncoding)
+      tokens = tokenEstimate.tokens
+      IF tokenEstimate.overflow:
+        evictedForAssembly++
+        CONTINUE
+      upperBoundTokens = ceil(tokens * (1 + tokenEstimate.varianceUpperBoundPct / 100))
+      IF upperBoundTokens <= remainingBudget:
         sections.push(section at position=1)
-        remainingBudget -= section.tokens
+        remainingBudget -= upperBoundTokens
       ELSE:
+        evictedForAssembly++
         break  // hard cap --- no partial sections
 
   IF options.includeWorkingMemory:
@@ -1048,7 +1087,8 @@ FUNCTION autoEvict(ctx, policy, utilization):
 | `writeWorkingMemory` | `write_wm` | unrestricted | GovernanceAction `{ domain: 'context', operation: 'write_wm' }` |
 | `readWorkingMemory` | `read_wm` | unrestricted | --- |
 | `flushWorkingMemory` | `manage_cognitive` | internal | GovernanceAction `{ domain: 'context', operation: 'discard_wm' }` |
-| `registerBoundaryTrigger` | `manage_cognitive` | confidential | --- |
+| `registerBoundaryTrigger` | `manage_cognitive` | confidential | GovernanceAction `{ domain: 'context', operation: 'boundary_trigger' }` |
+| `unregisterBoundaryTrigger` | `manage_cognitive` | confidential | GovernanceAction `{ domain: 'context', operation: 'boundary_trigger' }` |
 | `assembleContext` | `read_wm` + `query_claims` | unrestricted | --- |
 
 All mutating operations in this table take explicit `OperationContext` at the public interface and derive their `GovernanceAction` from the method row before mutation. Operations on claims with classification higher than the agent's clearance level produce `GOVERNANCE_REFUSAL` errors. Eviction of `restricted` or `critical` claims requires `manage_cognitive` regardless of eviction strategy. GovernanceAction types reference the unified `GovernanceAction` discriminated union (See `SHARED_TYPES.md` SS9).
@@ -1057,5 +1097,5 @@ All mutating operations in this table take explicit `OperationContext` at the pu
 
 **Contract Hash:** Tracked in `contracts/phase-x.contracts.json`
 **Authored:** 2026-05-05
-**Revised:** 2026-05-05 (v1.2.0 --- explicit mutation context, token estimator upper-bound enforcement, shared types deduplication, unified event system)
-**Supersedes:** v1.1.0
+**Revised:** 2026-05-05 (v1.2.1 --- boundary-trigger governance closure, mission-section token upper-bound enforcement, Rust parity)
+**Supersedes:** v1.2.0

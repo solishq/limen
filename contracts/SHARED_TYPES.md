@@ -1,4 +1,4 @@
-# Phase X Shared Types Registry v1.2.0
+# Phase X Shared Types Registry v1.2.1
 
 **Status:** RATIFIED --- Canonical Authority for All Phase X Contracts
 **Governing:** CDM v2.1 + Contract Compliance v2.1
@@ -350,7 +350,7 @@ export type GovernanceAction =
   | { readonly domain: 'lifecycle'; readonly operation: 'register' | 'promote' | 'demote' | 'suspend' | 'decommission' }
   | { readonly domain: 'knowledge'; readonly operation: 'export' | 'import' | 'transfer' }
   | { readonly domain: 'consent'; readonly operation: 'register' | 'revoke' | 'check' }
-  | { readonly domain: 'context'; readonly operation: 'write_wm' | 'discard_wm' | 'pin' | 'unpin' | 'evict' };
+  | { readonly domain: 'context'; readonly operation: 'write_wm' | 'discard_wm' | 'pin' | 'unpin' | 'evict' | 'boundary_trigger' };
 
 export type ComputerActionType =
   | 'file:read' | 'file:write' | 'file:delete'
@@ -1777,3 +1777,4 @@ Any contract that references a type from this registry MUST use it verbatim. No 
 | 1.0.0 | 2026-05-05 | Initial ratification. All 27 sections canonical. |
 | 1.1.0 | 2026-05-05 | Added CDM v2.1 Phase 8 manifest binding and canonical TokenEstimator contract. |
 | 1.2.0 | 2026-05-05 | Promoted agent memory request DTOs to shared ownership and canonically mapped terminal escalation audit events. |
+| 1.2.1 | 2026-05-05 | Added canonical context `boundary_trigger` governance operation for boundary trigger registration lifecycle. |

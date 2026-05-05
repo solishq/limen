@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "manifestVersion": "1.0.0",
-  "generatedAt": "2026-05-05T11:28:24+01:00",
+  "generatedAt": "2026-05-05T11:45:00+01:00",
   "governing": "CDM v2.1 + Contract Compliance v2.1",
   "phase": "Phase X",
   "status": "builder_remediated_pending_breaker",
@@ -10,16 +10,66 @@
     "HB-38": "No interface change without contract update. All public contract files are versioned and content-hashed in this manifest."
   },
   "contracts": [
-    { "path": "contracts/SHARED_TYPES.md", "contractVersion": "1.2.0", "sha256": "5f0786ccd45bee9055b45dfcb98f975bd8b3d53f63828e9e06cc6adfe954a2e9", "role": "canonical_shared_types" },
-    { "path": "contracts/AGENT_MEMORY_BRIDGE.md", "contractVersion": "1.3.0", "sha256": "f29fb87e75dbd1404e36bb1e6e6fa70ebc02aebd5ea07e77247bc87106e6e123", "role": "memory_bridge" },
-    { "path": "contracts/COMPUTER_USE_GOVERNANCE.md", "contractVersion": "2.2.0", "sha256": "f4e540c792f0f13b98297aad65f4866aa93ff11798f70c9a6f22ff6f9b3ab5aa", "role": "computer_use_governance" },
-    { "path": "contracts/AUDIT_VISUALIZATION_SCHEMA.md", "contractVersion": "1.2.0", "sha256": "4aeb64cd2c61532643a8e84f375cf8237be5d243b8b5de9a6a5460da1836b322", "role": "audit_visualization" },
-    { "path": "contracts/AGENT_ADAPTER_ARCHITECTURE.md", "contractVersion": "2.2.0", "sha256": "739129f0fcd31b2627257671072d01a2b9969e244a570115ccb2d8814b607205", "role": "adapter_architecture" },
-    { "path": "contracts/AGENT_INTELLIGENCE_BRIDGE.md", "contractVersion": "1.2.0", "sha256": "f8185d9bce328bcd0fb6a34ba57fdde1885c327724c4cdb7b31c27ee3a33e8f3", "role": "intelligence_bridge" },
-    { "path": "contracts/AGENT_EXECUTION_GOVERNANCE.md", "contractVersion": "1.2.0", "sha256": "5a7d2d7ced675d45b142afd4bc49345e848f2d91498183968b327427494f0fbd", "role": "execution_governance" },
-    { "path": "contracts/AGENT_CONTEXT_GOVERNANCE.md", "contractVersion": "1.2.0", "sha256": "3b601a2eb57ea69654437eb1197ef9d39bfacadfde5ac671b4eccdc93dcc67f9", "role": "context_governance" },
-    { "path": "contracts/AGENT_LIFECYCLE_MANAGEMENT.md", "contractVersion": "1.3.0", "sha256": "5954f6fae2fa62db5fc317ec20e48ba12e71636bfd4dbe8c929a203accd486b0", "role": "lifecycle_management" },
-    { "path": "docs/PHASE_X_ARCHITECTURE_OVERVIEW.md", "contractVersion": "1.2.0", "sha256": "d54ad2c94a73338539c57c9633dc7f72fae8de138676f577796aee5053be6ed2", "role": "architecture_overview" }
+    {
+      "path": "contracts/SHARED_TYPES.md",
+      "contractVersion": "1.2.1",
+      "sha256": "edbff8fe936d2af1a4978678cfba9b0be739ebe6b4fe980e6acc5105bbecceb9",
+      "role": "canonical_shared_types"
+    },
+    {
+      "path": "contracts/AGENT_MEMORY_BRIDGE.md",
+      "contractVersion": "1.3.0",
+      "sha256": "f29fb87e75dbd1404e36bb1e6e6fa70ebc02aebd5ea07e77247bc87106e6e123",
+      "role": "memory_bridge"
+    },
+    {
+      "path": "contracts/COMPUTER_USE_GOVERNANCE.md",
+      "contractVersion": "2.2.0",
+      "sha256": "f4e540c792f0f13b98297aad65f4866aa93ff11798f70c9a6f22ff6f9b3ab5aa",
+      "role": "computer_use_governance"
+    },
+    {
+      "path": "contracts/AUDIT_VISUALIZATION_SCHEMA.md",
+      "contractVersion": "1.2.0",
+      "sha256": "4aeb64cd2c61532643a8e84f375cf8237be5d243b8b5de9a6a5460da1836b322",
+      "role": "audit_visualization"
+    },
+    {
+      "path": "contracts/AGENT_ADAPTER_ARCHITECTURE.md",
+      "contractVersion": "2.2.0",
+      "sha256": "739129f0fcd31b2627257671072d01a2b9969e244a570115ccb2d8814b607205",
+      "role": "adapter_architecture"
+    },
+    {
+      "path": "contracts/AGENT_INTELLIGENCE_BRIDGE.md",
+      "contractVersion": "1.2.0",
+      "sha256": "f8185d9bce328bcd0fb6a34ba57fdde1885c327724c4cdb7b31c27ee3a33e8f3",
+      "role": "intelligence_bridge"
+    },
+    {
+      "path": "contracts/AGENT_EXECUTION_GOVERNANCE.md",
+      "contractVersion": "1.2.0",
+      "sha256": "5a7d2d7ced675d45b142afd4bc49345e848f2d91498183968b327427494f0fbd",
+      "role": "execution_governance"
+    },
+    {
+      "path": "contracts/AGENT_CONTEXT_GOVERNANCE.md",
+      "contractVersion": "1.2.1",
+      "sha256": "4620381a0504177af90eac23f74304e75a72b3cd93d004ca55dbd3d9e5041d35",
+      "role": "context_governance"
+    },
+    {
+      "path": "contracts/AGENT_LIFECYCLE_MANAGEMENT.md",
+      "contractVersion": "1.3.0",
+      "sha256": "5954f6fae2fa62db5fc317ec20e48ba12e71636bfd4dbe8c929a203accd486b0",
+      "role": "lifecycle_management"
+    },
+    {
+      "path": "docs/PHASE_X_ARCHITECTURE_OVERVIEW.md",
+      "contractVersion": "1.2.0",
+      "sha256": "d54ad2c94a73338539c57c9633dc7f72fae8de138676f577796aee5053be6ed2",
+      "role": "architecture_overview"
+    }
   ],
   "defenseSetBefore": [
     "canonical_shared_types",
@@ -48,7 +98,10 @@
     "canonical_audit_cardinality",
     "canonical_token_estimator",
     "syscall_reference_alignment",
-    "operation_context_timestamp_boundary"
+    "operation_context_timestamp_boundary",
+    "boundary_trigger_governance_closure",
+    "mission_context_token_upper_bound",
+    "context_rust_projection_parity"
   ],
   "monotonicityProof": {
     "claim": "defenseSetAfter is a strict superset of defenseSetBefore; no defense from the previous remediated suite is removed or weakened.",
@@ -63,30 +116,35 @@
       "canonical_audit_cardinality",
       "canonical_token_estimator",
       "syscall_reference_alignment",
-      "operation_context_timestamp_boundary"
+      "operation_context_timestamp_boundary",
+      "boundary_trigger_governance_closure",
+      "mission_context_token_upper_bound",
+      "context_rust_projection_parity"
     ],
     "closure": "Any future interface, defense, or contract hash change must update this manifest before certification."
   },
   "lci": {
     "name": "Phase X Contract Integrity",
     "assertion": "For every Phase X agent operation, canonical types, governance gates, consent checks, rate limits, and audit obligations compose into one closed contract family with no authority expansion outside Limen Core.",
-    "tau": "tau_PhaseX = CanonicalTypes ∩ CorePermissionMapping ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩ RateLimit ∩ LifecycleState",
+    "tau": "tau_PhaseX = CanonicalTypes ∩ CorePermissionMapping ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩ RateLimit ∩ TokenEstimator ∩ LifecycleState",
     "tauDerivation": [
       "CanonicalTypes: all shared cross-contract types, including adapter-facing memory request DTOs, are defined only in SHARED_TYPES.md.",
       "CorePermissionMapping: Phase X permissions are limited to Limen Core Permission strings.",
-      "GovernanceGate: every mutating operation takes OperationContext or GovernanceContext before mutation.",
+      "GovernanceGate: every mutating operation takes OperationContext or GovernanceContext before mutation, including context boundary-trigger registration lifecycle.",
       "ConsentGate: personal data storage, transfer, and export require active consent before persistence/export.",
       "AuditPath: allowed/sandboxed actions have before+after entries; refused/escalated actions have one terminal entry.",
       "EventBus: Phase X emits only AgentEvent values from SHARED_TYPES.md.",
       "RateLimit: DEFAULT_RATE_LIMITS are inherited and may only be tightened.",
+      "TokenEstimator: every assembled context section, including mission context, is admitted by upper-bound token estimate or excluded before return.",
       "LifecycleState: terminal and trust state transitions are explicit and audited."
     ],
     "closureProof": {
       "typeClosure": "All cross-contract type names are resolved through SHARED_TYPES.md; contract-local types are not referenced by other contracts.",
-      "authorityClosure": "AgentSession maps to OperationContext without adding permissions outside derivePermissions.",
+      "authorityClosure": "AgentSession maps to OperationContext without adding permissions outside derivePermissions; context boundary-trigger mutations require manage_cognitive through GovernanceAction boundary_trigger.",
       "eventClosure": "Core hook events are translated before entering AgentEventBus.",
       "auditClosure": "No successful side effect is returned before the required durable audit path exists.",
-      "evolutionClosure": "HB-38 requires any interface change to update the owning contract and this manifest hash."
+      "evolutionClosure": "HB-38 requires any interface change to update the owning contract and this manifest hash.",
+      "tokenClosure": "assembleContext applies TokenEstimator upper-bound admission to mission, working-memory, and belief sections; overflow is exclusion, never zero-token admission."
     }
   },
   "phase8Gate": {
