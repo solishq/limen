@@ -1,0 +1,15 @@
+[package]
+name = "limen_observability"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Optional observability infrastructure for Limen v5: Prometheus metrics and Grafana dashboards"
+
+[dependencies]
+prometheus-client = "0.23"
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

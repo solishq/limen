@@ -1,0 +1,18 @@
+[package]
+name = "limen_projection"
+description = "Projection storage, projector, certification, validity states."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+limen_types = { workspace = true }
+limen_foundation_contract = { workspace = true }
+limen_chain = { workspace = true }
+limen_canonical = { workspace = true }
+rusqlite = { workspace = true }
+blake3 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }

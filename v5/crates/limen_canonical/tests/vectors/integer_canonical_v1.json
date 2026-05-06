@@ -1,0 +1,40 @@
+{
+  "_comment": "Golden vectors for §10.2 canonical MessagePack encoding. Integers: fixed-width per Rust type (rule 3). Length prefixes: str32/bin32/array32/map32 (founder clarification). Tags from MessagePack spec: u8=0xcc, u16=0xcd, u32=0xce, u64=0xcf, i8=0xd0, i16=0xd1, i32=0xd2, i64=0xd3, str32=0xdb, bin32=0xc6, array32=0xdd, map32=0xdf.",
+  "integer_vectors": [
+    { "rust_type": "u8",  "value": 0,    "expected_hex": "cc00" },
+    { "rust_type": "u8",  "value": 1,    "expected_hex": "cc01" },
+    { "rust_type": "u8",  "value": 127,  "expected_hex": "cc7f" },
+    { "rust_type": "u8",  "value": 128,  "expected_hex": "cc80" },
+    { "rust_type": "u8",  "value": 255,  "expected_hex": "ccff" },
+    { "rust_type": "u16", "value": 0,    "expected_hex": "cd0000" },
+    { "rust_type": "u16", "value": 256,  "expected_hex": "cd0100" },
+    { "rust_type": "u16", "value": 65535,"expected_hex": "cdffff" },
+    { "rust_type": "u32", "value": 0,    "expected_hex": "ce00000000" },
+    { "rust_type": "u32", "value": 42,   "expected_hex": "ce0000002a" },
+    { "rust_type": "u32", "value": 256,  "expected_hex": "ce00000100" },
+    { "rust_type": "u64", "value": 0,    "expected_hex": "cf0000000000000000" },
+    { "rust_type": "u64", "value": 42,   "expected_hex": "cf000000000000002a" },
+    { "rust_type": "i8",  "value": 0,    "expected_hex": "d000" },
+    { "rust_type": "i8",  "value": -1,   "expected_hex": "d0ff" },
+    { "rust_type": "i8",  "value": 127,  "expected_hex": "d07f" },
+    { "rust_type": "i8",  "value": -128, "expected_hex": "d080" },
+    { "rust_type": "i16", "value": 0,    "expected_hex": "d10000" },
+    { "rust_type": "i16", "value": -1,   "expected_hex": "d1ffff" },
+    { "rust_type": "i32", "value": 0,    "expected_hex": "d200000000" },
+    { "rust_type": "i32", "value": -1,   "expected_hex": "d2ffffffff" },
+    { "rust_type": "i64", "value": 0,    "expected_hex": "d30000000000000000" },
+    { "rust_type": "i64", "value": 1,    "expected_hex": "d30000000000000001" },
+    { "rust_type": "i64", "value": -1,   "expected_hex": "d3ffffffffffffffff" }
+  ],
+  "length_prefix_vectors": [
+    { "structure": "string", "value": "hello", "prefix_tag_hex": "db", "prefix_length_hex": "00000005", "_comment": "str32 tag + 4-byte length" },
+    { "structure": "string", "value": "",      "prefix_tag_hex": "db", "prefix_length_hex": "00000000" },
+    { "structure": "bytes",  "value_hex": "deadbeef", "prefix_tag_hex": "c6", "prefix_length_hex": "00000004" },
+    { "structure": "array",  "element_count": 3, "prefix_tag_hex": "dd", "prefix_length_hex": "00000003" },
+    { "structure": "array",  "element_count": 0, "prefix_tag_hex": "dd", "prefix_length_hex": "00000000" },
+    { "structure": "map",    "entry_count": 2,   "prefix_tag_hex": "df", "prefix_length_hex": "00000002" },
+    { "structure": "map",    "entry_count": 0,   "prefix_tag_hex": "df", "prefix_length_hex": "00000000" }
+  ],
+  "forbidden_prefix_tags": ["a0-bf", "d9", "da", "c4", "c5", "90-9f", "dc", "80-8f", "de"],
+  "forbidden_prefix_names": ["fixstr", "str8", "str16", "bin8", "bin16", "fixarray", "array16", "fixmap", "map16"]
+}

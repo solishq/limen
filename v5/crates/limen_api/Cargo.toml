@@ -1,0 +1,12 @@
+[package]
+name = "limen_api"
+description = "Public API surface for Limen v5 substrate."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+limen_substrate = { workspace = true }
+limen_types = { workspace = true }
+limen_foundation_contract = { workspace = true }
+thiserror = { workspace = true }

@@ -1,0 +1,16 @@
+[package]
+name = "limen_substrate"
+description = "Assembled substrate: wires all components together."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+limen_types = { workspace = true }
+limen_foundation_contract = { workspace = true }
+limen_foundation_ops = { workspace = true }
+limen_chain = { workspace = true }
+limen_projection = { workspace = true }
+limen_substrate_runtime = { workspace = true }
+limen_canonical = { workspace = true }
+tokio = { workspace = true }

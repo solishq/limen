@@ -1,0 +1,25 @@
+[package]
+name = "limen_consensus"
+description = "Profile 3 consensus-replicated ChainReadContext implementation (Raft-based)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# MUST NOT depend on: limen_projection, limen_chain (parallel impl, not wrapper)
+[features]
+default = []
+# Enable concrete openraft dependency. Without this, only trait stubs + error types exist.
+openraft = ["dep:openraft"]
+# Enable consensus storage implementation (feature-gated todo!() stubs).
+# NOT in default features -- never linked into production binaries unless explicitly opted in.
+consensus = []
+
+[dependencies]
+limen_types = { workspace = true }
+limen_foundation_contract = { workspace = true }
+thiserror = { workspace = true }
+openraft = { version = "0.9", optional = true, default-features = false }
+
+[dev-dependencies]
+limen_foundation_contract = { workspace = true, features = ["test-support"] }

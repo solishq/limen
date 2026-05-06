@@ -1,0 +1,11 @@
+error[E0050]: method `evaluate` has 4 parameters but the declaration in trait `evaluate` has 3
+  --> tests/compile_fail/foundation_op_fourth_param.rs:18:22
+   |
+18 |           _chain_read: &FoundationReadCapability<'ctx>,
+   |  ______________________^
+19 | |         _runtime: &SubstrateRuntimeEnvelope<'tx>,
+20 | |         _proposed: &ProposedTransitionEnvelope,
+21 | |         _extra: &str,  // FORBIDDEN fourth parameter
+   | |____________________^ expected 3 parameters, found 4
+   |
+   = note: `evaluate` from trait: `fn(&FoundationReadCapability<'ctx>, &SubstrateRuntimeEnvelope<'tx>, &ProposedTransitionEnvelope) -> <Self as FoundationOperation>::Verdict`

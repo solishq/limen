@@ -1,0 +1,17 @@
+[package]
+name = "limen_foundation_contract"
+description = "Foundation contract: FoundationOperation trait, capability types, envelope types, verdict types, ChainReadContext trait."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# MUST NOT depend on anything except limen_types (v1.3 §0.2)
+[features]
+test-support = []  # Exposes test-only constructors for capabilities/envelopes
+
+[dependencies]
+limen_types = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+trybuild = { workspace = true }

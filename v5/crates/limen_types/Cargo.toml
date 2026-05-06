@@ -1,0 +1,9 @@
+[package]
+name = "limen_types"
+description = "Shared primitive types: Blake3Hash, ChainSequence, TenantScope, etc."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }

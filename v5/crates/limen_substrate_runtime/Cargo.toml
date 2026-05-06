@@ -1,0 +1,13 @@
+[package]
+name = "limen_substrate_runtime"
+description = "Dispatcher, capability minting, envelope construction, sealed FoundationOpsRegistry."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# MUST NOT depend on: limen_projection (v1.3 §0.2)
+[dependencies]
+limen_types = { workspace = true }
+limen_foundation_contract = { workspace = true }
+limen_foundation_ops = { workspace = true }
+limen_chain = { workspace = true }

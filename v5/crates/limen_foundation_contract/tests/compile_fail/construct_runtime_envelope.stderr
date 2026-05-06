@@ -1,0 +1,21 @@
+warning: unreachable expression
+ --> tests/compile_fail/construct_runtime_envelope.rs:9:20
+  |
+8 |         transaction: todo!(),
+  |                      ------- any code following this expression is unreachable
+9 |         operation: todo!(),
+  |                    ^^^^^^^ unreachable expression
+  |
+  = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+error[E0451]: fields `transaction`, `operation` and `_seal` of struct `SubstrateRuntimeEnvelope` are private
+  --> tests/compile_fail/construct_runtime_envelope.rs:8:9
+   |
+ 7 |     let _env = limen_foundation_contract::envelope::SubstrateRuntimeEnvelope {
+   |                ------------------------------------------------------------- in this type
+ 8 |         transaction: todo!(),
+   |         ^^^^^^^^^^^ private field
+ 9 |         operation: todo!(),
+   |         ^^^^^^^^^ private field
+10 |         _seal: PhantomData,
+   |         ^^^^^ private field

@@ -1,0 +1,60 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/limen_types",
+    "crates/limen_foundation_contract",
+    "crates/limen_foundation_ops",
+    "crates/limen_chain",
+    "crates/limen_projection",
+    "crates/limen_substrate_runtime",
+    "crates/limen_canonical",
+    "crates/limen_substrate",
+    "crates/limen_api",
+    "crates/limen_consensus",
+    "crates/limen_graph",
+    "crates/limen_observability",
+    "crates/limen_postgres",
+]
+
+[workspace.package]
+edition = "2021"
+version = "5.0.0-alpha.1"
+authors = ["SolisHQ <engineering@solishq.com>"]
+license = "BUSL-1.1"
+rust-version = "1.75"
+
+[workspace.dependencies]
+blake3 = "1"
+rusqlite = { version = "0.31", features = ["bundled", "backup"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rmp-serde = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+thiserror = "1"
+trybuild = "1"
+proptest = "1"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+
+# Internal crate dependencies (version-pinned per v1.4 §25)
+limen_types = { path = "crates/limen_types", version = "=5.0.0-alpha.1" }
+limen_foundation_contract = { path = "crates/limen_foundation_contract", version = "=5.0.0-alpha.1" }
+limen_foundation_ops = { path = "crates/limen_foundation_ops", version = "=5.0.0-alpha.1" }
+limen_chain = { path = "crates/limen_chain", version = "=5.0.0-alpha.1" }
+limen_crypto = { path = "crates/limen_crypto", version = "=5.0.0-alpha.1" }
+limen_canonical = { path = "crates/limen_canonical", version = "=5.0.0-alpha.1" }
+limen_projection = { path = "crates/limen_projection", version = "=5.0.0-alpha.1" }
+limen_substrate_runtime = { path = "crates/limen_substrate_runtime", version = "=5.0.0-alpha.1" }
+limen_substrate = { path = "crates/limen_substrate", version = "=5.0.0-alpha.1" }
+limen_api = { path = "crates/limen_api", version = "=5.0.0-alpha.1" }
+limen_consensus = { path = "crates/limen_consensus", version = "=5.0.0-alpha.1" }
+limen_observability = { path = "crates/limen_observability", version = "=5.0.0-alpha.1" }
+limen_postgres = { path = "crates/limen_postgres", version = "=5.0.0-alpha.1" }
+
+# Observability dependencies
+prometheus-client = "0.23"
+
+# PostgreSQL dependencies
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
+deadpool-postgres = "0.14"
+bytes = "1"
