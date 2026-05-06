@@ -212,6 +212,8 @@ interface CrewAIAdapter extends AgentAdapter {
 
 **Claim 1.12:** `healthCheck()` MUST return current adapter health including connectivity to Limen Core, active session count, and governance state. It is available in all lifecycle states except SHUTDOWN, where it returns `NOT_INITIALIZED`. Unlike `getHealth()` (which is synchronous and returns cached state), `healthCheck()` performs a live connectivity probe to Limen Core.
 
+**Claim 1.13:** `on()` and `off()` are permitted in all lifecycle states except SHUTDOWN, where they return silently (no-op, no error). Subscriptions registered via `on()` survive state transitions (UNINITIALIZED -> READY -> DEGRADED -> READY) but are cleared when `shutdown()` completes. `on()` returns a unique subscription ID; `off()` with an unknown or already-removed subscription ID is a no-op. No governance evaluation is required for subscription management -- these are local observer registrations with no Limen Core side effects.
+
 ### 3.2 CrewAIAdapterConfig (Local Type)
 
 ```typescript
@@ -251,6 +253,8 @@ interface CrewAIAdapterConfig {
 **Claim 2.1:** `governed` defaults to `true` and is non-optional in effect. Setting `governed: false` is invalid for every caller, including `verified` agents and agents with `governance_admin`; `initialize` MUST reject it with `GOVERNANCE_REFUSAL` and `rule: "governance_non_optional"`.
 
 **Claim 2.2:** `connectionTimeoutMs` MUST be within `[1000, 30000]`. Values outside this range are rejected at initialization with `SERDE_ERROR`; the adapter MUST NOT clamp silently.
+
+**Claim 2.10:** Config identity is determined by the SHA-256 hash of the canonical JSON serialization of `CrewAIAdapterConfig` (keys sorted recursively, no whitespace, `Set` values sorted lexicographically, `null` preserved). This digest is used by the idempotent `initialize()` check (§9.3 READY -> READY transition) and recorded in initialization audit entries. Two configs with identical digests are considered identical; differing digests trigger `ALREADY_INITIALIZED`.
 
 **Claim 2.7:** `rateLimits` are additive to `DEFAULT_RATE_LIMITS`. Empty adapter-specific limits still inherit defaults. Any configuration that weakens, disables, replaces, or locally resets default rate counters is rejected at initialization with `GOVERNANCE_REFUSAL`.
 
@@ -306,7 +310,7 @@ interface RememberOptions extends AgentMemoryOptions {
 interface CrewContext {
   readonly crewId: string;
   readonly agentRole: string;
-  readonly taskId: string | null;
+  readonly taskId: TaskId | null;
   readonly delegationDepth: number;
 }
 ```
@@ -714,9 +718,17 @@ pub enum AdapterLifecycleState {
     Shutdown,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AdapterHealthStatus {
+    Healthy,
+    Degraded,
+    Unhealthy,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdapterHealth {
-    pub status: String, // "healthy" | "degraded" | "unhealthy"
+    pub status: AdapterHealthStatus,
     pub lifecycle_state: AdapterLifecycleState,
     pub last_activity: Option<String>,
     pub active_sessions: u32,
@@ -768,7 +780,7 @@ The adapter has no ungoverned execution mode. `config.governed` exists only for 
 | Operation | Governance Action | Required Capability | Minimum Trust |
 |---|---|---|---|
 | `remember` | `{ domain: 'memory', operation: 'write' }` | `memory_write` | `low` |
-| `recall` | `{ domain: 'memory', operation: 'read' }` | `memory_read` | `untrusted` |
+| `recall` | `{ domain: 'memory', operation: 'read' }` | `memory_read` (implicit) | `untrusted` |
 | `createBranch` | `{ domain: 'memory', operation: 'branch' }` | `branching` | `medium` |
 | `mergeBranches` | `{ domain: 'memory', operation: 'merge' }` | `branching` | `medium` |
 | delegation event | `{ domain: 'execution', operation: 'delegate' }` | `mission_delegation` | `high` |
@@ -811,6 +823,8 @@ The adapter enforces a validity matrix derived from `AGENT_LIFECYCLE_MANAGEMENT.
 **Claim 3.5:** Confidence caps from `AGENT_LIFECYCLE_MANAGEMENT.md` §11 are enforced. A `remember` call with `confidence: 0.9` from a `medium` trust agent silently caps to `0.7`. The returned `ClaimId` references a claim with `confidence: 0.7`.
 
 **Claim 3.6:** All operations on a `suspended` or `decommissioned` agent return `GOVERNANCE_REFUSAL` with reason `"agent_state_not_active"`. This check precedes all other governance evaluation.
+
+**Claim 3.7:** The `memory_read` capability is implicitly granted at all trust levels, including `untrusted`. Declaring `memory_read` in `CrewAIAdapterConfig.capabilities` is permitted for audit visibility but does not gate access -- `recall` succeeds for any active agent regardless of whether `memory_read` appears in the declared capability set. The governance gate still evaluates (agent state, rate limits, classification), but capability presence is not checked for `recall`. This is the only implicitly granted capability; all other operations require explicit capability declaration.
 
 ---
 
@@ -1057,7 +1071,8 @@ type AdapterLifecycleState =
 |---|---|---|---|---|
 | UNINITIALIZED | INITIALIZING | `initialize()` called | Config validation passes | Begin connection to core |
 | INITIALIZING | READY | Core port connected, adapter registered | Audit entry recorded | Emit `session:started` |
-| INITIALIZING | UNINITIALIZED | Connection failure, config error | — | Error returned to caller |
+| INITIALIZING | UNINITIALIZED | Connection failure, config error, connectionTimeoutMs elapsed | — | Error returned to caller |
+| INITIALIZING | SHUTDOWN | `shutdown()` called while INITIALIZING | — | Abort connection attempt; force transition to SHUTDOWN |
 | READY | READY | `initialize()` called again with identical config | Config digest matches active digest | No-op success; no state reset |
 | READY | DEGRADED | Core port loss detected | — | Emit `cognitive:health_degraded`; begin auto-recovery |
 | DEGRADED | READY | Core port recovered | Health check passes | Emit `session:started` (recovery); clear error count |
@@ -1078,15 +1093,17 @@ type AdapterLifecycleState =
 
 **Claim 7.6:** After recovery exhaustion in DEGRADED state (all retry attempts per `RetryPolicy` have failed), the adapter remains in DEGRADED. The caller's recourse is `shutdown()` followed by construction of a new adapter instance. Re-initialization from DEGRADED is not permitted; calling `initialize()` in DEGRADED state returns `ALREADY_INITIALIZED`. The adapter emits `cognitive:health_degraded` with `{ recoveryExhausted: true }` when exhaustion occurs.
 
+**Claim 7.7:** INITIALIZING MUST transition to UNINITIALIZED within `connectionTimeoutMs`. If the timeout fires while in INITIALIZING, the adapter transitions to UNINITIALIZED and returns a connection-failure error to the caller. `shutdown()` from INITIALIZING MUST force an immediate transition to SHUTDOWN, aborting the in-progress connection attempt. This prevents INITIALIZING from becoming a stuck state that blocks resource cleanup.
+
 ### 9.4 Operations Permitted per State
 
-| State | initialize | remember | recall | createBranch | mergeBranches | resolveConflict | healthCheck | getHealth | shutdown |
-|---|---|---|---|---|---|---|---|---|---|
-| UNINITIALIZED | OK | ERR | ERR | ERR | ERR | ERR | OK (status: unhealthy) | OK (status: unhealthy) | OK (no-op) |
-| INITIALIZING | ERR | ERR | ERR | ERR | ERR | ERR | OK (status: degraded) | OK (status: degraded) | ERR |
-| READY | OK if same config; ERR if different | OK | OK | OK | OK | OK | OK (live probe) | OK (status: healthy) | OK |
-| DEGRADED | ERR | ERR | ERR | ERR | ERR | ERR | OK (status: degraded) | OK (status: degraded) | OK |
-| SHUTDOWN | ERR | ERR | ERR | ERR | ERR | ERR | ERR (NOT_INITIALIZED) | OK (status: unhealthy) | OK (no-op) |
+| State | initialize | remember | recall | createBranch | mergeBranches | resolveConflict | healthCheck | getHealth | on/off | shutdown |
+|---|---|---|---|---|---|---|---|---|---|---|
+| UNINITIALIZED | OK | ERR | ERR | ERR | ERR | ERR | OK (status: unhealthy) | OK (status: unhealthy) | OK | OK (no-op) |
+| INITIALIZING | ERR | ERR | ERR | ERR | ERR | ERR | OK (status: degraded) | OK (status: degraded) | OK | OK (force) |
+| READY | OK if same config; ERR if different | OK | OK | OK | OK | OK | OK (live probe) | OK (status: healthy) | OK | OK |
+| DEGRADED | ERR | ERR | ERR | ERR | ERR | ERR | OK (status: degraded) | OK (status: degraded) | OK | OK |
+| SHUTDOWN | ERR | ERR | ERR | ERR | ERR | ERR | ERR (NOT_INITIALIZED) | OK (status: unhealthy) | no-op | OK (no-op) |
 
 ---
 
@@ -1268,6 +1285,12 @@ The following test cases are mandatory for certification. They include the paren
 **Steps:** Call `healthCheck()` in UNINITIALIZED state. Initialize to READY and call `healthCheck()`. Simulate core port loss (DEGRADED) and call `healthCheck()`. Restore core port (READY) and call `healthCheck()`. Shutdown and call `healthCheck()`.
 **Assertions:** UNINITIALIZED: returns `AdapterHealth` with `status: 'unhealthy'`, `corePortConnected: false`, `activeSessions: 0`. READY: returns `status: 'healthy'`, `corePortConnected: true`. DEGRADED: returns `status: 'degraded'`, `corePortConnected: false`. SHUTDOWN: returns `NOT_INITIALIZED` error. In all non-SHUTDOWN states, `healthCheck()` performs a live probe (not cached) -- verified by injecting a transient core port failure between `getHealth()` (cached: healthy) and `healthCheck()` (live: degraded).
 
+### TC-29: Subscription Lifecycle via on/off
+
+**Covers:** Claim 1.13
+**Steps:** Register a subscription via `on('governance:refused', handler)` in UNINITIALIZED state. Initialize to READY. Trigger a governance refusal and verify handler fires. Call `off(subscriptionId)` and trigger another refusal -- verify handler does NOT fire. Register a new subscription. Transition to DEGRADED then back to READY -- verify subscription still fires. Call `shutdown()` -- verify all subscriptions are cleared. Attempt `on()` post-SHUTDOWN -- verify no-op (no error, no subscription created). Attempt `off('nonexistent-id')` -- verify no-op.
+**Assertions:** Subscriptions registered pre-READY fire once READY. `off()` removes exactly the targeted subscription. Subscriptions survive DEGRADED -> READY recovery. Shutdown clears all subscriptions. Post-SHUTDOWN `on()` is a silent no-op. `off()` with unknown ID is a no-op.
+
 ---
 
 ## 11. Dependencies
@@ -1337,6 +1360,10 @@ All verifiable claims for Breaker traceability:
 | 7.4 | §9.3 | Auto-recovery uses exponential backoff; exhaustion keeps DEGRADED |
 | 7.5 | §9.3 | Concurrent shutdown, recovery, and operations are serialized by lifecycle state |
 | 7.6 | §9.3 | Recovery exhaustion keeps DEGRADED; re-initialization not permitted; caller must shutdown + reconstruct |
+| 7.7 | §9.3 | INITIALIZING must transition to UNINITIALIZED within connectionTimeoutMs; shutdown from INITIALIZING forces SHUTDOWN |
+| 1.13 | §3.1 | on/off permitted in all states except SHUTDOWN (no-op); subscriptions survive transitions, cleared on shutdown |
+| 2.10 | §3.2 | Config identity is SHA-256 of canonical JSON (sorted keys, no whitespace); used for idempotent init |
+| 3.7 | §5.4 | memory_read implicitly granted at all trust levels; declaration is for audit only, does not gate access |
 
 ---
 
