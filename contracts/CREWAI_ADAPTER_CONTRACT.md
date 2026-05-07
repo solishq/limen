@@ -506,8 +506,8 @@ pub trait CrewAIAdapter: AgentAdapter + Send + Sync + 'static {
 
     fn get_health(&self) -> AdapterHealth;
 
-    fn on(&mut self, event: &str, callback: Box<dyn Fn(&AgentEventPayload) + Send + Sync>) -> String;
-    fn off(&mut self, subscription_id: &str);
+    fn on(&mut self, event: &str, callback: Box<dyn Fn(&AgentEventPayload) + Send + Sync>) -> Result<String, CrewAIAdapterError>;
+    fn off(&mut self, subscription_id: &str) -> Result<(), CrewAIAdapterError>;
 }
 
 /// CrewAI adapter config (contract-local)
