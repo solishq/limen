@@ -1473,6 +1473,7 @@ pub struct AuditLogEntry {
     pub agent_id: AgentId,
     pub session_id: SessionId,
     pub event: AgentEvent,
+    pub action: Option<serde_json::Value>, // GovernanceAction — matches TypeScript projection §10.3
     pub governance_decision: Option<GovernanceDecision>,
     pub details: serde_json::Value,
     pub previous_hash: String,
