@@ -22,7 +22,7 @@ This contract is a Phase 3 deliverable that implements the CrewAI adapter specif
 
 - **SHARED_TYPES.md v1.4.0** -- All cross-contract types, including `AgentFramework.crew_ai`
 - **AGENT_ADAPTER_ARCHITECTURE.md v2.3.0** -- Adapter interface, registry, translation semantics, testing contract
-- **AGENT_LIFECYCLE_MANAGEMENT.md v1.3.1** -- Agent identity, trust promotion, consent governance, knowledge exchange
+- **AGENT_LIFECYCLE_MANAGEMENT.md v1.3.0** -- Agent identity, trust promotion, consent governance, knowledge exchange
 
 The adapter does NOT modify Limen Core. It is a pure translation layer that maps CrewAI-native concepts to canonical Phase X types. Limen Core MUST reject CrewAI-originated memory, execution, and delegation operations that do not carry a registered adapter identity, session identity, governance decision, and audit-chain linkage.
 
@@ -47,7 +47,7 @@ CrewAI introduces concepts absent from single-agent adapters:
 | Contract Version | 1.0.0 |
 | SHARED_TYPES dependency | v1.4.0 |
 | AGENT_ADAPTER_ARCHITECTURE dependency | v2.3.0 |
-| AGENT_LIFECYCLE_MANAGEMENT dependency | v1.3.1 |
+| AGENT_LIFECYCLE_MANAGEMENT dependency | v1.3.0 |
 | CrewAI SDK target | v1.14.x |
 | CrewAI docs binding | Official CrewAI docs, Tools v1.14.0 and Tool Call Hooks v1.12.2+, accessed 2026-05-06 |
 
@@ -1316,11 +1316,11 @@ The following test cases are mandatory for certification. They include the paren
 |---|---|---|---|
 | `SHARED_TYPES.md` | v1.4.0 | §21 (`AgentFramework.crew_ai`) | Framework enum, all cross-contract types |
 | `AGENT_ADAPTER_ARCHITECTURE.md` | v2.3.0 | §7.6, §3, §8, §10 | Adapter interface, CrewAI spec, registry, testing contract, invariants |
-| `AGENT_LIFECYCLE_MANAGEMENT.md` | v1.3.1 | §5, §6, §7, §11, §13 | Trust promotion, consent governance, knowledge exchange, confidence caps, invariants |
+| `AGENT_LIFECYCLE_MANAGEMENT.md` | v1.3.0 | §5, §6, §7, §11, §13 | Trust promotion, consent governance, knowledge exchange, confidence caps, invariants |
 | `@langchain/langgraph-checkpoint` | N/A | — | NOT a dependency. CrewAI adapter communicates with Limen Core directly. LangGraph interop is a separate adapter concern. |
 | CrewAI SDK/docs | v1.14.x / official docs accessed 2026-05-06 | Tools, Tool Call Hooks | Hook context shape, BaseTool normalization, tool call interception |
 
-**Certification Gate:** This contract MUST NOT be certified in a workspace whose `SHARED_TYPES.md`, `AGENT_ADAPTER_ARCHITECTURE.md`, or `AGENT_LIFECYCLE_MANAGEMENT.md` versions are older than the versions listed above. In particular, `AgentFramework.crew_ai`, the v2.3.0 canonical `AgentAdapter` interface, and the v1.3.1 lifecycle confidence/trust rules must exist in the same contract family before implementation begins.
+**Certification Gate:** This contract MUST NOT be certified in a workspace whose `SHARED_TYPES.md`, `AGENT_ADAPTER_ARCHITECTURE.md`, or `AGENT_LIFECYCLE_MANAGEMENT.md` versions are older than the versions listed above. In particular, `AgentFramework.crew_ai`, the v2.3.0 canonical `AgentAdapter` interface, and the v1.3.0 lifecycle confidence/trust rules must exist in the same contract family before implementation begins.
 
 ---
 

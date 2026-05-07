@@ -84,7 +84,7 @@ All temporal logic must use the Phase X `TimeProvider` interface (no wall-clock 
 ### 5.1 Governance Non-Optionality
 - `governed: true` is the **default** for all Phase 3 adapters
 - Governance evaluation must be **authorization-first** (before token budget, before any side effect)
-- `governed: false` is only permitted via explicit, auditable configuration (not for production)
+- There is no `governed:false` bypass path. All adapters enforce governance unconditionally
 
 ### 5.2 Refusal Handling
 - All refusals must return typed `RefusalError` with:
@@ -139,19 +139,7 @@ If a required v5 port becomes unavailable after `READY`:
 
 ## 8. Error Taxonomy (Canonical)
 
-All Phase 3 adapters must use the Phase X error taxonomy with deterministic precedence:
-
-**Priority Order (highest to lowest):**
-1. `NOT_INITIALIZED` (init-time only)
-2. `GOVERNANCE_REFUSAL`
-3. `BUDGET_EXCEEDED`
-4. `TIME_PROVIDER_UNAVAILABLE`
-5. `CORE_PORT_UNAVAILABLE`
-6. `AUDIT_FAILURE`
-7. `TRANSLATION_FAILED`
-8. `MAX_SESSIONS_EXCEEDED`
-9. `UNKNOWN_TOOL`
-10. `INTERNAL_ERROR`
+All Phase 3 adapters must use the canonical error taxonomy from `AGENT_ADAPTER_ARCHITECTURE.md` v2.3.0 with deterministic precedence. Adapter-specific extensions (additional error codes beyond the base set) are permitted provided they follow the precedence rules defined in their individual contracts. The base precedence order is defined in each adapter contract's Error Taxonomy section (e.g., CrewAI Adapter Contract §6.2).
 
 ---
 
