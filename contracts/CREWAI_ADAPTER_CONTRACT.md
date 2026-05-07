@@ -20,7 +20,7 @@ This contract defines the `LimenCrewAIAdapter` -- a specialized adapter that bri
 
 This contract is a Phase 3 deliverable that implements the CrewAI adapter specification outlined in `AGENT_ADAPTER_ARCHITECTURE.md` v2.3.0 Section 7.6. It conforms to the canonical `AgentAdapter` interface and does not define an alternate adapter surface. It conforms to:
 
-- **SHARED_TYPES.md v1.4.0** -- All cross-contract types, including `AgentFramework.crew_ai`
+- **SHARED_TYPES.md v1.4.1** -- All cross-contract types, including `AgentFramework.crew_ai`
 - **AGENT_ADAPTER_ARCHITECTURE.md v2.3.0** -- Adapter interface, registry, translation semantics, testing contract
 - **AGENT_LIFECYCLE_MANAGEMENT.md v1.3.0** -- Agent identity, trust promotion, consent governance, knowledge exchange
 
@@ -45,7 +45,7 @@ CrewAI introduces concepts absent from single-agent adapters:
 | Field | Value |
 |---|---|
 | Contract Version | 1.0.0 |
-| SHARED_TYPES dependency | v1.4.0 |
+| SHARED_TYPES dependency | v1.4.1 |
 | AGENT_ADAPTER_ARCHITECTURE dependency | v2.3.0 |
 | AGENT_LIFECYCLE_MANAGEMENT dependency | v1.3.0 |
 | CrewAI SDK target | v1.14.x |
@@ -264,9 +264,17 @@ interface CrewAIAdapterConfig {
 
 ```typescript
 interface CrewAIToolCall extends AgentToolCall {
-  readonly agentFramework: 'crew_ai';
-  readonly tool: string; // normalized from CrewAI hook context tool_name
-  readonly args: Readonly<Record<string, unknown>>; // normalized from tool_input
+  // --- Inherited from AgentToolCall (AGENT_ADAPTER_ARCHITECTURE.md §5.1) ---
+  // readonly toolName: string;       — inherited; MUST equal this.tool (normalized from tool_name)
+  // readonly toolArgs: Readonly<Record<string, unknown>>; — inherited; MUST equal this.args (normalized from tool_input)
+  // readonly callId: string;         — inherited; unique call identifier from CrewAI hook context
+  // readonly agentFramework: AgentFramework; — inherited; specialized below
+  // readonly rawPayload: unknown;    — inherited; original CrewAI hook context before normalization
+
+  // --- CrewAI specializations ---
+  readonly agentFramework: 'crew_ai'; // literal specialization of AgentFramework
+  readonly tool: string; // alias for inherited toolName; normalized from CrewAI hook context tool_name. Invariant: this.tool === this.toolName
+  readonly args: Readonly<Record<string, unknown>>; // alias for inherited toolArgs; normalized from tool_input. Invariant: this.args === this.toolArgs
   readonly context: CrewAIToolContext;
 }
 
@@ -544,7 +552,7 @@ pub enum CrewProcessType {
 pub struct TokenBudgetConfig {
     pub max_tokens_per_operation: u64,
     pub max_tokens_per_session: u64,
-    pub encoding: String, // "cl100k_base" | "o200k_base" | "provider_native"
+    pub encoding: TokenEncoding, // canonical from SHARED_TYPES §25: Cl100kBase | O200kBase | ProviderNative
     pub warning_threshold_pct: u8, // Validated: must be in [0, 100]; values > 100 rejected at initialization
     pub replenishment_window_seconds: Option<u64>,
 }
@@ -560,9 +568,16 @@ pub struct RetryPolicy {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CrewAIToolCall {
+    // --- Inherited from AgentToolCall (AGENT_ADAPTER_ARCHITECTURE.md §9 Rust) ---
+    pub tool_name: String,        // canonical parent field; MUST equal self.tool
+    pub tool_args: serde_json::Value, // canonical parent field; MUST equal self.args
+    pub call_id: String,          // unique call identifier from CrewAI hook context
     pub agent_framework: AgentFramework,
-    pub tool: String,
-    pub args: serde_json::Value,
+    pub raw_payload: serde_json::Value, // original CrewAI hook context before normalization
+
+    // --- CrewAI specializations ---
+    pub tool: String,             // alias for tool_name; normalized from tool_name hook field. Invariant: self.tool == self.tool_name
+    pub args: serde_json::Value,  // alias for tool_args; normalized from tool_input hook field. Invariant: self.args == self.tool_args
     pub context: CrewAIToolContext,
 }
 
@@ -1314,7 +1329,7 @@ The following test cases are mandatory for certification. They include the paren
 
 | Dependency | Version | Section | Purpose |
 |---|---|---|---|
-| `SHARED_TYPES.md` | v1.4.0 | §21 (`AgentFramework.crew_ai`) | Framework enum, all cross-contract types |
+| `SHARED_TYPES.md` | v1.4.1 | §21 (`AgentFramework.crew_ai`) | Framework enum, all cross-contract types |
 | `AGENT_ADAPTER_ARCHITECTURE.md` | v2.3.0 | §7.6, §3, §8, §10 | Adapter interface, CrewAI spec, registry, testing contract, invariants |
 | `AGENT_LIFECYCLE_MANAGEMENT.md` | v1.3.0 | §5, §6, §7, §11, §13 | Trust promotion, consent governance, knowledge exchange, confidence caps, invariants |
 | `@langchain/langgraph-checkpoint` | N/A | — | NOT a dependency. CrewAI adapter communicates with Limen Core directly. LangGraph interop is a separate adapter concern. |
@@ -1395,7 +1410,7 @@ All verifiable claims for Breaker traceability:
 |---|---|---|---|
 | A-01 | Limen Core is reachable at `coreEndpoint` within `connectionTimeoutMs` | Standard deployment: adapter and core co-located or within same network | CORE_PORT_UNAVAILABLE; adapter transitions to DEGRADED |
 | A-02 | CrewAI agent roles map to a single Limen `AgentId` per crew member | CrewAI's agent abstraction has 1:1 identity | If CrewAI allows anonymous or pooled agents, identity mapping fails; requires adapter extension |
-| A-03 | `AgentFramework.crew_ai` exists in `SHARED_TYPES.md` v1.4.0 | Added in manifest v1.1.0; confirmed in §21 | If enum value is removed, adapter registration fails with `UNKNOWN_FRAMEWORK` |
+| A-03 | `AgentFramework.crew_ai` exists in `SHARED_TYPES.md` v1.4.1 | Added in manifest v1.1.0; confirmed in §21 | If enum value is removed, adapter registration fails with `UNKNOWN_FRAMEWORK` |
 | A-04 | `TokenEstimator` produces estimates with <=10% variance | Per SHARED_TYPES.md §20.1 validation rules | Budget enforcement accuracy degrades; operations may be over/under-budgeted |
 | A-05 | CrewAI delegation depth is bounded by `delegationDepthMax` | Configuration enforced at adapter level | Unbounded delegation creates governance audit explosion; risk mitigated by config validation |
 | A-06 | Time provider is available for ISO-8601 timestamp generation | Standard runtime assumption; clock injection per Constitution Hard Stop #7 | TIME_PROVIDER_UNAVAILABLE; all operations fail (precedence 3) |

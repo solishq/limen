@@ -1,4 +1,4 @@
-# Phase X Shared Types Registry v1.4.0
+# Phase X Shared Types Registry v1.4.1
 
 **Status:** RATIFIED --- Canonical Authority for All Phase X Contracts
 **Governing:** CDM v2.1 + Contract Compliance v2.1
@@ -1259,6 +1259,8 @@ export interface ActionDigest {
 
 For every canonical type that requires a Rust representation in the governance hot path.
 
+**Dual-Projection Parity Rule (v1.4.1):** Every TypeScript closed enum, branded type, and typed interface MUST have a structurally equivalent Rust projection. `String` is forbidden where TypeScript uses a union literal type. `serde_json::Value` is forbidden where TypeScript uses a typed interface or discriminated union. This rule is enforced by TC-21 (Dual Projection Parity) in every adapter contract.
+
 ```rust
 // --- Branded IDs (all newtypes over String) ---
 
@@ -1289,6 +1291,157 @@ pub struct TaskId(pub String);
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AdapterId(pub String);
 
+// Phase X branded types (§4)
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ClaimId(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct RelationshipId(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AgentBranchId(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ConsentId(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AuditEntryId(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct KnowledgePackageId(pub String);
+
+// --- CCP Types (§2) ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjectType {
+    String,
+    Number,
+    Boolean,
+    Date,
+    Json,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClaimStatus {
+    Active,
+    Retracted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroundingMode {
+    EvidencePath,
+    RuntimeWitness,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FreshnessLabel {
+    Fresh,
+    Aging,
+    Stale,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArchiveMode {
+    Exclude,
+    Include,
+    Only,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceType {
+    Memory,
+    Artifact,
+    Claim,
+    CapabilityResult,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelationshipType {
+    Supports,
+    Contradicts,
+    Supersedes,
+    DerivedFrom,
+}
+
+// --- Consent Types (§19) ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConsentableOperation {
+    AssertClaim,
+    TransferKnowledge,
+    ExportData,
+    ShareWithAgent,
+    StorePersonalData,
+    ProcessSensitive,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConsentPurpose {
+    MemoryStorage,
+    TechniqueExtraction,
+    KnowledgeTransfer,
+    Analytics,
+    Improvement,
+}
+
+// --- Permission (§1.2) ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Permission {
+    CreateAgent,
+    ModifyAgent,
+    DeleteAgent,
+    Chat,
+    Infer,
+    CreateMission,
+    ViewTelemetry,
+    ViewAudit,
+    ManageProviders,
+    ManageBudgets,
+    ManageRoles,
+    PurgeData,
+    ApproveResponse,
+    EditResponse,
+    TakeoverSession,
+    ReviewBatch,
+    ClassifyClaims,
+    ManageClassificationRules,
+    ManageProtectedPredicates,
+    RequestErasure,
+    ExportCompliance,
+    AssertClaim,
+    RetractClaim,
+    QueryClaims,
+    RelateClaims,
+    WriteWm,
+    ReadWm,
+    ManageConsent,
+    ViewConsent,
+    ManageCognitive,
+    ManageAgents,
+}
+
+// --- CoreTrustLevel (§5) ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CoreTrustLevel {
+    Untrusted,
+    Probationary,
+    Trusted,
+    Admin,
+}
+
 // --- AgentTrustLevel ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -1312,15 +1465,115 @@ impl AgentTrustLevel {
         }
     }
 
-    pub fn core_trust_level(&self) -> &'static str {
+    pub fn core_trust_level(&self) -> CoreTrustLevel {
         match self {
-            Self::Untrusted => "untrusted",
-            Self::Low => "probationary",
-            Self::Medium => "trusted",
-            Self::High => "trusted",
-            Self::Verified => "admin",
+            Self::Untrusted => CoreTrustLevel::Untrusted,
+            Self::Low => CoreTrustLevel::Probationary,
+            Self::Medium => CoreTrustLevel::Trusted,
+            Self::High => CoreTrustLevel::Trusted,
+            Self::Verified => CoreTrustLevel::Admin,
         }
     }
+}
+
+// --- GovernanceAction (§9 — typed, not serde_json::Value) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "domain", content = "operation")]
+pub enum GovernanceAction {
+    #[serde(rename = "memory")]
+    Memory(MemoryOperation),
+    #[serde(rename = "computer")]
+    Computer(ComputerActionType),
+    #[serde(rename = "execution")]
+    Execution(ExecutionOperation),
+    #[serde(rename = "lifecycle")]
+    Lifecycle(LifecycleOperation),
+    #[serde(rename = "knowledge")]
+    Knowledge(KnowledgeOperation),
+    #[serde(rename = "consent")]
+    Consent(ConsentOperation),
+    #[serde(rename = "context")]
+    Context(ContextOperation),
+    #[serde(rename = "search")]
+    Search(SearchOperation),
+    #[serde(rename = "coordination")]
+    Coordination(CoordinationOperation),
+    #[serde(rename = "output")]
+    Output(OutputOperation),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryOperation { Write, Read, Delete, Branch, Merge, ResolveMergeConflict }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionOperation { CreateMission, Delegate, Cancel, Retry, ToolCall }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LifecycleOperation { Register, Promote, Demote, Suspend, Decommission }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KnowledgeOperation { Export, Import, Transfer }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConsentOperation { Register, Revoke, Check }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextOperation { WriteWm, DiscardWm, Pin, Unpin, Evict, BoundaryTrigger }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchOperation { Query, Embed, DuplicateCheck, Configure }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CoordinationOperation { A2aSend, ForkSession, Sync, Replay, Rule }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputOperation { Produce, Telemetry, Infer, Plugin, Hook }
+
+// --- Recall/Search enums (parity with TS literal unions) ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchMode { Text, Semantic, Hybrid }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecallSortBy { Relevance, Confidence, Recency }
+
+// --- TimeRange (parity with TS { from: string; to: string }) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeRange {
+    pub from: String, // ISO-8601
+    pub to: String,   // ISO-8601
+}
+
+// --- TokenEstimator types (§20.1) ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TokenEncoding {
+    Cl100kBase,
+    O200kBase,
+    ProviderNative,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenEstimate {
+    pub tokens: u64,
+    pub encoding: TokenEncoding,
+    pub exact: bool,
+    pub variance_upper_bound_pct: u8,
+    pub overflow: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1328,7 +1581,7 @@ pub struct OperationContext {
     pub tenant_id: Option<TenantId>,
     pub user_id: Option<UserId>,
     pub agent_id: Option<AgentId>,
-    pub permissions: Vec<String>,
+    pub permissions: Vec<Permission>,
     pub session_id: Option<SessionId>,
     pub clearance_level: Option<u8>,
 }
@@ -1340,7 +1593,7 @@ pub struct AgentSession {
     pub tenant_id: Option<TenantId>,
     pub adapter_id: AdapterId,
     pub trust_level: AgentTrustLevel,
-    pub core_trust_level: String,
+    pub core_trust_level: CoreTrustLevel,
     pub clearance_level: u8,
     pub capabilities: Vec<AgentCapability>,
     pub started_at: String,
@@ -1353,7 +1606,7 @@ pub struct AgentSession {
 pub struct GovernanceContext {
     pub operation_context: OperationContext,
     pub session: AgentSession,
-    pub action: serde_json::Value,
+    pub action: GovernanceAction,
     pub resource: Option<String>,
     pub policy_ids: Vec<PolicyId>,
     pub action_history: Vec<ActionDigest>,
@@ -1364,8 +1617,8 @@ pub struct GovernanceDecision {
     pub allowed: bool,
     pub verdict: GovernanceVerdict,
     pub reason: Option<String>,
-    pub required_permissions: Vec<String>,
-    pub missing_permissions: Vec<String>,
+    pub required_permissions: Vec<Permission>,
+    pub missing_permissions: Vec<Permission>,
     pub clearance_required: Option<u8>,
     pub clearance_actual: Option<u8>,
     pub evaluated_at: String,
@@ -1373,36 +1626,36 @@ pub struct GovernanceDecision {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentMemoryEntry {
-    pub id: String,
+    pub id: ClaimId,
     pub content: String,
     pub subject: String,
     pub predicate: String,
     pub value: serde_json::Value,
     pub confidence: f64,
     pub effective_confidence: f64,
-    pub freshness: String,
+    pub freshness: FreshnessLabel,
     pub classification: ClassificationLevel,
     pub tags: Vec<String>,
     pub category: Option<String>,
     pub source_agent_id: AgentId,
     pub mission_id: Option<MissionId>,
     pub task_id: Option<TaskId>,
-    pub grounding_mode: String,
+    pub grounding_mode: GroundingMode,
     pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvidenceRef {
-    pub evidence_type: String,
-    pub id: String,
+    pub evidence_type: EvidenceType,
+    pub id: String, // polymorphic: ClaimId | ArtifactId | capability result ID
     pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelationshipRef {
-    pub id: String,
-    pub relationship_type: String,
-    pub target_id: String,
+    pub id: RelationshipId,
+    pub relationship_type: RelationshipType,
+    pub target_id: ClaimId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1410,7 +1663,7 @@ pub struct BeliefState {
     pub belief: AgentMemoryEntry,
     pub evidence: Vec<EvidenceRef>,
     pub relationships: Vec<RelationshipRef>,
-    pub status: String,
+    pub status: ClaimStatus,
     pub retention_policy: Option<RetentionPolicy>,
     pub governance: Option<GovernanceDecision>,
 }
@@ -1420,7 +1673,7 @@ pub struct StructuredContent {
     pub subject: String,
     pub predicate: String,
     pub value: serde_json::Value,
-    pub object_type: Option<String>,
+    pub object_type: Option<ObjectType>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1432,7 +1685,7 @@ pub struct AgentMemoryOptions {
     pub category: Option<String>,
     pub mission_id: Option<MissionId>,
     pub task_id: Option<TaskId>,
-    pub grounding_mode: Option<String>,
+    pub grounding_mode: Option<GroundingMode>,
     pub retention_days: Option<u32>,
 }
 
@@ -1443,15 +1696,15 @@ pub struct AgentRecallQuery {
     pub predicate: Option<String>,
     pub tags: Option<Vec<String>>,
     pub category: Option<String>,
-    pub freshness_filter: Option<Vec<String>>,
+    pub freshness_filter: Option<Vec<FreshnessLabel>>,
     pub min_confidence: Option<f64>,
-    pub time_range: Option<serde_json::Value>,
+    pub time_range: Option<TimeRange>,
     pub classification: Option<ClassificationLevel>,
     pub mission_id: Option<MissionId>,
     pub task_id: Option<TaskId>,
     pub source_agent_id: Option<AgentId>,
     pub include_superseded: Option<bool>,
-    pub branch_id: Option<String>,
+    pub branch_id: Option<AgentBranchId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1460,9 +1713,9 @@ pub struct AgentRecallOptions {
     pub offset: Option<u32>,
     pub include_evidence: Option<bool>,
     pub include_relationships: Option<bool>,
-    pub search_mode: Option<String>,
-    pub archive_mode: Option<String>,
-    pub sort_by: Option<String>,
+    pub search_mode: Option<SearchMode>,
+    pub archive_mode: Option<ArchiveMode>,
+    pub sort_by: Option<RecallSortBy>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1473,7 +1726,7 @@ pub struct AuditLogEntry {
     pub agent_id: AgentId,
     pub session_id: SessionId,
     pub event: AgentEvent,
-    pub action: Option<serde_json::Value>, // GovernanceAction — matches TypeScript projection §10.3
+    pub action: Option<GovernanceAction>,
     pub governance_decision: Option<GovernanceDecision>,
     pub details: serde_json::Value,
     pub previous_hash: String,
@@ -1488,9 +1741,9 @@ pub struct ConsentContext {
     pub agent_id: AgentId,
     pub tenant_id: Option<TenantId>,
     pub data_subject_id: Option<String>,
-    pub operation: String,
-    pub purpose: String,
-    pub consent_id: Option<String>,
+    pub operation: ConsentableOperation,
+    pub purpose: ConsentPurpose,
+    pub consent_id: Option<ConsentId>,
     pub granted: bool,
     pub checked_at: String,
 }
@@ -1597,8 +1850,263 @@ pub enum ApprovalType {
 
 // --- AgentEvent ---
 
+/// Closed enum mirroring the TypeScript `AgentEvent` literal union (§16.1).
+/// TC-21 compliance: no `String` wrapper — every variant is explicit.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct AgentEvent(pub String); // Validated at construction: must match `domain:action` or `*`
+pub enum AgentEvent {
+    // Memory events
+    #[serde(rename = "memory:created")]
+    MemoryCreated,
+    #[serde(rename = "memory:recalled")]
+    MemoryRecalled,
+    #[serde(rename = "memory:forgotten")]
+    MemoryForgotten,
+    #[serde(rename = "memory:branch_created")]
+    MemoryBranchCreated,
+    #[serde(rename = "memory:branch_merged")]
+    MemoryBranchMerged,
+    #[serde(rename = "memory:branch_discarded")]
+    MemoryBranchDiscarded,
+    // Governance events
+    #[serde(rename = "governance:allowed")]
+    GovernanceAllowed,
+    #[serde(rename = "governance:refused")]
+    GovernanceRefused,
+    #[serde(rename = "governance:escalated")]
+    GovernanceEscalated,
+    #[serde(rename = "governance:sandboxed")]
+    GovernanceSandboxed,
+    // Computer action events
+    #[serde(rename = "action:before")]
+    ActionBefore,
+    #[serde(rename = "action:after")]
+    ActionAfter,
+    #[serde(rename = "action:refused")]
+    ActionRefused,
+    // Session events
+    #[serde(rename = "session:started")]
+    SessionStarted,
+    #[serde(rename = "session:ended")]
+    SessionEnded,
+    #[serde(rename = "session:rejected")]
+    SessionRejected,
+    // Intelligence events
+    #[serde(rename = "technique:extracted")]
+    TechniqueExtracted,
+    #[serde(rename = "technique:evaluated")]
+    TechniqueEvaluated,
+    #[serde(rename = "technique:promoted")]
+    TechniquePromoted,
+    #[serde(rename = "technique:suspended")]
+    TechniqueSuspended,
+    #[serde(rename = "technique:retired")]
+    TechniqueRetired,
+    #[serde(rename = "technique:transferred")]
+    TechniqueTransferred,
+    #[serde(rename = "cognitive:health_degraded")]
+    CognitiveHealthDegraded,
+    #[serde(rename = "cognitive:consolidation_complete")]
+    CognitiveConsolidationComplete,
+    #[serde(rename = "cognitive:gap_detected")]
+    CognitiveGapDetected,
+    #[serde(rename = "selfheal:triggered")]
+    SelfhealTriggered,
+    #[serde(rename = "selfheal:cascade")]
+    SelfhealCascade,
+    #[serde(rename = "selfheal:complete")]
+    SelfhealComplete,
+    #[serde(rename = "selfheal:conflict_resolved")]
+    SelfhealConflictResolved,
+    // Execution events
+    #[serde(rename = "mission:created")]
+    MissionCreated,
+    #[serde(rename = "mission:state_changed")]
+    MissionStateChanged,
+    #[serde(rename = "mission:delegated")]
+    MissionDelegated,
+    #[serde(rename = "mission:completed")]
+    MissionCompleted,
+    #[serde(rename = "mission:failed")]
+    MissionFailed,
+    #[serde(rename = "mission:cancelled")]
+    MissionCancelled,
+    #[serde(rename = "task:created")]
+    TaskCreated,
+    #[serde(rename = "task:state_changed")]
+    TaskStateChanged,
+    #[serde(rename = "task:completed")]
+    TaskCompleted,
+    #[serde(rename = "task:failed")]
+    TaskFailed,
+    #[serde(rename = "task:retried")]
+    TaskRetried,
+    #[serde(rename = "budget:reserved")]
+    BudgetReserved,
+    #[serde(rename = "budget:consumed")]
+    BudgetConsumed,
+    #[serde(rename = "budget:released")]
+    BudgetReleased,
+    #[serde(rename = "budget:exhausted")]
+    BudgetExhausted,
+    #[serde(rename = "wave:started")]
+    WaveStarted,
+    #[serde(rename = "wave:completed")]
+    WaveCompleted,
+    #[serde(rename = "wave:failed")]
+    WaveFailed,
+    // Context events
+    #[serde(rename = "context:pressure_changed")]
+    ContextPressureChanged,
+    #[serde(rename = "context:eviction_triggered")]
+    ContextEvictionTriggered,
+    #[serde(rename = "context:eviction_complete")]
+    ContextEvictionComplete,
+    #[serde(rename = "context:pin_added")]
+    ContextPinAdded,
+    #[serde(rename = "context:pin_removed")]
+    ContextPinRemoved,
+    #[serde(rename = "working_memory:written")]
+    WorkingMemoryWritten,
+    #[serde(rename = "working_memory:discarded")]
+    WorkingMemoryDiscarded,
+    #[serde(rename = "working_memory:flushed")]
+    WorkingMemoryFlushed,
+    // Search events
+    #[serde(rename = "search:queried")]
+    SearchQueried,
+    #[serde(rename = "embedding:queued")]
+    EmbeddingQueued,
+    #[serde(rename = "embedding:completed")]
+    EmbeddingCompleted,
+    #[serde(rename = "duplicate:detected")]
+    DuplicateDetected,
+    // Coordination events
+    #[serde(rename = "a2a:sent")]
+    A2aSent,
+    #[serde(rename = "a2a:refused")]
+    A2aRefused,
+    #[serde(rename = "session:forked")]
+    SessionForked,
+    #[serde(rename = "sync:watermark_advanced")]
+    SyncWatermarkAdvanced,
+    #[serde(rename = "replay:verified")]
+    ReplayVerified,
+    #[serde(rename = "replay:diverged")]
+    ReplayDiverged,
+    #[serde(rename = "a2a:rule_registered")]
+    A2aRuleRegistered,
+    #[serde(rename = "a2a:rule_removed")]
+    A2aRuleRemoved,
+    #[serde(rename = "a2a:action_validated")]
+    A2aActionValidated,
+    #[serde(rename = "a2a:action_denied")]
+    A2aActionDenied,
+    #[serde(rename = "a2a:action_masked")]
+    A2aActionMasked,
+    #[serde(rename = "a2a:rate_limited")]
+    A2aRateLimited,
+    #[serde(rename = "fork:created")]
+    ForkCreated,
+    #[serde(rename = "fork:merged")]
+    ForkMerged,
+    #[serde(rename = "fork:discarded")]
+    ForkDiscarded,
+    #[serde(rename = "fork:conflict_detected")]
+    ForkConflictDetected,
+    #[serde(rename = "sync:started")]
+    SyncStarted,
+    #[serde(rename = "sync:completed")]
+    SyncCompleted,
+    #[serde(rename = "sync:failed")]
+    SyncFailed,
+    #[serde(rename = "sync:conflict_resolved")]
+    SyncConflictResolved,
+    #[serde(rename = "sync:peer_registered")]
+    SyncPeerRegistered,
+    #[serde(rename = "sync:peer_removed")]
+    SyncPeerRemoved,
+    #[serde(rename = "sync:peer_unreachable")]
+    SyncPeerUnreachable,
+    #[serde(rename = "replay:snapshot_captured")]
+    ReplaySnapshotCaptured,
+    #[serde(rename = "replay:verification_complete")]
+    ReplayVerificationComplete,
+    #[serde(rename = "replay:verification_failed")]
+    ReplayVerificationFailed,
+    #[serde(rename = "replay:divergence_detected")]
+    ReplayDivergenceDetected,
+    // Output, telemetry, inference, plugin events
+    #[serde(rename = "output:produced")]
+    OutputProduced,
+    #[serde(rename = "telemetry:reported")]
+    TelemetryReported,
+    #[serde(rename = "inference:completed")]
+    InferenceCompleted,
+    #[serde(rename = "inference:rejected")]
+    InferenceRejected,
+    #[serde(rename = "plugin:installed")]
+    PluginInstalled,
+    #[serde(rename = "plugin:disabled")]
+    PluginDisabled,
+    #[serde(rename = "hook:failed")]
+    HookFailed,
+    #[serde(rename = "output:retracted")]
+    OutputRetracted,
+    #[serde(rename = "telemetry:cost_recorded")]
+    TelemetryCostRecorded,
+    #[serde(rename = "telemetry:vital_recorded")]
+    TelemetryVitalRecorded,
+    #[serde(rename = "inference:started")]
+    InferenceStarted,
+    #[serde(rename = "inference:retry")]
+    InferenceRetry,
+    #[serde(rename = "inference:failed")]
+    InferenceFailed,
+    #[serde(rename = "plugin:uninstalled")]
+    PluginUninstalled,
+    #[serde(rename = "plugin:error")]
+    PluginError,
+    #[serde(rename = "hook:registered")]
+    HookRegistered,
+    #[serde(rename = "hook:fired")]
+    HookFired,
+    #[serde(rename = "hook:blocked")]
+    HookBlocked,
+    // Lifecycle events
+    #[serde(rename = "agent:registered")]
+    AgentRegistered,
+    #[serde(rename = "agent:updated")]
+    AgentUpdated,
+    #[serde(rename = "agent:suspended")]
+    AgentSuspended,
+    #[serde(rename = "agent:reactivated")]
+    AgentReactivated,
+    #[serde(rename = "agent:decommissioned")]
+    AgentDecommissioned,
+    #[serde(rename = "capability:granted")]
+    CapabilityGranted,
+    #[serde(rename = "capability:revoked")]
+    CapabilityRevoked,
+    #[serde(rename = "trust:promoted")]
+    TrustPromoted,
+    #[serde(rename = "trust:demoted")]
+    TrustDemoted,
+    #[serde(rename = "consent:registered")]
+    ConsentRegistered,
+    #[serde(rename = "consent:revoked")]
+    ConsentRevoked,
+    #[serde(rename = "consent:expired")]
+    ConsentExpired,
+    #[serde(rename = "knowledge:exported")]
+    KnowledgeExported,
+    #[serde(rename = "knowledge:imported")]
+    KnowledgeImported,
+    #[serde(rename = "knowledge:transferred")]
+    KnowledgeTransferred,
+    // Wildcard
+    #[serde(rename = "*")]
+    Wildcard,
+}
 
 // --- MergeStrategy ---
 
@@ -1772,6 +2280,7 @@ pub enum AgentFramework {
     #[serde(rename = "llama_index")]
     LlamaIndex,
 }
+
 ```
 
 ---
@@ -1868,3 +2377,4 @@ Any contract that references a type from this registry MUST use it verbatim. No 
 | 1.2.1 | 2026-05-05 | Added canonical context `boundary_trigger` governance operation for boundary trigger registration lifecycle. |
 | 1.3.0 | 2026-05-05 | Added final agent surface governance actions/events, exact branded-ID source split, clearance level 3 doctrine, and manual merge session-end terminal path. |
 | 1.4.0 | 2026-05-06 | Extended `AgentFramework` from 6 -> 10 values for Phase 3 framework adapter support. Added: `crew_ai`, `auto_gen`, `semantic_kernel`, `llama_index`. |
+| 1.4.1 | 2026-05-07 | Rust dual-projection parity remediation (TC-21). Replaced all `String` fields with closed enums where TypeScript uses union literals. Replaced `serde_json::Value` for `GovernanceAction` and `AuditLogEntry.action` with typed `GovernanceAction` enum. Added missing branded types (`ClaimId`, `RelationshipId`, `AgentBranchId`, `ConsentId`, `AuditEntryId`, `KnowledgePackageId`). Added missing CCP enums (`ObjectType`, `ClaimStatus`, `GroundingMode`, `FreshnessLabel`, `ArchiveMode`, `EvidenceType`, `RelationshipType`), consent enums (`ConsentableOperation`, `ConsentPurpose`), `Permission` enum (31 values), `CoreTrustLevel` enum, `GovernanceAction` domain enums (10), recall enums (`SearchMode`, `RecallSortBy`), `TimeRange` struct, and `TokenEncoding`/`TokenEstimate` types. |

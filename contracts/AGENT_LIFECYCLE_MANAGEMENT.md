@@ -67,7 +67,7 @@ interface AgentLifecycleClient {
 ### 3.1 AgentRegistrationSpec
 
 ```typescript
-// AgentFramework: See SHARED_TYPES §21 (6 values: 'claude' | 'codex' | 'openclaw' | 'hermes' | 'gemma' | 'custom')
+// AgentFramework: See SHARED_TYPES §21 (10 values: 'claude' | 'codex' | 'openclaw' | 'hermes' | 'gemma' | 'custom' | 'crew_ai' | 'auto_gen' | 'semantic_kernel' | 'llama_index')
 
 interface AgentRegistrationSpec {
   readonly name: string;
