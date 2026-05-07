@@ -12,8 +12,8 @@
   "contracts": [
     {
       "path": "contracts/SHARED_TYPES.md",
-      "contractVersion": "1.3.0",
-      "sha256": "0a6e8bc52973656450a80b900cd69052cf03907babd32cf699ba309b699ac0b8",
+      "contractVersion": "1.4.0",
+      "sha256": "343d6c62c17654285760eafa7df40733d8df90690fbdd1f7879d823c47fc366a",
       "role": "canonical_shared_types"
     },
     {
@@ -36,8 +36,8 @@
     },
     {
       "path": "contracts/AGENT_ADAPTER_ARCHITECTURE.md",
-      "contractVersion": "2.2.0",
-      "sha256": "739129f0fcd31b2627257671072d01a2b9969e244a570115ccb2d8814b607205",
+      "contractVersion": "2.3.0",
+      "sha256": "a3c5fc11915b5baec864ea39aa90f501fc96c40810e54574e0a487c57ae02b5e",
       "role": "adapter_architecture"
     },
     {
@@ -134,7 +134,11 @@
     "plugin_hook_isolation_governance",
     "public_ts_operation_context_closure",
     "manual_merge_shared_resolution_type",
-    "shared_type_ownership_index_extended"
+    "shared_type_ownership_index_extended",
+    "phase3_agent_framework_extension",
+    "phase3_governance_action_tool_call",
+    "phase3_governance_action_resolve_merge_conflict",
+    "phase3_session_rejected_event"
   ],
   "monotonicityProof": {
     "claim": "defenseSetAfter is a strict superset of defenseSetBefore; no defense from the previous remediated suite is removed or weakened.",
@@ -167,7 +171,11 @@
       "plugin_hook_isolation_governance",
       "public_ts_operation_context_closure",
       "manual_merge_shared_resolution_type",
-      "shared_type_ownership_index_extended"
+      "shared_type_ownership_index_extended",
+      "phase3_agent_framework_extension",
+      "phase3_governance_action_tool_call",
+      "phase3_governance_action_resolve_merge_conflict",
+      "phase3_session_rejected_event"
     ],
     "closure": "Any future interface, defense, or contract hash change must update this manifest before certification."
   },

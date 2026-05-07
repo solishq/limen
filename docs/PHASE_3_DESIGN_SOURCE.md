@@ -20,7 +20,7 @@
 **Status:**
 - Phase 3 Design Source — **RATIFIED** (May 6, 2026)
 - Phase X Loopback — **RATIFIED** (AgentFramework extended 6 -> 10 values)
-- CrewAI Adapter Contract — **PRODUCTION-READY** (Final TBS Max Breaker: CLEAN, 25/25 findings resolved)
+- CrewAI Adapter Contract — **RATIFIED** (Final Breaker: CLEAN, 25/25 findings resolved)
 
 ---
 

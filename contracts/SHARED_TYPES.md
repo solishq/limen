@@ -1,4 +1,4 @@
-# Phase X Shared Types Registry v1.3.0
+# Phase X Shared Types Registry v1.4.0
 
 **Status:** RATIFIED --- Canonical Authority for All Phase X Contracts
 **Governing:** CDM v2.1 + Contract Compliance v2.1
@@ -31,7 +31,7 @@
 - [§18 Rate Limit Policy](#18-rate-limit-policy-unified) — Per-scope limits + defaults
 - [§19 Consent Integration](#19-consent-integration) — ConsentRequirement, ConsentableOperation
 - [§20 Performance Budget](#20-performance-budget-reconciled) — Governance <10ms, audit <50ms, provenance batched
-- [§21 AgentFramework](#21-agentframework-unified) — 6-value enum
+- [§21 AgentFramework](#21-agentframework-unified) — 10-value enum
 - [§22 TGP Types](#22-tgp-types-canonical) — Technique status, provenance, evaluation
 - [§23 Multi-Branch Merge Ordering](#23-multi-branch-merge-ordering-deterministic) — Deterministic 5-step algorithm
 - [§24 ActionDigest](#24-actiondigest-for-rate-limiting-and-history) — Lightweight action summary
@@ -389,9 +389,9 @@ export interface GovernanceContext {
 }
 
 export type GovernanceAction =
-  | { readonly domain: 'memory'; readonly operation: 'write' | 'read' | 'delete' | 'branch' | 'merge' }
+  | { readonly domain: 'memory'; readonly operation: 'write' | 'read' | 'delete' | 'branch' | 'merge' | 'resolve_merge_conflict' }
   | { readonly domain: 'computer'; readonly operation: ComputerActionType }
-  | { readonly domain: 'execution'; readonly operation: 'create_mission' | 'delegate' | 'cancel' | 'retry' }
+  | { readonly domain: 'execution'; readonly operation: 'create_mission' | 'delegate' | 'cancel' | 'retry' | 'tool_call' }
   | { readonly domain: 'lifecycle'; readonly operation: 'register' | 'promote' | 'demote' | 'suspend' | 'decommission' }
   | { readonly domain: 'knowledge'; readonly operation: 'export' | 'import' | 'transfer' }
   | { readonly domain: 'consent'; readonly operation: 'register' | 'revoke' | 'check' }
@@ -998,7 +998,7 @@ export type AgentEvent =
   // Computer action events
   | 'action:before' | 'action:after' | 'action:refused'
   // Session events
-  | 'session:started' | 'session:ended'
+  | 'session:started' | 'session:ended' | 'session:rejected'
   // Intelligence events
   | 'technique:extracted' | 'technique:evaluated' | 'technique:promoted'
   | 'technique:suspended' | 'technique:retired' | 'technique:transferred'
@@ -1207,7 +1207,7 @@ export interface TokenEstimator {
 ## 21. AgentFramework (UNIFIED)
 
 ```typescript
-export type AgentFramework = 'claude' | 'codex' | 'openclaw' | 'hermes' | 'gemma' | 'custom';
+export type AgentFramework = 'claude' | 'codex' | 'openclaw' | 'hermes' | 'gemma' | 'custom' | 'crew_ai' | 'auto_gen' | 'semantic_kernel' | 'llama_index';
 ```
 
 ---
@@ -1762,6 +1762,14 @@ pub enum AgentFramework {
     Hermes,
     Gemma,
     Custom,
+    #[serde(rename = "crew_ai")]
+    CrewAi,
+    #[serde(rename = "auto_gen")]
+    AutoGen,
+    #[serde(rename = "semantic_kernel")]
+    SemanticKernel,
+    #[serde(rename = "llama_index")]
+    LlamaIndex,
 }
 ```
 
@@ -1858,3 +1866,4 @@ Any contract that references a type from this registry MUST use it verbatim. No 
 | 1.2.0 | 2026-05-05 | Promoted agent memory request DTOs to shared ownership and canonically mapped terminal escalation audit events. |
 | 1.2.1 | 2026-05-05 | Added canonical context `boundary_trigger` governance operation for boundary trigger registration lifecycle. |
 | 1.3.0 | 2026-05-05 | Added final agent surface governance actions/events, exact branded-ID source split, clearance level 3 doctrine, and manual merge session-end terminal path. |
+| 1.4.0 | 2026-05-06 | Extended `AgentFramework` from 6 -> 10 values for Phase 3 framework adapter support. Added: `crew_ai`, `auto_gen`, `semantic_kernel`, `llama_index`. |

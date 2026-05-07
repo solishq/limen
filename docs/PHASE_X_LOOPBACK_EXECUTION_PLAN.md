@@ -45,7 +45,7 @@ This document outlines the execution plan for the **Phase X Loopback** -- the in
 
 ### Step 2: Manifest / Hash / HB-37/HB-38 Update (COMPLETED -- RATIFIED)
 - Updated `phase-x.contracts.json` manifest hash
-- Extended HB-37 (defense-set monotonicity) from 8 -> 38 defenses
+- Extended HB-37 (defense-set monotonicity) from 8 -> 39 defenses
 - Extended HB-38 (LCI closure) to include new adapter surface
 - Verified all hashes
 
