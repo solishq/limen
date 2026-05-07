@@ -1,10 +1,9 @@
 # Phase X Integration Plan
 
-**Status:** Draft integration handoff  
-**Governing:** CDM v2.1 + Contract Compliance v2.1  
-**Source branch:** `phase-x-remediation`  
-**Clean commit:** `5fdbf68`  
-**Target branch:** `main`  
+**Status:** Canonical integration handoff
+**Governing:** CDM v2.1 + Contract Compliance v2.1
+**Development branch:** `release/v5` (all v5 work; `main` is stable v4 baseline)
+**Canonical merge:** `ee4b0df` (Phase X contracts merged to main)  
 
 ## Executive Summary
 
@@ -14,21 +13,21 @@ Integrate Phase X as a canonical, indexed CDM v2.1 contract family, not as loose
 
 1. Preflight:
    - Confirm clean worktree: `git status --short`
-   - Fetch source: `git fetch origin phase-x-remediation main`
-   - Verify source commit: `git rev-parse phase-x-remediation` equals or contains `5fdbf68`
+   - Fetch source: `git fetch origin release/v5 main`
+   - Verify source commit: `git rev-parse release/v5` equals or contains `5fdbf68`
    - Verify Breaker/CLEAN evidence is present in the branch notes, PR, or certification artifact.
 
 2. Create integration branch from current main:
    - `git switch main`
    - `git pull --ff-only origin main`
-   - `git switch -c integrate/phase-x-contracts`
+   - `git switch -c release/v5`
 
 3. Merge without squashing:
-   - `git merge --no-ff phase-x-remediation`
+   - `git merge --no-ff release/v5`
    - Rationale: preserve contract authorship, review lineage, and audit trail.
 
 4. Conflict policy:
-   - For Phase X contract files, prefer the `phase-x-remediation` version unless main has newer CDM-wide doctrine that must be reconciled.
+   - For Phase X contract files, prefer the `release/v5` version unless main has newer CDM-wide doctrine that must be reconciled.
    - Never hand-merge by informal preference. Any conflict touching contract semantics must be resolved by explicit LCI reasoning in the PR.
 
 5. Post-merge verification:
@@ -57,7 +56,7 @@ Update `MASTER-INDEX-v2.1-FINAL.md`:
   - `contracts/phase-x.contracts.json`
 - For each entry include role, version, canonical owner, hash, and dependency direction.
 - Add `phase-x.contracts.json` as the machine-readable Phase X compliance authority.
-- Add LCI note: `tau_PhaseX = CanonicalTypes ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩ RateLimit ∩ TokenEstimator ∩ LifecycleState`.
+- Add LCI note: `tau_PhaseX = CanonicalTypes ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩ RateLimit ∩ TokenEstimator ∩ LifecycleState ∩ CorePermissionMapping ∩ SearchGate ∩ CoordinationGate ∩ OutputGate`.
 
 Update `CONTRACT-COMPLIANCE-v2.1.md`:
 
@@ -85,18 +84,17 @@ Continuity updates:
 
 ## Integration Checklist
 
-1. Confirm branch `phase-x-remediation` contains commit `5fdbf68`.
-2. Merge into `integrate/phase-x-contracts` using `--no-ff`.
-3. Resolve conflicts with LCI notes, not informal preference.
+1. Confirm `release/v5` branch contains all Phase X contracts and v5 Rust substrate.
+2. Verify Phase X contracts on `main` match indexed versions in Master Index.
+3. Resolve any conflicts with LCI notes, not informal preference.
 4. Recompute hashes and verify `phase-x.contracts.json`.
 5. Update `MASTER-INDEX-v2.1-FINAL.md`.
 6. Update `CONTRACT-COMPLIANCE-v2.1.md`.
 7. Add or confirm Phase X continuity handoff.
 8. Run link/docs validation.
 9. Run contract hash verification.
-10. Run final Breaker check on merged branch.
-11. Open PR to `main`.
-12. Require approval from doctrine owner / governance reviewer before merge.
+10. Run final verification on `release/v5` branch.
+11. Require approval from doctrine owner / governance reviewer before merge to `main`.
 
 ## Commit and PR Guidance
 
@@ -119,7 +117,7 @@ Recommended PR description:
 Integrates the CLEAN Phase X remediation branch into main and registers Phase X as a canonical CDM v2.1 contract family.
 
 ## Traceability
-- Source branch: phase-x-remediation
+- Source branch: release/v5
 - Clean commit: 5fdbf68
 - Compliance authority: contracts/phase-x.contracts.json
 - Doctrine updates:
@@ -155,4 +153,4 @@ CanonicalTypes ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩
   - Mitigation: make Master Index the canonical entrypoint and require hash verification before implementation.
 
 - Risk: hidden regression to v2.1 contracts.
-  - Mitigation: require HB-37 proof and final Breaker review on the merged branch, not only on `phase-x-remediation`.
+  - Mitigation: require HB-37 proof and final Breaker review on the merged branch, not only on `release/v5`.

@@ -52,9 +52,9 @@
 - Marketplace / plugin ecosystem (Phase 4)
 
 ### 3.3 Core Isolation (Non-Negotiable)
-- Phase 3 adapters **MUST NOT** modify any file under `v5/**`
+- Phase 3 adapters **MUST NOT** modify any v5 core file (v5 core lives on `release/v5` branch, not `main`)
 - Adapters must fail closed with `CORE_PORT_UNAVAILABLE` when required v5 ports are missing
-- All v5 dependencies are **read-only** (immutable inputs)
+- All v5 dependencies are **read-only** (immutable inputs sourced from `release/v5`)
 
 ---
 

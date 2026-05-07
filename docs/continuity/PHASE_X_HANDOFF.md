@@ -2,10 +2,9 @@
 
 **Status:** Canonical continuity handoff
 **Governing:** CDM v2.1 + Contract Compliance v2.1
-**Source branch:** `phase-x-remediation`
-**Clean commit:** `5fdbf68`
-**Target integration branch:** `integrate/phase-x-contracts`
-**Certification state:** CLEAN per provided Phase X remediation context
+**Development branch:** `release/v5` (all v5 work; `main` is stable v4 baseline)
+**Canonical merge:** `ee4b0df` (Phase X contracts merged to main)
+**Certification state:** CLEAN per Phase X remediation context
 
 ## 1. Purpose
 
@@ -51,8 +50,8 @@ This handoff preserves continuity for adopting Phase X as a canonical contract f
 
 | Evidence | Required State |
 |----------|----------------|
-| Source branch | `phase-x-remediation` |
-| Clean commit | `5fdbf68` |
+| Development branch | `release/v5` |
+| Canonical merge | `ee4b0df` |
 | Breaker state | CLEAN per provided Phase X remediation context |
 | Compliance authority | `contracts/phase-x.contracts.json` |
 | Master Index registration | `MASTER-INDEX-v2.1-FINAL.md` |

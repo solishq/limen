@@ -13,11 +13,14 @@
 ## 2. Phase X -- AI Agent Integration Layer
 
 **Family status:** Canonical contract family
-**Source branch:** `phase-x-remediation`
-**Clean commit:** `5fdbf68`
-**Target integration branch:** `integrate/phase-x-contracts`
+**Development branch:** `release/v5` (all v5 development; `main` represents stable v4 baseline)
 **Compliance authority:** `contracts/phase-x.contracts.json`
-**LCI note:** `tau_PhaseX = CanonicalTypes ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩ RateLimit ∩ TokenEstimator ∩ LifecycleState`
+**LCI note:** `tau_PhaseX = CanonicalTypes ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩ RateLimit ∩ TokenEstimator ∩ LifecycleState ∩ CorePermissionMapping ∩ SearchGate ∩ CoordinationGate ∩ OutputGate`
+
+### Branching Policy (Non-Negotiable)
+- `main` = current stable release (v4). No versioned folders (`v5/`, `v6/`, etc.) permitted.
+- All major version development happens on `release/vX` branches (e.g., `release/v5`).
+- Merge to `main` only when the major version is release-ready and fully certified.
 
 ### 2.1 Compliance Authority
 

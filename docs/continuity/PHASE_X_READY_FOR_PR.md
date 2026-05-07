@@ -2,18 +2,16 @@
 
 **Status:** Ready package
 **Governing:** CDM v2.1 + Contract Compliance v2.1
-**Source branch:** `phase-x-remediation`
-**Clean commit:** `5fdbf68`
-**Target integration branch:** `integrate/phase-x-contracts`
-**PR target:** `main`
+**Development branch:** `release/v5` (all v5 work; `main` is stable v4 baseline)
+**Canonical merge:** `ee4b0df` (Phase X contracts merged to main)
 
 ## 1. Final Verification Checklist
 
 | # | Check | Result |
 |---|-------|--------|
-| 1 | Confirm branch `phase-x-remediation` contains commit `5fdbf68`. | PASS: ___ FAIL: ___ |
-| 2 | Confirm integration branch `integrate/phase-x-contracts` is based on current `main`. | PASS: ___ FAIL: ___ |
-| 3 | Confirm `phase-x-remediation` was merged with `git merge --no-ff phase-x-remediation`. | PASS: ___ FAIL: ___ |
+| 1 | Confirm `release/v5` branch contains all Phase X contracts and v5 Rust substrate. | PASS: ___ FAIL: ___ |
+| 2 | Confirm `main` contains Phase X contracts (canonical merge `ee4b0df`) and NO `v5/` directory. | PASS: ___ FAIL: ___ |
+| 3 | Confirm `release/v5` is the active development branch for v5 implementation. | PASS: ___ FAIL: ___ |
 | 4 | Confirm any conflict touching contract semantics was resolved with explicit LCI reasoning. | PASS: ___ FAIL: ___ |
 | 5 | Recompute hashes for all adopted Phase X files and verify `contracts/phase-x.contracts.json`. | PASS: ___ FAIL: ___ |
 | 6 | Confirm `defenseSetAfter ⊇ defenseSetBefore` in `contracts/phase-x.contracts.json`. | PASS: ___ FAIL: ___ |
@@ -31,8 +29,8 @@
 Integrates the CLEAN Phase X remediation branch into main and registers Phase X as a canonical CDM v2.1 contract family.
 
 ## Traceability
-- Source branch: phase-x-remediation
-- Clean commit: 5fdbf68
+- Development branch: release/v5
+- Canonical merge: ee4b0df
 - Compliance authority: contracts/phase-x.contracts.json
 - Doctrine updates:
   - MASTER-INDEX-v2.1-FINAL.md
@@ -44,7 +42,7 @@ Integrates the CLEAN Phase X remediation branch into main and registers Phase X 
 
 ## LCI
 Phase X is adopted as a closed contract family:
-CanonicalTypes ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩ RateLimit ∩ TokenEstimator ∩ LifecycleState.
+CanonicalTypes ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩ RateLimit ∩ TokenEstimator ∩ LifecycleState ∩ CorePermissionMapping ∩ SearchGate ∩ CoordinationGate ∩ OutputGate.
 
 ## HB-37 / HB-38
 - No existing v2.1 defense removed.
