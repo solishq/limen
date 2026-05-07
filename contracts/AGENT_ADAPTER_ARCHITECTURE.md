@@ -1,4 +1,4 @@
-# Agent Adapter Architecture Contract v2.2.0
+# Agent Adapter Architecture Contract v2.3.0
 
 **Status:** RATIFIED DESIGN -- Pending Implementation
 **Governing:** CDM v2.1 + Contract Compliance v2.1
@@ -23,7 +23,7 @@ The following types are used by this contract and defined canonically in `SHARED
 | Type | Section |
 |------|---------|
 | `AgentCapability` (20-value enum) | See `SHARED_TYPES.md` §6 |
-| `AgentFramework` (6-value enum including `'gemma'`) | See `SHARED_TYPES.md` §21 |
+| `AgentFramework` (10-value enum including `'gemma'`, `'crew_ai'`, `'auto_gen'`, `'semantic_kernel'`, `'llama_index'`) | See `SHARED_TYPES.md` §21 |
 | `ComputerAction` (17-variant union) | See `SHARED_TYPES.md` §11 |
 | `ComputerActionType` | See `SHARED_TYPES.md` §9 |
 | `ActionBase` | See `SHARED_TYPES.md` §11.1 |
@@ -706,6 +706,15 @@ System startup / plugin load
     -> adapter.initialize(client, governor, config)
     <- Result.ok() -- adapter is live
 ```
+
+---
+
+## Appendix A: Version History
+
+| Version | Date | Change |
+|---|---|---|
+| 2.2.0 | 2026-05-05 | Initial ratified design with 6 reference adapters, canonical translation semantics, registry, and Rust trait. |
+| 2.3.0 | 2026-05-06 | Phase 3 loopback: updated `AgentFramework` reference from 6 -> 10 values. Added `'tool_call'` to execution domain and `'resolve_merge_conflict'` to memory domain in `GovernanceAction`. Added `'session:rejected'` to `AgentEvent`. All changes applied in `SHARED_TYPES.md` v1.4.0; this contract references those canonical definitions. |
 
 ---
 
