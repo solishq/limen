@@ -212,7 +212,7 @@ interface CrewAIAdapter extends AgentAdapter {
 
 **Claim 1.12:** `healthCheck()` MUST return current adapter health including connectivity to Limen Core, active session count, and governance state. It is available in all lifecycle states except SHUTDOWN, where it returns `NOT_INITIALIZED`. Unlike `getHealth()` (which is synchronous and returns cached state), `healthCheck()` performs a live connectivity probe to Limen Core.
 
-**Claim 1.13:** `on()` and `off()` are permitted in all lifecycle states except SHUTDOWN, where they return silently (no-op, no error). Subscriptions registered via `on()` survive state transitions (UNINITIALIZED -> READY -> DEGRADED -> READY) but are cleared when `shutdown()` completes. `on()` returns a unique subscription ID; `off()` with an unknown or already-removed subscription ID is a no-op. No governance evaluation is required for subscription management -- these are local observer registrations with no Limen Core side effects.
+**Claim 1.13:** `on()` and `off()` are permitted in all lifecycle states except SHUTDOWN, where they throw `NOT_INITIALIZED`. This eliminates the dead-subscription problem: callers who attempt to register subscriptions on a shut-down adapter receive an explicit error rather than a silent no-op that creates the false impression of an active subscription. Subscriptions registered via `on()` survive state transitions (UNINITIALIZED -> READY -> DEGRADED -> READY) but are cleared when `shutdown()` completes. `on()` returns a unique subscription ID; `off()` with an unknown or already-removed subscription ID is a no-op. No governance evaluation is required for subscription management -- these are local observer registrations with no Limen Core side effects.
 
 ### 3.2 CrewAIAdapterConfig (Local Type)
 
@@ -258,6 +258,8 @@ interface CrewAIAdapterConfig {
 
 **Claim 2.7:** `rateLimits` are additive to `DEFAULT_RATE_LIMITS`. Empty adapter-specific limits still inherit defaults. Any configuration that weakens, disables, replaces, or locally resets default rate counters is rejected at initialization with `GOVERNANCE_REFUSAL`.
 
+**Claim 2.13:** `delegationDepthMax` must be in range [0, 10]. `0` disables delegation entirely. Values above 10 are rejected at initialization with `INVALID_CONFIG` (mapped to `SERDE_ERROR`). The adapter MUST NOT silently clamp values outside this range.
+
 ### 3.2.1 CrewAI Hook and Tool Types (Local Types)
 
 ```typescript
@@ -293,10 +295,12 @@ interface CrewAISessionStart {
 interface CrewAISessionEnd {
   readonly sessionId: SessionId;
   readonly crewId: string;
-  readonly outcome: 'completed' | 'failed' | 'cancelled';
+  readonly outcome: 'completed' | 'failed' | 'cancelled' | 'timeout';
   readonly metadata: Readonly<Record<string, unknown>>;
 }
 ```
+
+**Claim 2.11:** Sessions that exceed `maxDurationMs` (if configured in session metadata) end with outcome `'timeout'`. The adapter produces a `SessionSummary` with the timeout outcome and an audit entry recording the timeout trigger. Timeout-ended sessions follow the same cleanup path as `'cancelled'` sessions.
 
 **Claim 2.8:** CrewAI native hook payloads MUST be normalized from `tool_name` and `tool_input`. The adapter MUST NOT infer a tool from `agent.role`, `task.description`, or arbitrary `{ tool, args }` fields unless those fields are produced by the normalization layer.
 
@@ -372,6 +376,8 @@ interface TokenBudgetConfig {
   readonly replenishmentWindowSeconds?: number | null; // null/omitted = not retryable within session
 }
 ```
+
+**Claim 2.12:** `warningThresholdPct` must be in range [0, 100]. Values outside this range are rejected at initialization with `INVALID_CONFIG` (mapped to `SERDE_ERROR`). The adapter MUST NOT silently clamp values outside this range.
 
 ### 3.7 RetryPolicy (Local Type)
 
@@ -499,6 +505,9 @@ pub trait CrewAIAdapter: AgentAdapter + Send + Sync + 'static {
     ) -> impl Future<Output = Result<AdapterHealth, CrewAIAdapterError>> + Send;
 
     fn get_health(&self) -> AdapterHealth;
+
+    fn on(&mut self, event: &str, callback: Box<dyn Fn(&AgentEventPayload) + Send + Sync>) -> String;
+    fn off(&mut self, subscription_id: &str);
 }
 
 /// CrewAI adapter config (contract-local)
@@ -536,7 +545,7 @@ pub struct TokenBudgetConfig {
     pub max_tokens_per_operation: u64,
     pub max_tokens_per_session: u64,
     pub encoding: String, // "cl100k_base" | "o200k_base" | "provider_native"
-    pub warning_threshold_pct: u8,
+    pub warning_threshold_pct: u8, // Validated: must be in [0, 100]; values > 100 rejected at initialization
     pub replenishment_window_seconds: Option<u64>,
 }
 
@@ -611,6 +620,7 @@ pub enum CrewAISessionOutcome {
     Completed,
     Failed,
     Cancelled,
+    Timeout,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -787,8 +797,12 @@ The adapter has no ungoverned execution mode. `config.governed` exists only for 
 | `translateToolCall` | `{ domain: 'execution', operation: 'tool_call' }` | mapped per tool registry | mapped per tool registry |
 | `translateActionToGovernance` | canonical `ComputerAction` domain/action | mapped per `ComputerAction` | mapped per `ComputerAction` |
 | `resolveConflict` | `{ domain: 'memory', operation: 'resolve_merge_conflict' }` | `branching` | `medium` |
+| `mapNativeEvent` | N/A -- pure transformation | N/A | N/A |
+| `mapLimenEvent` | N/A -- pure transformation | N/A | N/A |
 
-**Claim 3.3:** EVERY operation in the table above MUST pass through the governance gate. There is no `governed:false`, verified-admin, test, degraded, retry, or shutdown-drain path that bypasses governance evaluation for a side-effecting operation.
+**Claim 3.8:** `mapNativeEvent` and `mapLimenEvent` are pure data transformations with no side effects. They do not emit events, do not write to Limen Core, and do not require governance evaluation. They produce no audit entry. They are synchronous functions that translate between CrewAI hook event shapes and canonical `AgentEventPayload` shapes, returning `null` when no mapping exists.
+
+**Claim 3.3:** EVERY side-effecting operation in the table above MUST pass through the governance gate. There is no `governed:false`, verified-admin, test, degraded, retry, or shutdown-drain path that bypasses governance evaluation for a side-effecting operation.
 
 ### 5.3 GovernanceRefusal Error
 
@@ -874,8 +888,8 @@ Errors are evaluated in strict precedence order. The order extends the canonical
 | 2 | `ALREADY_INITIALIZED` | `initialize()` only | Conflicting initialization attempt against a READY adapter |
 | 3 | `TIME_PROVIDER_UNAVAILABLE` | All operations except `getHealth`, `shutdown` | Cannot timestamp governance or audit decisions |
 | 4 | `SERDE_ERROR` | `translateToolCall`, `translateActionToGovernance`, `initialize` | Native payload cannot be normalized enough to identify actor/action |
-| 5 | `GOVERNANCE_REFUSAL` | All side-effecting operations | Policy blocks operation before resource admission |
-| 6 | `TRUST_LEVEL_INSUFFICIENT` | `remember`, `createBranch`, `mergeBranches`, `resolveConflict`, delegation | Trust floor not met for requested capability |
+| 5 | `GOVERNANCE_REFUSAL` | All side-effecting operations | Policy blocks operation before resource admission. Fires for lifecycle-state violations (suspended/decommissioned agents attempting any operation) and governance-rule violations (refusal hints, rate limits, classification denials). |
+| 6 | `TRUST_LEVEL_INSUFFICIENT` | `remember`, `createBranch`, `mergeBranches`, `resolveConflict`, delegation | Trust floor not met for requested capability. Fires when an active agent's trust level is below the minimum required for a specific operation (e.g., an `untrusted` agent calling `remember` which requires `low`). Distinguished from `GOVERNANCE_REFUSAL` in that the agent is active and governance-compliant, but lacks the trust level for the specific operation. |
 | 7 | `CAPABILITY_NOT_DECLARED` | `translateToolCall`, `translateActionToGovernance`, delegation | Operation requires undeclared capability |
 | 8 | `UNKNOWN_TOOL` | `translateToolCall` | CrewAI tool is not registered in adapter tool registry |
 | 9 | `TRANSLATION_FAILED` | `translateToolCall`, `translateActionToGovernance` | Tool call translation from CrewAI format to Limen governance format failed |
@@ -997,7 +1011,8 @@ interface CrewAIAuditDetails {
     | 'onAgentSessionStart'
     | 'onAgentSessionEnd'
     | 'initialize'
-    | 'shutdown';
+    | 'shutdown'
+    | 'healthCheck';
   readonly crewId: string;
   readonly agentRole: string;
   readonly delegationDepth: number;
@@ -1014,6 +1029,8 @@ interface CrewAIAuditDetails {
 **Claim 6.3:** The `governanceState` field MUST accurately reflect the governance verdict for this operation. `'not_applicable'` is valid only for pre-governance admission failures where no actor/action context could be constructed, such as malformed native payloads. `'bypassed'` is forbidden.
 
 **Claim 6.4:** Every failure that occurs after GovernanceContext construction produces a terminal audit entry before the error is returned. If that failure audit cannot be appended, the returned error is `AUDIT_FAILURE`.
+
+**Claim 6.5:** `healthCheck` produces an audit entry of type `'healthCheck'` recording probe result and latency. The `governanceState` for healthCheck audit entries is `'not_applicable'` because health probes are diagnostic operations with no governance gate.
 
 ### 8.3 Hash Chain Integrity
 
@@ -1097,13 +1114,13 @@ type AdapterLifecycleState =
 
 ### 9.4 Operations Permitted per State
 
-| State | initialize | remember | recall | createBranch | mergeBranches | resolveConflict | healthCheck | getHealth | on/off | shutdown |
-|---|---|---|---|---|---|---|---|---|---|---|
-| UNINITIALIZED | OK | ERR | ERR | ERR | ERR | ERR | OK (status: unhealthy) | OK (status: unhealthy) | OK | OK (no-op) |
-| INITIALIZING | ERR | ERR | ERR | ERR | ERR | ERR | OK (status: degraded) | OK (status: degraded) | OK | OK (force) |
-| READY | OK if same config; ERR if different | OK | OK | OK | OK | OK | OK (live probe) | OK (status: healthy) | OK | OK |
-| DEGRADED | ERR | ERR | ERR | ERR | ERR | ERR | OK (status: degraded) | OK (status: degraded) | OK | OK |
-| SHUTDOWN | ERR | ERR | ERR | ERR | ERR | ERR | ERR (NOT_INITIALIZED) | OK (status: unhealthy) | no-op | OK (no-op) |
+| State | initialize | remember | recall | createBranch | mergeBranches | resolveConflict | translateToolCall | translateActionToGovernance | onAgentSessionStart | onAgentSessionEnd | healthCheck | getHealth | on/off | shutdown |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| UNINITIALIZED | OK | ERR | ERR | ERR | ERR | ERR | ERR | ERR | ERR | ERR | OK (status: unhealthy) | OK (status: unhealthy) | OK | OK (no-op) |
+| INITIALIZING | ERR | ERR | ERR | ERR | ERR | ERR | ERR | ERR | ERR | ERR | OK (status: degraded) | OK (status: degraded) | OK | OK (force) |
+| READY | OK if same config; ERR if different | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK (live probe) | OK (status: healthy) | OK | OK |
+| DEGRADED | ERR | ERR | ERR | ERR | ERR | ERR | ERR (CORE_PORT_UNAVAILABLE) | ERR (CORE_PORT_UNAVAILABLE) | ERR (CORE_PORT_UNAVAILABLE) | ERR (CORE_PORT_UNAVAILABLE) | OK (status: degraded) | OK (status: degraded) | OK | OK |
+| SHUTDOWN | ERR | ERR | ERR | ERR | ERR | ERR | ERR | ERR | ERR | ERR | ERR (NOT_INITIALIZED) | OK (status: unhealthy) | ERR (NOT_INITIALIZED) | OK (no-op) |
 
 ---
 
@@ -1288,8 +1305,8 @@ The following test cases are mandatory for certification. They include the paren
 ### TC-29: Subscription Lifecycle via on/off
 
 **Covers:** Claim 1.13
-**Steps:** Register a subscription via `on('governance:refused', handler)` in UNINITIALIZED state. Initialize to READY. Trigger a governance refusal and verify handler fires. Call `off(subscriptionId)` and trigger another refusal -- verify handler does NOT fire. Register a new subscription. Transition to DEGRADED then back to READY -- verify subscription still fires. Call `shutdown()` -- verify all subscriptions are cleared. Attempt `on()` post-SHUTDOWN -- verify no-op (no error, no subscription created). Attempt `off('nonexistent-id')` -- verify no-op.
-**Assertions:** Subscriptions registered pre-READY fire once READY. `off()` removes exactly the targeted subscription. Subscriptions survive DEGRADED -> READY recovery. Shutdown clears all subscriptions. Post-SHUTDOWN `on()` is a silent no-op. `off()` with unknown ID is a no-op.
+**Steps:** Register a subscription via `on('governance:refused', handler)` in UNINITIALIZED state. Initialize to READY. Trigger a governance refusal and verify handler fires. Call `off(subscriptionId)` and trigger another refusal -- verify handler does NOT fire. Register a new subscription. Transition to DEGRADED then back to READY -- verify subscription still fires. Call `shutdown()` -- verify all subscriptions are cleared. Attempt `on()` post-SHUTDOWN -- verify `NOT_INITIALIZED` error is returned. Attempt `off()` post-SHUTDOWN -- verify `NOT_INITIALIZED` error is returned. Attempt `off('nonexistent-id')` pre-SHUTDOWN -- verify no-op.
+**Assertions:** Subscriptions registered pre-READY fire once READY. `off()` removes exactly the targeted subscription. Subscriptions survive DEGRADED -> READY recovery. Shutdown clears all subscriptions. Post-SHUTDOWN `on()` and `off()` return `NOT_INITIALIZED`. `off()` with unknown ID (pre-SHUTDOWN) is a no-op.
 
 ---
 
@@ -1361,9 +1378,14 @@ All verifiable claims for Breaker traceability:
 | 7.5 | §9.3 | Concurrent shutdown, recovery, and operations are serialized by lifecycle state |
 | 7.6 | §9.3 | Recovery exhaustion keeps DEGRADED; re-initialization not permitted; caller must shutdown + reconstruct |
 | 7.7 | §9.3 | INITIALIZING must transition to UNINITIALIZED within connectionTimeoutMs; shutdown from INITIALIZING forces SHUTDOWN |
-| 1.13 | §3.1 | on/off permitted in all states except SHUTDOWN (no-op); subscriptions survive transitions, cleared on shutdown |
+| 1.13 | §3.1 | on/off permitted in all states except SHUTDOWN (throws NOT_INITIALIZED); subscriptions survive transitions, cleared on shutdown |
 | 2.10 | §3.2 | Config identity is SHA-256 of canonical JSON (sorted keys, no whitespace); used for idempotent init |
 | 3.7 | §5.4 | memory_read implicitly granted at all trust levels; declaration is for audit only, does not gate access |
+| 3.8 | §5.2 | mapNativeEvent and mapLimenEvent are pure data transformations; no governance, no audit, no side effects |
+| 2.11 | §3.2.1 | Sessions exceeding maxDurationMs end with outcome 'timeout' |
+| 2.12 | §3.6 | warningThresholdPct must be in [0, 100]; values outside rejected with SERDE_ERROR |
+| 2.13 | §3.2 | delegationDepthMax must be in [0, 10]; 0 disables delegation; values above 10 rejected with SERDE_ERROR |
+| 6.5 | §8.2 | healthCheck produces audit entry of type 'healthCheck' recording probe result and latency |
 
 ---
 
