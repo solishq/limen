@@ -37,11 +37,22 @@ fn test_envelope(at: u64) -> CommitEnvelope {
     }
 }
 
+/// Default verdict set for test commits — all operations pass.
+fn test_verdicts() -> VerdictSet {
+    VerdictSet {
+        refusal: RefusalVerdict::Accept,
+        authority: AuthorityVerdict::Authorized,
+        governance: GovernanceVerdict::Permitted,
+        cascade: CascadeVerdict::Intact,
+    }
+}
+
 fn commit_one(storage: &SqliteChainStorage, payload: &str, at: u64) -> ChainEntry {
     commit_entry(
         storage,
         test_proposed(payload),
         CommitDecision::Commit { path: CommitPath::Default },
+        test_verdicts(),
         TenantScope("default".into()),
         test_envelope(at),
     ).unwrap()
@@ -124,6 +135,7 @@ fn test_b_concurrent_commit_stress() {
                     &s,
                     test_proposed(&format!("entry-{}", idx)),
                     CommitDecision::Commit { path: CommitPath::Default },
+                    test_verdicts(),
                     TenantScope("default".into()),
                     test_envelope(idx as u64),
                 ).unwrap();
@@ -217,6 +229,7 @@ fn test_d_refusal_durable_and_chain_linked() {
             category: RefusalCategory::Governance,
             detail: "policy violation".into(),
         }),
+        test_verdicts(),
         TenantScope("default".into()),
         test_envelope(2),
     ).unwrap();
@@ -325,12 +338,14 @@ fn test_g_multi_tenant() {
         commit_entry(
             &storage, test_proposed(&format!("a-{}", i)),
             CommitDecision::Commit { path: CommitPath::Default },
+            test_verdicts(),
             tenant_a.clone(), test_envelope(i * 2),
         ).unwrap();
 
         commit_entry(
             &storage, test_proposed(&format!("b-{}", i)),
             CommitDecision::Commit { path: CommitPath::Default },
+            test_verdicts(),
             tenant_b.clone(), test_envelope(i * 2 + 1),
         ).unwrap();
     }

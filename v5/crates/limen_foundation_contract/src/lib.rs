@@ -10,6 +10,7 @@
 pub mod capabilities;
 pub mod chain;
 pub mod envelope;
+pub mod lifecycle;
 pub mod operation;
 pub mod operations;
 pub mod proposed;

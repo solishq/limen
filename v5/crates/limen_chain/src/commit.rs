@@ -1,22 +1,32 @@
 //! Commit path per v1.3 §6.4 steps 1–8.
-//! M3 scope: takes a pre-computed `CommitDecision` from the test harness.
-//! Foundation operation dispatch (step 5) is deferred to M5.
+//!
+//! P0 amendment: actual `VerdictSet` from dispatch loop is threaded through
+//! (F-03 fix). The `commit_entry` function now takes the real verdicts instead
+//! of fabricating `Accept/Authorized/Permitted/Intact`.
+//!
+//! `SqliteChainStorage` implements `ChainCommitSink` for audit-before-success
+//! fusion with the dispatch loop.
 
 use limen_types::*;
 use limen_foundation_contract::chain::*;
+use limen_foundation_contract::dispatch::ChainCommitSink;
 use limen_foundation_contract::envelope::CommitEnvelope;
 use limen_foundation_contract::proposed::ProposedTransitionEnvelope;
 use limen_foundation_contract::verdict::*;
 use crate::storage::{SqliteChainStorage, ChainStorageError};
 use crate::canonical_temp::to_canonical_bytes;
 
-/// Commit a chain entry. In M3, the caller provides the `CommitDecision`
-/// (foundation operations are not implemented yet). In M5+, the substrate
-/// runtime will compute the decision via `commit_decision()`.
+/// Commit a chain entry with the actual verdict set from the dispatch loop.
+///
+/// F-03 fix: the `verdicts` parameter carries the real `VerdictSet` — no
+/// fabricated verdicts. For backward compatibility, callers that pass
+/// `CommitDecision::Refused` do not use the verdicts (refusal entries
+/// store the refusal verdict from the decision itself).
 pub fn commit_entry(
     storage: &SqliteChainStorage,
     proposed: ProposedTransitionEnvelope,
     decision: CommitDecision,
+    verdicts: VerdictSet,
     tenant_scope: TenantScope,
     commit_envelope: CommitEnvelope,
 ) -> Result<ChainEntry, ChainStorageError> {
@@ -66,12 +76,7 @@ pub fn commit_entry(
         CommitDecision::Commit { path } => {
             let transition = CommittedTransition {
                 proposed: proposed.clone(),
-                verdicts: VerdictSet {
-                    refusal: RefusalVerdict::Accept,
-                    authority: AuthorityVerdict::Authorized,
-                    governance: GovernanceVerdict::Permitted,
-                    cascade: CascadeVerdict::Intact,
-                },
+                verdicts,
                 commit_path: path,
                 canonical_at,
             };
@@ -156,6 +161,24 @@ pub fn commit_entry(
     tx.commit()?;
 
     Ok(entry)
+}
+
+/// Implement `ChainCommitSink` for `SqliteChainStorage` to enable
+/// audit-before-success fusion with the dispatch loop.
+impl ChainCommitSink for SqliteChainStorage {
+    fn commit_entry(
+        &self,
+        proposed: ProposedTransitionEnvelope,
+        decision: CommitDecision,
+        verdicts: VerdictSet,
+        tenant_scope: TenantScope,
+        commit_envelope: CommitEnvelope,
+    ) -> Result<ChainEntry, String> {
+        crate::commit::commit_entry(
+            self, proposed, decision, verdicts, tenant_scope, commit_envelope,
+        )
+        .map_err(|e| format!("{:?}", e))
+    }
 }
 
 fn insert_entry(

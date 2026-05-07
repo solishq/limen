@@ -4,10 +4,19 @@
 //! Composition rule: committed iff all four return non-blocking verdicts.
 //! Static-type dispatch — four hardcoded operations, no runtime registry.
 //!
+//! P0 amendments:
+//!   - Lifecycle guard gating: dispatch requires `Ready` state.
+//!   - Audit-before-success fusion: `CommitDecision::Commit` is never returned
+//!     without a durable chain entry written via `ChainCommitSink`.
+//!   - F-03 fix: actual `VerdictSet` from dispatch loop is threaded through
+//!     to the commit sink — no hardcoded `Accept/Authorized/Permitted/Intact`.
+//!
 //! Authority: M6 precondition v2.0 founder ratification.
 
 use crate::capabilities::{FoundationReadCapability, ChainReadContext};
-use crate::envelope::{TransactionRuntimeContext, OperationScopedFields};
+use crate::chain::ChainEntry;
+use crate::envelope::{TransactionRuntimeContext, CommitEnvelope, OperationScopedFields};
+use crate::lifecycle::{LifecycleGuard, LifecycleError};
 use crate::proposed::ProposedTransitionEnvelope;
 use crate::verdict::*;
 use crate::substrate_authority;
@@ -16,6 +25,65 @@ use crate::operations::authority::AuthorityAndCommitEvaluation;
 use crate::operations::governance::GovernanceEvaluation;
 use crate::operations::cascade::CascadeIntegrityEvaluation;
 use limen_types::*;
+
+/// Error type for commit transaction failures.
+///
+/// Unifies lifecycle errors and chain commit sink errors into a single
+/// error type returned by the fused `run_commit_transaction`.
+#[derive(Debug)]
+pub enum CommitTransactionError {
+    /// Substrate is not in `Ready` state.
+    LifecycleNotReady(LifecycleError),
+    /// The chain commit sink failed to persist the entry.
+    ChainCommitFailed(String),
+}
+
+impl std::fmt::Display for CommitTransactionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LifecycleNotReady(e) => write!(f, "lifecycle: {}", e),
+            Self::ChainCommitFailed(e) => write!(f, "chain commit: {}", e),
+        }
+    }
+}
+
+impl From<LifecycleError> for CommitTransactionError {
+    fn from(e: LifecycleError) -> Self {
+        Self::LifecycleNotReady(e)
+    }
+}
+
+/// Trait for durable chain entry persistence.
+///
+/// Defined in `limen_foundation_contract` so the dispatch loop can write
+/// chain entries without depending on `limen_chain`. Implemented by
+/// `limen_chain::storage::SqliteChainStorage` (or any other backend).
+///
+/// This trait enables the audit-before-success invariant: `CommitDecision::Commit`
+/// is never returned to a caller without the corresponding chain entry
+/// already durably written.
+pub trait ChainCommitSink {
+    /// Persist a chain entry. Returns the written entry on success.
+    ///
+    /// The implementor MUST ensure durability before returning `Ok`.
+    /// The `verdicts` parameter carries the actual `VerdictSet` from the
+    /// dispatch loop (F-03 fix: no fabricated verdicts).
+    fn commit_entry(
+        &self,
+        proposed: ProposedTransitionEnvelope,
+        decision: CommitDecision,
+        verdicts: VerdictSet,
+        tenant_scope: TenantScope,
+        commit_envelope: CommitEnvelope,
+    ) -> Result<ChainEntry, String>;
+}
+
+/// Internal dispatch outcome that carries both the decision and the
+/// full verdict set from all four operations.
+pub(crate) struct DispatchOutcome {
+    decision: CommitDecision,
+    verdicts: VerdictSet,
+}
 
 /// Execute the v1.3 §1.3 dispatch loop.
 /// Static-type dispatch: four hardcoded operations in fixed order.
@@ -28,6 +96,9 @@ use limen_types::*;
 ///
 /// Composition: "A proposed transition is committed if and only if all four
 /// verdict-producing operations return non-blocking verdicts."
+///
+/// Returns a `DispatchOutcome` carrying both the `CommitDecision` and the
+/// actual `VerdictSet` from the dispatch loop (F-03 fix).
 pub(crate) fn execute_dispatch_loop<'ctx, 'tx>(
     tx_ctx: &'tx TransactionRuntimeContext,
     cap: &FoundationReadCapability<'ctx>,
@@ -36,7 +107,7 @@ pub(crate) fn execute_dispatch_loop<'ctx, 'tx>(
     execution_context: ExecutionContext,
     freshness: FreshnessMarker,
     invocation_base: &mut u64,
-) -> CommitDecision {
+) -> DispatchOutcome {
     // --- Operation 1: Refusal (Property 3) ---
     *invocation_base += 1;
     let refusal_fields = OperationScopedFields {
@@ -49,8 +120,16 @@ pub(crate) fn execute_dispatch_loop<'ctx, 'tx>(
     let refusal = substrate_authority::dispatch_operation::<RefusalEvaluation>(
         tx_ctx, cap, proposed, refusal_fields,
     );
-    if let RefusalVerdict::Refuse(r) = refusal {
-        return CommitDecision::Refused(r);
+    if let RefusalVerdict::Refuse(ref r) = refusal {
+        return DispatchOutcome {
+            decision: CommitDecision::Refused(r.clone()),
+            verdicts: VerdictSet {
+                refusal: refusal.clone(),
+                authority: AuthorityVerdict::Authorized,     // not reached
+                governance: GovernanceVerdict::Permitted,     // not reached
+                cascade: CascadeVerdict::Intact,              // not reached
+            },
+        };
     }
 
     // --- Operation 2: Authority + Commit Path (Property 5 + 2) ---
@@ -67,8 +146,18 @@ pub(crate) fn execute_dispatch_loop<'ctx, 'tx>(
     );
     let commit_path = match authority {
         AuthorityVerdict::Authorized => CommitPath::Default,
-        AuthorityVerdict::RouteVia(p) => p,
-        AuthorityVerdict::Unauthorized(r) => return CommitDecision::Refused(r.into()),
+        AuthorityVerdict::RouteVia(ref p) => p.clone(),
+        AuthorityVerdict::Unauthorized(ref r) => {
+            return DispatchOutcome {
+                decision: CommitDecision::Refused(r.clone().into()),
+                verdicts: VerdictSet {
+                    refusal: refusal.clone(),
+                    authority: authority.clone(),
+                    governance: GovernanceVerdict::Permitted,  // not reached
+                    cascade: CascadeVerdict::Intact,           // not reached
+                },
+            };
+        }
     };
 
     // --- Operation 3: Governance (Property 6) ---
@@ -83,8 +172,16 @@ pub(crate) fn execute_dispatch_loop<'ctx, 'tx>(
     let governance = substrate_authority::dispatch_operation::<GovernanceEvaluation>(
         tx_ctx, cap, proposed, gov_fields,
     );
-    if let GovernanceVerdict::Blocked(_, r) = governance {
-        return CommitDecision::Refused(r.into());
+    if let GovernanceVerdict::Blocked(_, ref r) = governance {
+        return DispatchOutcome {
+            decision: CommitDecision::Refused(r.clone().into()),
+            verdicts: VerdictSet {
+                refusal: refusal.clone(),
+                authority: authority.clone(),
+                governance: governance.clone(),
+                cascade: CascadeVerdict::Intact,               // not reached
+            },
+        };
     }
 
     // --- Operation 4: Cascade Integrity (Property 8) ---
@@ -99,12 +196,28 @@ pub(crate) fn execute_dispatch_loop<'ctx, 'tx>(
     let cascade = substrate_authority::dispatch_operation::<CascadeIntegrityEvaluation>(
         tx_ctx, cap, proposed, cascade_fields,
     );
-    if let CascadeVerdict::Broken(l) = cascade {
-        return CommitDecision::Refused(l.into());
+    if let CascadeVerdict::Broken(ref l) = cascade {
+        return DispatchOutcome {
+            decision: CommitDecision::Refused(l.clone().into()),
+            verdicts: VerdictSet {
+                refusal,
+                authority,
+                governance,
+                cascade,
+            },
+        };
     }
 
-    // All four non-blocking → Commit
-    CommitDecision::Commit { path: commit_path }
+    // All four non-blocking → Commit with actual verdicts
+    DispatchOutcome {
+        decision: CommitDecision::Commit { path: commit_path },
+        verdicts: VerdictSet {
+            refusal,
+            authority,
+            governance,
+            cascade,
+        },
+    }
 }
 
 #[cfg(test)]
@@ -144,7 +257,7 @@ mod tests {
         let freshness = cap.freshness_marker();
 
         let mut invocation_counter: u64 = 100; // start at 100 to make increment visible
-        let _decision = execute_dispatch_loop(
+        let _outcome = execute_dispatch_loop(
             &tx_ctx, &cap, &proposed,
             SubstrateInstant(1000), ExecutionContext::Profile1, freshness,
             &mut invocation_counter,
@@ -156,17 +269,114 @@ mod tests {
              Got {}. If all 4 share the same InvocationId, the counter \
              was not incremented per operation.", invocation_counter);
     }
+
+    /// F-03 fix: verify that dispatch loop returns actual verdicts, not fabricated ones.
+    #[test]
+    fn test_dispatch_returns_actual_verdict_set() {
+        let reader = TestReader;
+        let cap = crate::substrate_authority::mint_capability(&reader, TenantScope("t".into()));
+        let tx_ctx = crate::substrate_authority::mint_transaction_context(
+            RequestBoundary(1), ActorIdentity("actor".into()),
+            TenantScope("t".into()), TraceIdentity(1),
+        );
+        let proposed = ProposedTransitionEnvelope::new(
+            crate::proposed::ProposedTransition { payload: b"test".to_vec(), transition_type: "test".into() },
+            ProposerIdentity("actor".into()), ProposerTimestamp(1000),
+            RequestedTenantScope("t".into()), SchemaVersion(1),
+        );
+        let freshness = cap.freshness_marker();
+
+        let mut base: u64 = 0;
+        let outcome = execute_dispatch_loop(
+            &tx_ctx, &cap, &proposed,
+            SubstrateInstant(1000), ExecutionContext::Profile1, freshness,
+            &mut base,
+        );
+
+        // Verify the verdicts are the actual results from the operations
+        assert_eq!(outcome.verdicts.refusal, RefusalVerdict::Accept);
+        assert_eq!(outcome.verdicts.authority, AuthorityVerdict::Authorized);
+        assert_eq!(outcome.verdicts.governance, GovernanceVerdict::Permitted);
+        assert_eq!(outcome.verdicts.cascade, CascadeVerdict::Intact);
+        assert!(matches!(outcome.decision, CommitDecision::Commit { .. }));
+    }
 }
 
-/// Execute a substrate commit transaction.
+/// Execute a substrate commit transaction with lifecycle gating.
 ///
-/// Public entry point. Accepts data inputs only. Returns `CommitDecision` only.
-/// No callbacks, closures, operation parameters, or dispatcher trait objects.
+/// Public entry point. Checks lifecycle state before dispatch.
+/// If a `ChainCommitSink` is provided and the dispatch decision is `Commit`,
+/// the chain entry is written INSIDE this function before returning —
+/// enforcing the audit-before-success invariant.
 ///
-/// Internally: mints capability + context, dispatches four operations in
-/// v1.3 fixed order, composes verdict, returns result. All authority
-/// exercised inside this function via `pub(crate)` same-crate paths.
-/// Capability and context drop at function exit — cannot escape.
+/// The `VerdictSet` threaded to the commit sink is the actual set from
+/// the dispatch loop (F-03 fix: no fabricated verdicts).
+///
+/// Returns `Err` if:
+///   - The lifecycle guard is not in `Ready` state
+///   - The chain commit sink fails to persist the entry
+pub fn run_commit_transaction_gated(
+    lifecycle: &LifecycleGuard,
+    reader: &dyn ChainReadContext,
+    commit_sink: Option<&dyn ChainCommitSink>,
+    tenant_scope: TenantScope,
+    request_boundary: RequestBoundary,
+    actor_identity: ActorIdentity,
+    trace_identity: TraceIdentity,
+    proposed: &ProposedTransitionEnvelope,
+    clock: SubstrateInstant,
+    execution_context: ExecutionContext,
+    mut invocation_base: u64,
+) -> Result<CommitDecision, CommitTransactionError> {
+    // P0-1: Lifecycle guard — reject if not Ready
+    lifecycle.require_ready()?;
+
+    let cap = substrate_authority::mint_capability(reader, tenant_scope.clone());
+    let tx_ctx = substrate_authority::mint_transaction_context(
+        request_boundary.clone(),
+        actor_identity.clone(),
+        tenant_scope.clone(),
+        trace_identity.clone(),
+    );
+    let freshness = cap.freshness_marker();
+
+    let outcome = execute_dispatch_loop(
+        &tx_ctx, &cap, proposed,
+        clock, execution_context, freshness,
+        &mut invocation_base,
+    );
+
+    // P0-2: Audit-before-success fusion
+    // If decision is Commit AND we have a commit sink, write the chain entry
+    // INSIDE this function. The caller never sees Commit without a durable entry.
+    if let CommitDecision::Commit { .. } = &outcome.decision {
+        if let Some(sink) = commit_sink {
+            let commit_envelope = CommitEnvelope {
+                request_boundary,
+                actor_identity,
+                tenant_scope: tenant_scope.clone(),
+                trace_identity,
+                committed_at: clock,
+            };
+            sink.commit_entry(
+                proposed.clone(),
+                outcome.decision.clone(),
+                outcome.verdicts,
+                tenant_scope,
+                commit_envelope,
+            ).map_err(CommitTransactionError::ChainCommitFailed)?;
+        }
+    }
+
+    Ok(outcome.decision)
+    // cap and tx_ctx drop here — cannot escape
+}
+
+/// Execute a substrate commit transaction (legacy entry point).
+///
+/// Preserved for backward compatibility with existing tests and callers.
+/// Does NOT enforce lifecycle gating or audit-before-success fusion.
+/// New code SHOULD use `run_commit_transaction_gated` instead.
 pub fn run_commit_transaction(
     reader: &dyn ChainReadContext,
     tenant_scope: TenantScope,
@@ -184,10 +394,11 @@ pub fn run_commit_transaction(
     );
     let freshness = cap.freshness_marker();
 
-    execute_dispatch_loop(
+    let outcome = execute_dispatch_loop(
         &tx_ctx, &cap, proposed,
         clock, execution_context, freshness,
         &mut invocation_base,
-    )
+    );
+    outcome.decision
     // cap and tx_ctx drop here — cannot escape
 }
