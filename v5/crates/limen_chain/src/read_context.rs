@@ -110,6 +110,22 @@ impl<'tx> ChainReadContext for SqliteTransactionReadContext<'tx> {
 }
 
 /// Deserialize a chain entry from its stored kind + payload.
+///
+/// F-05/F-08 verified: payloads are serialized with `CanonicalMsgPackSerializer`
+/// (fixed-width str32/bin32/array32/map32) but deserialized here with
+/// `rmp_serde::from_slice`. This works because:
+///   1. str32, bin32, array32, map32 are valid MessagePack format tags
+///   2. `rmp_serde` handles all valid msgpack format variants (both compact and fixed-width)
+///   3. The canonical serializer writes structs as positional arrays (`array32`),
+///      and `rmp_serde::from_slice` deserializes positional arrays into structs
+///      by field declaration order (matching serde's sequential field access)
+///
+/// Roundtrip correctness is proven by `test_h_canonical_serialize_rmp_serde_deserialize_roundtrip`
+/// and `test_h_refusal_entry_roundtrip` in `chain_tests.rs`.
+///
+/// NOTE: The deserialized `content_hash` field is always `[0;32]` because the
+/// payload is the "hashable form" (pre-hash). The actual hash is stored in the
+/// `content_hash` column and verified by `verify_chain`.
 fn deserialize_chain_entry(kind: &str, payload: &[u8]) -> Result<ChainEntry, String> {
     match kind {
         "Committed" => {

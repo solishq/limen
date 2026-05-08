@@ -389,3 +389,118 @@ fn test_g_multi_tenant() {
     assert!(report.integrity_ok);
     assert_eq!(report.verified_count, 10);
 }
+
+// ============================================================
+// H. Serialization roundtrip: canonical -> rmp_serde (F-05/F-08)
+// ============================================================
+
+/// F-05/F-08 fix: Prove that data serialized with `CanonicalMsgPackSerializer`
+/// (fixed-width str32/bin32/array32/map32) can be correctly deserialized by
+/// `rmp_serde::from_slice` (the standard MessagePack decoder).
+///
+/// This test exercises the ACTUAL commit-then-read path:
+/// 1. `commit_entry` serializes via `to_canonical_bytes` (canonical fixed-width)
+/// 2. The payload is stored in SQLite
+/// 3. `SqliteTransactionReadContext::read_entry` deserializes via `rmp_serde::from_slice`
+/// 4. The deserialized entry must match the original field values
+///
+/// If this test fails, the serialization and deserialization codecs are
+/// incompatible and chain entries cannot be read back after commit.
+#[test]
+fn test_h_canonical_serialize_rmp_serde_deserialize_roundtrip() {
+    let storage = test_storage();
+
+    // Commit an entry with known field values
+    let original_payload = "roundtrip-test-payload-with-unicode-\u{1F600}";
+    let entry = commit_one(&storage, original_payload, 42);
+
+    // Read it back through the SqliteTransactionReadContext path
+    // which uses rmp_serde::from_slice for deserialization
+    let mut conn = storage.lock_conn().unwrap();
+    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).unwrap();
+    let read_ctx = limen_chain::read_context::SqliteTransactionReadContext::new(&tx);
+
+    let read_back = read_ctx.read_entry(ChainSequence(0)).unwrap()
+        .expect("entry must exist after commit");
+
+    // Verify field-level equality.
+    // NOTE: content_hash in the deserialized payload is [0;32] because the
+    // payload is the "hashable form" (pre-hash). The actual content_hash is
+    // stored in a separate SQLite column and verified by verify_chain.
+    // This is by design (v1.3 section 6.4 step 6).
+    assert_eq!(read_back.global_sequence(), entry.global_sequence(),
+        "global_sequence must survive roundtrip");
+    assert_eq!(read_back.tenant_sequence(), entry.tenant_sequence(),
+        "tenant_sequence must survive roundtrip");
+    assert_eq!(read_back.previous_hash(), entry.previous_hash(),
+        "previous_hash must survive roundtrip");
+    assert_eq!(read_back.tenant_scope(), entry.tenant_scope(),
+        "tenant_scope must survive roundtrip");
+
+    // Verify the inner transition payload survived the roundtrip
+    match &read_back {
+        ChainEntry::Committed(committed) => {
+            assert_eq!(committed.transition.proposed.transition.payload,
+                original_payload.as_bytes(),
+                "payload bytes must survive canonical serialize -> rmp_serde deserialize roundtrip");
+            assert_eq!(committed.transition.verdicts.refusal, RefusalVerdict::Accept,
+                "verdict must survive roundtrip");
+            assert_eq!(committed.transition.verdicts.authority, AuthorityVerdict::Authorized,
+                "verdict must survive roundtrip");
+            assert_eq!(committed.transition.verdicts.governance, GovernanceVerdict::Permitted,
+                "verdict must survive roundtrip");
+            assert_eq!(committed.transition.verdicts.cascade, CascadeVerdict::Intact,
+                "verdict must survive roundtrip");
+        }
+        ChainEntry::Refusal(_) => panic!("expected Committed entry, got Refusal"),
+    }
+
+    tx.rollback().unwrap();
+}
+
+/// F-05/F-08 supplemental: Prove that a Refusal entry also roundtrips correctly
+/// through canonical serialize -> rmp_serde deserialize.
+#[test]
+fn test_h_refusal_entry_roundtrip() {
+    let storage = test_storage();
+
+    let refusal = commit_entry(
+        &storage,
+        test_proposed("refused-roundtrip"),
+        CommitDecision::Refused(RefusalReason {
+            category: RefusalCategory::Authority,
+            detail: "roundtrip-test-detail".into(),
+        }),
+        test_verdicts(),
+        TenantScope("default".into()),
+        test_envelope(99),
+    ).unwrap();
+
+    // Read back through rmp_serde deserialization path
+    let mut conn = storage.lock_conn().unwrap();
+    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).unwrap();
+    let read_ctx = limen_chain::read_context::SqliteTransactionReadContext::new(&tx);
+
+    let read_back = read_ctx.read_entry(ChainSequence(0)).unwrap()
+        .expect("refusal entry must exist after commit");
+
+    assert_eq!(read_back.global_sequence(), refusal.global_sequence());
+    // content_hash in deserialized payload is [0;32] — see test_h_canonical comment.
+
+    match &read_back {
+        ChainEntry::Refusal(r) => {
+            match &r.refusal_verdict {
+                RefusalVerdict::Refuse(reason) => {
+                    assert_eq!(reason.category, RefusalCategory::Authority,
+                        "refusal category must survive roundtrip");
+                    assert_eq!(reason.detail, "roundtrip-test-detail",
+                        "refusal detail must survive roundtrip");
+                }
+                RefusalVerdict::Accept => panic!("expected Refuse verdict, got Accept"),
+            }
+        }
+        ChainEntry::Committed(_) => panic!("expected Refusal entry, got Committed"),
+    }
+
+    tx.rollback().unwrap();
+}

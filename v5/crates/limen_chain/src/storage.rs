@@ -22,8 +22,13 @@ pub struct SqliteChainStorage {
 }
 
 impl SqliteChainStorage {
-    /// Acquire the connection lock. Used for schema inspection, verification,
-    /// tamper-injection tests, and direct query in test harnesses.
+    /// Acquire the connection lock for test and verification use only.
+    ///
+    /// F-09 fix: hidden from public API documentation. External production
+    /// code MUST use `ChainReadContext` or `ChainCommitSink` for chain access.
+    /// This method exists solely for schema introspection, tamper-injection
+    /// tests, and chain verification (`verify.rs` uses `conn` directly).
+    #[doc(hidden)]
     pub fn lock_conn(&self) -> Result<std::sync::MutexGuard<'_, Connection>, ChainStorageError> {
         self.conn.lock().map_err(|_| ChainStorageError::LockPoisoned)
     }

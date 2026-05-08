@@ -302,12 +302,14 @@ mod tests {
     }
 }
 
-/// Execute a substrate commit transaction with lifecycle gating.
+/// Execute a substrate commit transaction with lifecycle gating and
+/// mandatory audit-before-success fusion.
 ///
 /// Public entry point. Checks lifecycle state before dispatch.
-/// If a `ChainCommitSink` is provided and the dispatch decision is `Commit`,
-/// the chain entry is written INSIDE this function before returning —
-/// enforcing the audit-before-success invariant.
+/// The `commit_sink` is **mandatory** (NF-01 fix): every `Commit` decision
+/// produces a durable chain entry BEFORE the caller sees the decision.
+/// There is no code path where `CommitDecision::Commit` can be returned
+/// without a persisted chain entry.
 ///
 /// The `VerdictSet` threaded to the commit sink is the actual set from
 /// the dispatch loop (F-03 fix: no fabricated verdicts).
@@ -318,7 +320,7 @@ mod tests {
 pub fn run_commit_transaction_gated(
     lifecycle: &LifecycleGuard,
     reader: &dyn ChainReadContext,
-    commit_sink: Option<&dyn ChainCommitSink>,
+    commit_sink: &dyn ChainCommitSink,
     tenant_scope: TenantScope,
     request_boundary: RequestBoundary,
     actor_identity: ActorIdentity,
@@ -346,26 +348,24 @@ pub fn run_commit_transaction_gated(
         &mut invocation_base,
     );
 
-    // P0-2: Audit-before-success fusion
-    // If decision is Commit AND we have a commit sink, write the chain entry
-    // INSIDE this function. The caller never sees Commit without a durable entry.
+    // P0-2: Audit-before-success fusion (NF-01: commit_sink is mandatory)
+    // If decision is Commit, write the chain entry INSIDE this function.
+    // The caller never sees Commit without a durable entry.
     if let CommitDecision::Commit { .. } = &outcome.decision {
-        if let Some(sink) = commit_sink {
-            let commit_envelope = CommitEnvelope {
-                request_boundary,
-                actor_identity,
-                tenant_scope: tenant_scope.clone(),
-                trace_identity,
-                committed_at: clock,
-            };
-            sink.commit_entry(
-                proposed.clone(),
-                outcome.decision.clone(),
-                outcome.verdicts,
-                tenant_scope,
-                commit_envelope,
-            ).map_err(CommitTransactionError::ChainCommitFailed)?;
-        }
+        let commit_envelope = CommitEnvelope {
+            request_boundary,
+            actor_identity,
+            tenant_scope: tenant_scope.clone(),
+            trace_identity,
+            committed_at: clock,
+        };
+        commit_sink.commit_entry(
+            proposed.clone(),
+            outcome.decision.clone(),
+            outcome.verdicts,
+            tenant_scope,
+            commit_envelope,
+        ).map_err(CommitTransactionError::ChainCommitFailed)?;
     }
 
     Ok(outcome.decision)
@@ -374,10 +374,11 @@ pub fn run_commit_transaction_gated(
 
 /// Execute a substrate commit transaction (legacy entry point).
 ///
-/// Preserved for backward compatibility with existing tests and callers.
-/// Does NOT enforce lifecycle gating or audit-before-success fusion.
-/// New code SHOULD use `run_commit_transaction_gated` instead.
-pub fn run_commit_transaction(
+/// **DEPRECATED (NF-02)**: Does NOT enforce lifecycle gating or
+/// audit-before-success fusion. Use `run_commit_transaction_gated` instead.
+/// Restricted to `pub(crate)` — external crates cannot call this function.
+#[deprecated(note = "NF-02: use run_commit_transaction_gated with lifecycle + commit_sink")]
+pub(crate) fn run_commit_transaction(
     reader: &dyn ChainReadContext,
     tenant_scope: TenantScope,
     request_boundary: RequestBoundary,
