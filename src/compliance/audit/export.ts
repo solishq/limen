@@ -12,7 +12,7 @@
  */
 
 import type { ClassificationLevel, Result, KernelError } from '../../adapters/crewai/types.js';
-import type { EnterpriseAuditEntry, ChainVerificationResult } from './enterprise-logger.js';
+import type { EnterpriseAuditEntry, ChainVerificationResult, TimeProvider } from './enterprise-logger.js';
 import { EnterpriseAuditLogger } from './enterprise-logger.js';
 
 
@@ -41,6 +41,9 @@ export type ClassificationDistribution = Readonly<Record<ClassificationLevel, nu
 /**
  * Governance decision summary in the export.
  */
+/**
+ * F-15: Added 'unknown' category for when sum of known verdicts does not equal total.
+ */
 export interface GovernanceDecisionSummary {
   readonly totalDecisions: number;
   readonly allowed: number;
@@ -48,6 +51,7 @@ export interface GovernanceDecisionSummary {
   readonly escalated: number;
   readonly sandboxed: number;
   readonly noDecision: number;
+  readonly unknown: number;
 }
 
 /**
@@ -110,11 +114,17 @@ export interface FedRAMPExport extends ComplianceExport {
  * Each format includes: entry count, date range, classification distribution,
  * governance decision summary, and chain integrity status.
  */
+const DEFAULT_TIME_PROVIDER: TimeProvider = {
+  now: () => new Date().toISOString(),
+};
+
 export class AuditExporter {
   readonly #logger: EnterpriseAuditLogger;
+  readonly #timeProvider: TimeProvider;
 
-  constructor(logger: EnterpriseAuditLogger) {
+  constructor(logger: EnterpriseAuditLogger, timeProvider?: TimeProvider) {
     this.#logger = logger;
+    this.#timeProvider = timeProvider ?? DEFAULT_TIME_PROVIDER;
   }
 
   /**
@@ -219,11 +229,14 @@ export class AuditExporter {
     }
 
     const allEntries = this.#logger.getEntries();
-    const fromStr = dateRange.from.toISOString();
-    const toStr = dateRange.to.toISOString();
+    const fromMs = dateRange.from.getTime();
+    const toMs = dateRange.to.getTime();
 
-    // Filter entries within date range
-    const entries = allEntries.filter(e => e.timestamp >= fromStr && e.timestamp <= toStr);
+    // F-09: Filter entries within date range using proper Date comparison (not string comparison)
+    const entries = allEntries.filter(e => {
+      const entryMs = new Date(e.timestamp).getTime();
+      return entryMs >= fromMs && entryMs <= toMs;
+    });
 
     // Classification distribution
     const classificationDistribution: Record<ClassificationLevel, number> = {
@@ -238,13 +251,23 @@ export class AuditExporter {
     }
 
     // Governance decision summary
+    // F-15: Compute 'unknown' bucket when sum of known verdicts does not equal total
+    const totalDecisions = entries.filter(e => e.governanceDecision !== null).length;
+    const allowed = entries.filter(e => e.governanceDecision?.verdict?.verdict === 'allow').length;
+    const refused = entries.filter(e => e.governanceDecision?.verdict?.verdict === 'refuse').length;
+    const escalated = entries.filter(e => e.governanceDecision?.verdict?.verdict === 'escalate').length;
+    const sandboxed = entries.filter(e => e.governanceDecision?.verdict?.verdict === 'sandbox').length;
+    const noDecision = entries.filter(e => e.governanceDecision === null).length;
+    const knownSum = allowed + refused + escalated + sandboxed;
+    const unknown = totalDecisions - knownSum;
     const governanceSummary: GovernanceDecisionSummary = {
-      totalDecisions: entries.filter(e => e.governanceDecision !== null).length,
-      allowed: entries.filter(e => e.governanceDecision?.verdict?.verdict === 'allow').length,
-      refused: entries.filter(e => e.governanceDecision?.verdict?.verdict === 'refuse').length,
-      escalated: entries.filter(e => e.governanceDecision?.verdict?.verdict === 'escalate').length,
-      sandboxed: entries.filter(e => e.governanceDecision?.verdict?.verdict === 'sandbox').length,
-      noDecision: entries.filter(e => e.governanceDecision === null).length,
+      totalDecisions,
+      allowed,
+      refused,
+      escalated,
+      sandboxed,
+      noDecision,
+      unknown: unknown > 0 ? unknown : 0,
     };
 
     // Chain integrity check
@@ -257,8 +280,8 @@ export class AuditExporter {
       ok: true,
       value: {
         framework,
-        exportedAt: new Date().toISOString(),
-        dateRange: { from: fromStr, to: toStr },
+        exportedAt: this.#timeProvider.now(),
+        dateRange: { from: dateRange.from.toISOString(), to: dateRange.to.toISOString() },
         entryCount: entries.length,
         classificationDistribution: classificationDistribution as ClassificationDistribution,
         governanceSummary,

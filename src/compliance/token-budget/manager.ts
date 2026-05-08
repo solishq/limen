@@ -21,10 +21,15 @@ import type {
   BudgetEvent,
   TokenBudgetManagerConfig,
 } from './types.js';
+import type { TimeProvider } from '../audit/enterprise-logger.js';
 
 function makeError(code: string, message: string): KernelError {
   return { code, message, spec: 'SHARED_TYPES.md S20' };
 }
+
+const DEFAULT_TIME_PROVIDER: TimeProvider = {
+  now: () => new Date().toISOString(),
+};
 
 /**
  * TokenBudgetManager -- tracks per-session and per-operation token budgets.
@@ -44,10 +49,29 @@ export class TokenBudgetManager {
   readonly #reservations: Map<string, TokenReservation> = new Map();
   readonly #config: TokenBudgetManagerConfig;
   readonly #eventListeners: Array<(event: BudgetEvent) => void> = [];
+  readonly #timeProvider: TimeProvider;
   #nextReservationId = 0;
 
-  constructor(config: TokenBudgetManagerConfig) {
+  /**
+   * F-11: Validates all numeric config values on construction.
+   * F-13: Accepts optional TimeProvider for deterministic testing.
+   */
+  constructor(config: TokenBudgetManagerConfig, timeProvider?: TimeProvider) {
+    // F-11: Config validation -- all numeric values must be finite, non-negative, <= MAX_SAFE_INTEGER
+    this.#validateNumeric('defaultMaxTokensPerSession', config.defaultMaxTokensPerSession);
+    this.#validateNumeric('defaultMaxTokensPerOperation', config.defaultMaxTokensPerOperation);
+    this.#validateNumeric('defaultWarningThresholdPct', config.defaultWarningThresholdPct);
+    if (config.defaultReplenishmentWindowSeconds !== null) {
+      this.#validateNumeric('defaultReplenishmentWindowSeconds', config.defaultReplenishmentWindowSeconds);
+    }
     this.#config = config;
+    this.#timeProvider = timeProvider ?? DEFAULT_TIME_PROVIDER;
+  }
+
+  #validateNumeric(name: string, value: number): void {
+    if (!Number.isFinite(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) {
+      throw new Error(`Invalid config '${name}': must be a finite non-negative number <= Number.MAX_SAFE_INTEGER, got ${String(value)}`);
+    }
   }
 
   /**
@@ -67,7 +91,7 @@ export class TokenBudgetManager {
       return { ok: false, error: makeError('SESSION_EXISTS', `Session ${sessionId} already has a budget`) };
     }
 
-    const now = new Date().toISOString();
+    const now = this.#timeProvider.now();
     const state: SessionBudgetState = {
       sessionId,
       totalBudget: maxTokensPerSession ?? this.#config.defaultMaxTokensPerSession,
@@ -152,7 +176,7 @@ export class TokenBudgetManager {
         sessionId,
         tokens: estimatedTokens,
         remaining,
-        timestamp: new Date().toISOString(),
+        timestamp: this.#timeProvider.now(),
       });
 
       return { ok: true, value: result };
@@ -166,7 +190,7 @@ export class TokenBudgetManager {
 
     // Create reservation
     const reservationId = `res-${String(++this.#nextReservationId)}`;
-    const now = new Date().toISOString();
+    const now = this.#timeProvider.now();
     const reservation: TokenReservation = {
       reservationId,
       sessionId,
@@ -248,7 +272,7 @@ export class TokenBudgetManager {
     }
 
     const newReserved = Math.max(0, session.reserved - reservation.estimatedTokens);
-    const now = new Date().toISOString();
+    const now = this.#timeProvider.now();
 
     // Mark reservation consumed
     this.#reservations.set(reservationId, { ...reservation, consumed: true });
@@ -265,9 +289,10 @@ export class TokenBudgetManager {
       warningEmitted: session.warningEmitted || shouldWarn,
     });
 
+    // F-05: Emit budget:warning (not budget:exhausted) when crossing warning threshold
     if (shouldWarn) {
       this.#emitEvent({
-        type: 'budget:exhausted',
+        type: 'budget:warning',
         sessionId,
         tokens: actualTokens,
         remaining: session.totalBudget - newConsumed - newReserved,
@@ -314,7 +339,7 @@ export class TokenBudgetManager {
     }
 
     const newReserved = Math.max(0, session.reserved - reservation.estimatedTokens);
-    const now = new Date().toISOString();
+    const now = this.#timeProvider.now();
 
     this.#reservations.set(reservationId, { ...reservation, released: true });
     this.#sessions.set(sessionId, {
@@ -365,7 +390,7 @@ export class TokenBudgetManager {
       return { ok: false, error: makeError('REPLENISHMENT_DISABLED', 'Budget replenishment is not configured for this session') };
     }
 
-    const now = new Date().toISOString();
+    const now = this.#timeProvider.now();
     this.#sessions.set(sessionId, {
       ...session,
       consumed: 0,
@@ -406,9 +431,21 @@ export class TokenBudgetManager {
 
   /**
    * Subscribe to budget events.
+   * F-14: Returns an unsubscribe function to prevent memory leaks.
    */
-  onEvent(listener: (event: BudgetEvent) => void): void {
+  onEvent(listener: (event: BudgetEvent) => void): () => void {
     this.#eventListeners.push(listener);
+    return () => this.offEvent(listener);
+  }
+
+  /**
+   * F-14: Unsubscribe from budget events.
+   */
+  offEvent(listener: (event: BudgetEvent) => void): void {
+    const idx = this.#eventListeners.indexOf(listener);
+    if (idx !== -1) {
+      this.#eventListeners.splice(idx, 1);
+    }
   }
 
   #emitEvent(event: BudgetEvent): void {

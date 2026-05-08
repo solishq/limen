@@ -36,11 +36,14 @@ export const CLASSIFICATION_LEVELS: readonly ClassificationLevel[] = [
 /**
  * Result of a classification enforcement check.
  */
+/**
+ * F-10: Renamed actualLevel -> maxAccessibleLevel for clarity with fractional clearance.
+ */
 export interface ClassificationEnforcementResult {
   readonly allowed: boolean;
   readonly requiredLevel: ClassificationLevel;
   readonly requiredNumeric: number;
-  readonly actualLevel: ClassificationLevel;
+  readonly maxAccessibleLevel: ClassificationLevel;
   readonly actualNumeric: number;
 }
 

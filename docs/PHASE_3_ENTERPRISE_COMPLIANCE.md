@@ -1,9 +1,9 @@
 # Phase 3 Enterprise Compliance Pack -- Traceability Matrix
 
-**Version:** 1.0.0
-**Date:** 2026-05-07
-**Status:** BUILT -- Pending Breaker/Certifier/Witness
-**Tests:** 79 pass, 0 fail
+**Version:** 1.1.0
+**Date:** 2026-05-08
+**Status:** REMEDIATED -- 15 Breaker findings fixed, pending re-Breaker
+**Tests:** 118 pass, 0 fail (79 original + 39 new from remediation)
 **Contract References:** SHARED_TYPES.md v1.4.1, PHASE_3_DESIGN_SOURCE.md v1.1.0, CREWAI_ADAPTER_CONTRACT.md v1.0.0
 
 ---
@@ -101,14 +101,38 @@
 
 ---
 
+## Remediation Traceability (v1.1.0 -- 15 Breaker Findings)
+
+| Finding | Severity | Fix Summary | Source File | New Tests | Evidence |
+|---------|----------|-------------|-------------|-----------|----------|
+| F-01 | P1-CRITICAL | Recursive canonicalJsonStringify for deterministic nested-key serialization | audit/enterprise-logger.ts | 8 tests (canonical serializer + nested hash) | All key depths sorted |
+| F-02 | P1-CRITICAL | tombstoneEntry() method on logger, chain-preserving (skip hash recompute for tombstoned) | audit/enterprise-logger.ts | 3 tests (in-place + bounds + already-tombstoned) | Chain valid after tombstone |
+| F-03 | P1-CRITICAL | getEntries() returns structuredClone + Object.freeze | audit/enterprise-logger.ts | 2 tests (frozen + mutation isolation) | TypeError on mutation |
+| F-04 | P2-HIGH | Real tamper detection test with corrupted hash + previousHash link verification | compliance.test.ts | 3 tests (corruption + link + event) | Chain validity assertions |
+| F-05 | P2-HIGH | budget:warning event type added, warning threshold emits warning not exhausted | token-budget/types.ts, manager.ts | 2 tests (warning vs exhausted) | Event type verified |
+| F-06 | P2-HIGH | Proper per-session ceiling test: high per-op, low per-session | compliance.test.ts | 1 test | Per-session path hit |
+| F-07 | P2-HIGH | runComplianceCheck() actually calls TokenBudgetManager/Retention/Rollback | pack.ts | existing test passes with real checks | Temp session created/removed |
+| F-08 | P2-HIGH | StepExecutor injection in RollbackManager constructor | rollback/manager.ts | 3 tests (partial + default + full failure) | Error collection verified |
+| F-09 | P3-MEDIUM | Date filtering uses getTime() comparison instead of string comparison | audit/export.ts | 1 test (timezone-variant) | Numeric comparison |
+| F-10 | P3-MEDIUM | actualLevel renamed to maxAccessibleLevel in ClassificationEnforcementResult | classification/types.ts, engine.ts | 3 tests (fractional clearance) | Field name verified |
+| F-11 | P3-MEDIUM | Config validation in TokenBudgetManager constructor (finite, non-negative, <= MAX_SAFE_INTEGER) | token-budget/manager.ts | 4 tests (NaN, negative, Infinity, valid) | Throws on invalid |
+| F-12 | P3-MEDIUM | TombstonedEntry uses AgentId and SessionId branded types | audit/retention.ts | 1 test (branded type assignment) | Type-level compile check |
+| F-13 | P3-MEDIUM | TimeProvider interface injected into all components (EnterpriseAuditLogger, RetentionPolicyEnforcer, TokenBudgetManager, RollbackManager, AuditExporter, EnterpriseCompliancePack) | All source files | 3 tests (logger, retention, rollback) | Fixed time verified |
+| F-14 | P3-MEDIUM | offEvent() added to all 3 event-emitting classes; onEvent() returns unsubscribe function | enterprise-logger.ts, manager.ts, rollback/manager.ts | 3 tests (logger, budget, rollback unsub) | Event count stable after unsub |
+| F-15 | P4-LOW | unknown category added to GovernanceDecisionSummary when sum != total | audit/export.ts | 2 tests (unknown=0, field exists) | Bucket computed |
+
+---
+
 ## Summary
 
-- **Total Rows:** 86
-- **Source Files:** 10 (types + implementations)
-- **Tests:** 79 passing (8 describe blocks)
+- **Total Traceability Rows:** 86 (original) + 15 (remediation)
+- **Source Files Modified:** 8 (enterprise-logger.ts, retention.ts, export.ts, manager.ts [token-budget], types.ts [token-budget], manager.ts [rollback], types.ts [classification], pack.ts, index.ts)
+- **Tests:** 118 passing (22 describe blocks)
 - **Contract Coverage:** SHARED_TYPES.md S3, S5, S10, S10.3, S16, S17, S20, S20.1; PHASE_3_DESIGN_SOURCE.md S5, S6, S17; CREWAI_ADAPTER_CONTRACT.md S3.6, S4.4, S7.1
 - **Governance:** #governed = true on all components, no bypass path
-- **Zero modifications:** No Phase 1/Phase 2 code or contracts modified
+- **TimeProvider:** Injected in all 6 components, no direct Date calls remain in production code
+- **Event cleanup:** offEvent() on all 3 event-emitting classes
+- **Hash chain:** canonicalJsonStringify for deterministic nested serialization
 
 ---
 

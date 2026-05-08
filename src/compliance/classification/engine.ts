@@ -161,14 +161,14 @@ export class ClassificationEngine {
     }
 
     const requiredNumeric = CLASSIFICATION_NUMERIC[required];
-    // Determine the actor's classification level from their numeric clearance
-    const actualLevel = this.#numericToLevel(actualClearance);
+    // F-10: Determine the actor's maximum accessible classification level from their numeric clearance
+    const maxAccessibleLevel = this.#numericToLevel(actualClearance);
 
     const result: ClassificationEnforcementResult = {
       allowed: actualClearance >= requiredNumeric,
       requiredLevel: required,
       requiredNumeric,
-      actualLevel,
+      maxAccessibleLevel,
       actualNumeric: actualClearance,
     };
 

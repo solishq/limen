@@ -12,9 +12,9 @@
  * - Hard delete only for unrestricted on expiry
  */
 
-import type { ClassificationLevel, Result, KernelError } from '../../adapters/crewai/types.js';
+import type { ClassificationLevel, Result, KernelError, AgentId, SessionId } from '../../adapters/crewai/types.js';
 import { DEFAULT_RETENTION, type EnterpriseRetentionPolicy } from '../classification/engine.js';
-import type { EnterpriseAuditEntry } from './enterprise-logger.js';
+import type { EnterpriseAuditEntry, TimeProvider } from './enterprise-logger.js';
 
 function makeError(code: string, message: string): KernelError {
   return { code, message, spec: 'SHARED_TYPES.md S17' };
@@ -56,6 +56,9 @@ export interface GdprErasureResult {
  * - timestamp
  * - classification
  */
+/**
+ * F-12: Uses AgentId and SessionId branded types instead of plain string.
+ */
 export interface TombstonedEntry {
   readonly id: string;
   readonly timestamp: string;
@@ -68,8 +71,8 @@ export interface TombstonedEntry {
   readonly tombstonedAt: string;
   readonly archiveStatus: 'tombstoned';
   readonly tenantId: null;
-  readonly agentId: string;
-  readonly sessionId: string;
+  readonly agentId: AgentId;
+  readonly sessionId: SessionId;
   readonly action: null;
   readonly governanceDecision: null;
   readonly details: Readonly<Record<string, unknown>>;
@@ -80,9 +83,18 @@ export interface TombstonedEntry {
  *
  * #governed = true -- no ungoverned mode.
  */
+const DEFAULT_TIME_PROVIDER: TimeProvider = {
+  now: () => new Date().toISOString(),
+};
+
 export class RetentionPolicyEnforcer {
   /** Governance is always enforced. This field exists to make governance non-optional visible in source. */
   readonly #governed: true = true;
+  readonly #timeProvider: TimeProvider;
+
+  constructor(timeProvider?: TimeProvider) {
+    this.#timeProvider = timeProvider ?? DEFAULT_TIME_PROVIDER;
+  }
 
   /** Verify governance is active. Used by internal checks. */
   get governed(): boolean { return this.#governed; }
@@ -209,11 +221,11 @@ export class RetentionPolicyEnforcer {
       currentHash: entry.currentHash,
       sequenceNumber: entry.sequenceNumber,
       tombstoned: true,
-      tombstonedAt: new Date().toISOString(),
+      tombstonedAt: this.#timeProvider.now(),
       archiveStatus: 'tombstoned',
       tenantId: null,
-      agentId: entry.agentId,
-      sessionId: entry.sessionId,
+      agentId: entry.agentId as AgentId,
+      sessionId: entry.sessionId as SessionId,
       action: null,
       governanceDecision: null,
       details: { tombstoned: true, originalEvent: entry.event },

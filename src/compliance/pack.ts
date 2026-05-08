@@ -19,10 +19,15 @@ import { ClassificationEngine } from './classification/engine.js';
 import { TokenBudgetManager } from './token-budget/manager.js';
 import type { TokenBudgetManagerConfig } from './token-budget/types.js';
 import { EnterpriseAuditLogger } from './audit/enterprise-logger.js';
+import type { TimeProvider } from './audit/enterprise-logger.js';
 import { RetentionPolicyEnforcer } from './audit/retention.js';
 import { AuditExporter, type ComplianceFramework, type DateRange } from './audit/export.js';
 import type { SOC2Export, ISO27001Export, FedRAMPExport } from './audit/export.js';
 import { RollbackManager } from './rollback/manager.js';
+
+const DEFAULT_TIME_PROVIDER: TimeProvider = {
+  now: () => new Date().toISOString(),
+};
 
 function makeError(code: string, message: string): KernelError {
   return { code, message, spec: 'PHASE_3_DESIGN_SOURCE.md' };
@@ -33,6 +38,7 @@ function makeError(code: string, message: string): KernelError {
  */
 export interface CompliancePackConfig {
   readonly tokenBudget: TokenBudgetManagerConfig;
+  readonly timeProvider?: TimeProvider;
 }
 
 /**
@@ -68,15 +74,18 @@ export class EnterpriseCompliancePack {
   readonly #retentionEnforcer: RetentionPolicyEnforcer;
   readonly #auditExporter: AuditExporter;
   readonly #rollbackManager: RollbackManager;
+  readonly #timeProvider: TimeProvider;
   #initialized = false;
 
   constructor(config: CompliancePackConfig) {
+    const tp = config.timeProvider ?? DEFAULT_TIME_PROVIDER;
+    this.#timeProvider = tp;
     this.#classificationEngine = new ClassificationEngine();
-    this.#tokenBudgetManager = new TokenBudgetManager(config.tokenBudget);
-    this.#auditLogger = new EnterpriseAuditLogger();
-    this.#retentionEnforcer = new RetentionPolicyEnforcer();
-    this.#auditExporter = new AuditExporter(this.#auditLogger);
-    this.#rollbackManager = new RollbackManager();
+    this.#tokenBudgetManager = new TokenBudgetManager(config.tokenBudget, tp);
+    this.#auditLogger = new EnterpriseAuditLogger(tp);
+    this.#retentionEnforcer = new RetentionPolicyEnforcer(tp);
+    this.#auditExporter = new AuditExporter(this.#auditLogger, tp);
+    this.#rollbackManager = new RollbackManager({ timeProvider: tp });
   }
 
   /**
@@ -187,11 +196,23 @@ export class EnterpriseCompliancePack {
       detail: classResult.ok ? 'Classification engine operational' : classResult.error.message,
     });
 
-    // 2. Token budget manager (check structure, not specific session)
+    // F-07: Token budget manager -- actually verify by creating a temp session
+    let tokenBudgetOk = false;
+    const tempSessionId = `__compliance_check_${Date.now()}`;
+    try {
+      const initResult = this.#tokenBudgetManager.initSession(tempSessionId, 1000, 1000);
+      if (initResult.ok) {
+        const reserveResult = this.#tokenBudgetManager.reserveTokens(tempSessionId, 'compliance_check', 0);
+        tokenBudgetOk = reserveResult.ok && reserveResult.value.allowed;
+        this.#tokenBudgetManager.removeSession(tempSessionId);
+      }
+    } catch {
+      tokenBudgetOk = false;
+    }
     checks.push({
       component: 'TokenBudgetManager',
-      status: 'pass',
-      detail: 'Token budget manager operational',
+      status: tokenBudgetOk ? 'pass' : 'fail',
+      detail: tokenBudgetOk ? 'Token budget manager operational' : 'Token budget manager check failed',
     });
 
     // 3. Audit logger chain integrity
@@ -207,18 +228,32 @@ export class EnterpriseCompliancePack {
           : 'Audit chain integrity failure',
     });
 
-    // 4. Retention enforcer
+    // F-07: Retention enforcer -- actually verify by calling getPolicy
+    let retentionOk = false;
+    try {
+      const policy = this.#retentionEnforcer.getPolicy('unrestricted');
+      retentionOk = policy !== null && policy.retentionDays > 0;
+    } catch {
+      retentionOk = false;
+    }
     checks.push({
       component: 'RetentionPolicyEnforcer',
-      status: 'pass',
-      detail: 'Retention policy enforcer operational',
+      status: retentionOk ? 'pass' : 'fail',
+      detail: retentionOk ? 'Retention policy enforcer operational' : 'Retention policy enforcer check failed',
     });
 
-    // 5. Rollback manager
+    // F-07: Rollback manager -- verify by calling getLastResult (should not throw)
+    let rollbackOk = false;
+    try {
+      this.#rollbackManager.getLastResult();
+      rollbackOk = true;
+    } catch {
+      rollbackOk = false;
+    }
     checks.push({
       component: 'RollbackManager',
-      status: 'pass',
-      detail: 'Rollback manager operational',
+      status: rollbackOk ? 'pass' : 'fail',
+      detail: rollbackOk ? 'Rollback manager operational' : 'Rollback manager check failed',
     });
 
     // 6. Governance enforcement
@@ -235,7 +270,7 @@ export class EnterpriseCompliancePack {
       value: {
         overall: allPassed ? 'pass' : 'fail',
         checks,
-        timestamp: new Date().toISOString(),
+        timestamp: this.#timeProvider.now(),
       },
     };
   }

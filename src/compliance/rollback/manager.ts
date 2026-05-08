@@ -21,10 +21,21 @@ import type {
   RollbackCheck,
   RollbackEventType,
 } from './types.js';
+import type { TimeProvider } from '../audit/enterprise-logger.js';
 
 function makeError(code: string, message: string): KernelError {
   return { code, message, spec: 'PHASE_3_DESIGN_SOURCE.md S17' };
 }
+
+const DEFAULT_TIME_PROVIDER: TimeProvider = {
+  now: () => new Date().toISOString(),
+};
+
+/**
+ * F-08: StepExecutor function type for injection.
+ * Called for each rollback step. Can throw or return error.
+ */
+export type StepExecutor = (step: RollbackStep) => Result<void>;
 
 /** 15-minute recovery timeline (PHASE_3_DESIGN_SOURCE.md S17) */
 const RECOVERY_TIMELINE_MS = 15 * 60 * 1000;
@@ -45,9 +56,20 @@ export class RollbackManager {
   /** Verify governance is active. */
   get governed(): boolean { return this.#governed; }
   readonly #eventListeners: Array<(event: RollbackEventType, data: unknown) => void> = [];
+  readonly #timeProvider: TimeProvider;
+  readonly #stepExecutor: StepExecutor;
   #currentPlan: RollbackPlan | null = null;
   #lastResult: RollbackResult | null = null;
   #nextPlanId = 0;
+
+  /**
+   * F-08: Accepts optional stepExecutor for testing.
+   * F-13: Accepts optional TimeProvider for deterministic testing.
+   */
+  constructor(options?: { stepExecutor?: StepExecutor; timeProvider?: TimeProvider }) {
+    this.#timeProvider = options?.timeProvider ?? DEFAULT_TIME_PROVIDER;
+    this.#stepExecutor = options?.stepExecutor ?? ((_step: RollbackStep) => ({ ok: true as const, value: undefined }));
+  }
 
   /**
    * PHASE_3_DESIGN_SOURCE.md S17 -- Generate rollback plan.
@@ -62,7 +84,7 @@ export class RollbackManager {
    */
   planRollback(): Result<RollbackPlan> {
     const planId = `rollback-${String(++this.#nextPlanId)}`;
-    const now = new Date().toISOString();
+    const now = this.#timeProvider.now();
 
     const steps: RollbackStep[] = [
       {
@@ -141,7 +163,8 @@ export class RollbackManager {
       return { ok: false, error: makeError('PLAN_MISMATCH', 'Plan does not match the current planned rollback') };
     }
 
-    const startedAt = new Date();
+    const startMs = Date.now();
+    const startedAtStr = this.#timeProvider.now();
     this.#emitEvent('rollback:started', { planId: plan.planId });
 
     const executedSteps: RollbackStep[] = [];
@@ -154,10 +177,10 @@ export class RollbackManager {
         continue;
       }
 
-      const stepStart = new Date().toISOString();
+      const stepStart = this.#timeProvider.now();
 
       // Check 15-minute timeline
-      const elapsed = Date.now() - startedAt.getTime();
+      const elapsed = Date.now() - startMs;
       if (elapsed > RECOVERY_TIMELINE_MS) {
         const timeoutError = `Step '${step.name}' skipped: 15-minute recovery timeline exceeded`;
         errors.push(timeoutError);
@@ -165,7 +188,7 @@ export class RollbackManager {
           ...step,
           status: 'failed',
           startedAt: stepStart,
-          completedAt: new Date().toISOString(),
+          completedAt: this.#timeProvider.now(),
           error: timeoutError,
         });
         failed = true;
@@ -173,15 +196,15 @@ export class RollbackManager {
         continue;
       }
 
-      // Execute step (simulated -- actual execution depends on deployment context)
-      const stepResult = this.#executeStep(step);
+      // F-08: Execute step via injected executor (allows test injection of failures)
+      const stepResult = this.#stepExecutor(step);
 
       if (stepResult.ok) {
         const completedStep: RollbackStep = {
           ...step,
           status: 'completed',
           startedAt: stepStart,
-          completedAt: new Date().toISOString(),
+          completedAt: this.#timeProvider.now(),
           error: null,
         };
         executedSteps.push(completedStep);
@@ -191,7 +214,7 @@ export class RollbackManager {
           ...step,
           status: 'failed',
           startedAt: stepStart,
-          completedAt: new Date().toISOString(),
+          completedAt: this.#timeProvider.now(),
           error: stepResult.error.message,
         };
         executedSteps.push(failedStep);
@@ -201,16 +224,16 @@ export class RollbackManager {
       }
     }
 
-    const completedAt = new Date();
-    const durationMs = completedAt.getTime() - startedAt.getTime();
+    const completedAtStr = this.#timeProvider.now();
+    const durationMs = Date.now() - startMs;
     const stepsCompleted = executedSteps.filter(s => s.status === 'completed').length;
     const stepsFailed = executedSteps.filter(s => s.status === 'failed').length;
 
     const result: RollbackResult = {
       planId: plan.planId,
       status: failed ? (stepsCompleted > 0 ? 'partial' : 'failed') : 'completed',
-      startedAt: startedAt.toISOString(),
-      completedAt: completedAt.toISOString(),
+      startedAt: startedAtStr,
+      completedAt: completedAtStr,
       durationMs,
       stepsCompleted,
       stepsFailed,
@@ -294,25 +317,21 @@ export class RollbackManager {
 
   /**
    * Subscribe to rollback events.
+   * F-14: Returns an unsubscribe function to prevent memory leaks.
    */
-  onEvent(listener: (event: RollbackEventType, data: unknown) => void): void {
+  onEvent(listener: (event: RollbackEventType, data: unknown) => void): () => void {
     this.#eventListeners.push(listener);
+    return () => this.offEvent(listener);
   }
 
   /**
-   * Execute a single rollback step.
-   * In production, this would interact with the actual deployment.
-   * Here it simulates successful execution.
+   * F-14: Unsubscribe from rollback events.
    */
-  #executeStep(_step: RollbackStep): Result<void> {
-    // Simulated step execution -- always succeeds in this implementation.
-    // Production implementation would:
-    // - disable_adapters: call adapter.shutdown() for each Phase 3 adapter
-    // - revert_agent_framework_enum: remove Phase 3 values from enum
-    // - revert_manifest_defense_set: restore Phase 2 defense count
-    // - update_master_index_hashes: recompute hashes
-    // - trigger_rca: create RCA task
-    return { ok: true, value: undefined };
+  offEvent(listener: (event: RollbackEventType, data: unknown) => void): void {
+    const idx = this.#eventListeners.indexOf(listener);
+    if (idx !== -1) {
+      this.#eventListeners.splice(idx, 1);
+    }
   }
 
   #emitEvent(event: RollbackEventType, data: unknown): void {

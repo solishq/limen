@@ -59,10 +59,14 @@ export interface BudgetCheckResult {
  * Budget event types emitted by TokenBudgetManager.
  * SHARED_TYPES.md S16 -- Events.
  */
+/**
+ * F-05: Added 'budget:warning' for threshold crossing (distinct from exhausted).
+ */
 export type BudgetEventType =
   | 'budget:reserved'
   | 'budget:consumed'
   | 'budget:released'
+  | 'budget:warning'
   | 'budget:exhausted';
 
 /**

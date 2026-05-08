@@ -30,6 +30,42 @@ function makeError(code: string, message: string): KernelError {
 }
 
 /**
+ * TimeProvider interface for deterministic testing.
+ * F-13: All temporal logic uses injected provider, never direct Date.
+ */
+export interface TimeProvider {
+  now(): string; // ISO-8601
+}
+
+const DEFAULT_TIME_PROVIDER: TimeProvider = {
+  now: () => new Date().toISOString(),
+};
+
+/**
+ * Recursive sorted-key JSON serializer for deterministic hash computation.
+ * F-01: Handles nested objects (recursive sort), arrays (preserve order),
+ * null, and primitives. Produces identical output regardless of key insertion order.
+ */
+export function canonicalJsonStringify(value: unknown): string {
+  if (value === null || value === undefined) {
+    return JSON.stringify(value);
+  }
+  if (typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    const items = value.map(item => canonicalJsonStringify(item));
+    return '[' + items.join(',') + ']';
+  }
+  const obj = value as Record<string, unknown>;
+  const sortedKeys = Object.keys(obj).sort();
+  const pairs = sortedKeys.map(
+    key => JSON.stringify(key) + ':' + canonicalJsonStringify(obj[key]),
+  );
+  return '{' + pairs.join(',') + '}';
+}
+
+/**
  * Enterprise audit entry -- extends AuditLogEntry with enterprise metadata.
  */
 export interface EnterpriseAuditEntry extends AuditLogEntry {
@@ -62,7 +98,12 @@ export class EnterpriseAuditLogger {
   readonly #governed = true;
   readonly #entries: EnterpriseAuditEntry[] = [];
   readonly #eventListeners: Array<(event: string, data: unknown) => void> = [];
+  readonly #timeProvider: TimeProvider;
   #nextSequence = 0;
+
+  constructor(timeProvider?: TimeProvider) {
+    this.#timeProvider = timeProvider ?? DEFAULT_TIME_PROVIDER;
+  }
 
   /**
    * SHARED_TYPES.md S10.3 -- Append an audit entry to the chain.
@@ -184,6 +225,14 @@ export class EnterpriseAuditLogger {
         };
       }
 
+      // F-02: Skip content hash verification for tombstoned entries.
+      // Tombstoned entries intentionally changed details/action/governanceDecision
+      // but preserved the original currentHash for chain integrity.
+      // The previousHash linkage (checked above) still validates chain structure.
+      if (entry.tombstoned) {
+        continue;
+      }
+
       // Recompute currentHash
       const hashableEntry = {
         id: entry.id,
@@ -230,10 +279,52 @@ export class EnterpriseAuditLogger {
   }
 
   /**
-   * Get all entries (read-only snapshot).
+   * Get all entries (deep-frozen copies).
+   * F-03: Returns structuredClone'd, Object.freeze'd entries so callers
+   * cannot mutate internal state.
    */
   getEntries(): readonly EnterpriseAuditEntry[] {
-    return [...this.#entries];
+    const cloned = this.#entries.map(e => structuredClone(e));
+    return Object.freeze(cloned.map(e => Object.freeze(e)));
+  }
+
+  /**
+   * F-02: Tombstone an entry in-place in the audit chain.
+   * Replaces the entry at the given index with a tombstoned version.
+   * The currentHash is PRESERVED (it was already chained) -- only details are redacted.
+   * Chain verification continues to work because the original hash is retained.
+   *
+   * @param index - The index of the entry to tombstone
+   * @returns Result with the tombstoned entry
+   */
+  tombstoneEntry(index: number): Result<EnterpriseAuditEntry> {
+    if (index < 0 || index >= this.#entries.length) {
+      return { ok: false, error: makeError('INVALID_INDEX', `Index ${String(index)} out of range [0, ${String(this.#entries.length)})`) };
+    }
+    const entry = this.#entries[index]!;
+    if (entry.tombstoned) {
+      return { ok: false, error: makeError('ALREADY_TOMBSTONED', `Entry at index ${String(index)} is already tombstoned`) };
+    }
+    const tombstoned: EnterpriseAuditEntry = {
+      id: entry.id,
+      timestamp: entry.timestamp,
+      tenantId: entry.tenantId,
+      agentId: entry.agentId,
+      sessionId: entry.sessionId,
+      event: entry.event,
+      action: null,
+      governanceDecision: null,
+      details: Object.freeze({ tombstoned: true, originalEvent: entry.event }),
+      previousHash: entry.previousHash,
+      currentHash: entry.currentHash,
+      classification: entry.classification,
+      sequenceNumber: entry.sequenceNumber,
+      tombstoned: true,
+      tombstonedAt: this.#timeProvider.now(),
+      archiveStatus: 'tombstoned',
+    };
+    this.#entries[index] = tombstoned;
+    return { ok: true, value: tombstoned };
   }
 
   /**
@@ -245,17 +336,30 @@ export class EnterpriseAuditLogger {
 
   /**
    * Subscribe to audit events.
+   * F-14: Returns an unsubscribe function to prevent memory leaks.
    */
-  onEvent(listener: (event: string, data: unknown) => void): void {
+  onEvent(listener: (event: string, data: unknown) => void): () => void {
     this.#eventListeners.push(listener);
+    return () => this.offEvent(listener);
   }
 
   /**
-   * Compute SHA-256 hash of canonical JSON (sorted keys, no whitespace).
+   * F-14: Unsubscribe from audit events.
+   */
+  offEvent(listener: (event: string, data: unknown) => void): void {
+    const idx = this.#eventListeners.indexOf(listener);
+    if (idx !== -1) {
+      this.#eventListeners.splice(idx, 1);
+    }
+  }
+
+  /**
+   * Compute SHA-256 hash of canonical JSON (recursively sorted keys, no whitespace).
    * SHARED_TYPES.md S10.3: currentHash = SHA-256(canonical serialized entry excluding currentHash).
+   * F-01: Uses canonicalJsonStringify for deterministic nested object serialization.
    */
   #computeHash(obj: unknown): string {
-    const canonical = JSON.stringify(obj, Object.keys(obj as Record<string, unknown>).sort());
+    const canonical = canonicalJsonStringify(obj);
     return createHash('sha256').update(canonical).digest('hex');
   }
 

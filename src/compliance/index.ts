@@ -33,8 +33,8 @@ export type {
 } from './token-budget/types.js';
 
 // Audit
-export { EnterpriseAuditLogger } from './audit/enterprise-logger.js';
-export type { EnterpriseAuditEntry, ChainVerificationResult } from './audit/enterprise-logger.js';
+export { EnterpriseAuditLogger, canonicalJsonStringify } from './audit/enterprise-logger.js';
+export type { EnterpriseAuditEntry, ChainVerificationResult, TimeProvider } from './audit/enterprise-logger.js';
 export { RetentionPolicyEnforcer } from './audit/retention.js';
 export type { RetentionAction, RetentionResult, GdprErasureResult, TombstonedEntry } from './audit/retention.js';
 export { AuditExporter } from './audit/export.js';
@@ -51,6 +51,7 @@ export type {
 
 // Rollback
 export { RollbackManager } from './rollback/manager.js';
+export type { StepExecutor } from './rollback/manager.js';
 export type {
   RollbackPlan,
   RollbackStep,
