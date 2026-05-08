@@ -1360,10 +1360,17 @@ export class LimenCrewAIAdapter {
   }
 
   // ── Private: Token Estimation (F-15) ──
+  //
+  // Token estimation uses a heuristic of ~4 characters per token (based on
+  // average English tokenizer ratios for cl100k_base). Estimates are APPROXIMATE
+  // and include operation-specific overhead (audit entries, governance context).
+  // Consumers setting tight token budgets should account for up to 10% variance
+  // per SHARED_TYPES.md §20.1 TokenEstimate.varianceUpperBoundPct.
 
   /**
    * F-15: Operation-specific token estimation for remember.
    * Components: content + structured_content + audit overhead + governance overhead.
+   * Note: Uses ~4 chars/token heuristic. Estimates are approximate (≤10% variance).
    */
   private _estimateRememberTokens(content: string | StructuredContent, options?: RememberOptions): number {
     const serialized = typeof content === 'string' ? content : JSON.stringify(content);
