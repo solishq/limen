@@ -41,7 +41,6 @@ limen_types = { path = "crates/limen_types", version = "=5.0.0-alpha.1" }
 limen_foundation_contract = { path = "crates/limen_foundation_contract", version = "=5.0.0-alpha.1" }
 limen_foundation_ops = { path = "crates/limen_foundation_ops", version = "=5.0.0-alpha.1" }
 limen_chain = { path = "crates/limen_chain", version = "=5.0.0-alpha.1" }
-limen_crypto = { path = "crates/limen_crypto", version = "=5.0.0-alpha.1" }
 limen_canonical = { path = "crates/limen_canonical", version = "=5.0.0-alpha.1" }
 limen_projection = { path = "crates/limen_projection", version = "=5.0.0-alpha.1" }
 limen_substrate_runtime = { path = "crates/limen_substrate_runtime", version = "=5.0.0-alpha.1" }
