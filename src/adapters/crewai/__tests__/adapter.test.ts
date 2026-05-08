@@ -395,6 +395,28 @@ describe('CrewAI Adapter', () => {
       assert.ok(!result.ok);
       assert.equal(result.error.code, 'AUDIT_FAILURE');
     });
+
+    it('post-operation audit failure returns AUDIT_FAILURE even after successful core write (F-08)', async () => {
+      const adapter = makeAdapter();
+      let coreCallCount = 0;
+      const session = await initAdapterWithSession(adapter, undefined, {
+        remember: async () => {
+          coreCallCount++;
+          return 'claim-post-audit' as ClaimId;
+        },
+        appendAudit: async () => 'evt-001' as EventId,
+      });
+
+      // Inject POST-operation audit failure (F-08: now functional)
+      adapter._injectAuditFailure('post');
+
+      const ctx = makeCtx(session);
+      const result = await adapter.remember(ctx, 'test content');
+      assert.ok(!result.ok);
+      assert.equal(result.error.code, 'AUDIT_FAILURE');
+      // The core call DID happen (remember succeeded), but audit failed after
+      assert.equal(coreCallCount, 1);
+    });
   });
 
   /** TC-05: CREWAI_ADAPTER_CONTRACT.md S10 -- Core Port Loss and Recovery */
@@ -423,14 +445,38 @@ describe('CrewAI Adapter', () => {
     });
   });
 
-  /** TC-06: CREWAI_ADAPTER_CONTRACT.md S10 -- Ungoverned Config Rejection */
-  describe('TC-06: Ungoverned Config Rejection (governed: false)', () => {
-    it('rejects governed: false with GOVERNANCE_REFUSAL', async () => {
+  /** TC-06: CREWAI_ADAPTER_CONTRACT.md S10 -- Branch Creation and Merge with Conflict Resolution */
+  describe('TC-06: Branch Creation and Merge with Conflict Resolution', () => {
+    it('creates branch and merges with highest_confidence strategy', async () => {
       const adapter = makeAdapter();
-      const config = makeConfig({ governed: false as unknown as true });
-      const result = await adapter.initialize(makeMockClient(), makeMockGovernor(), config);
-      assert.ok(!result.ok);
-      assert.equal(result.error.code, 'GOVERNANCE_REFUSAL');
+      const session = await initAdapterWithSession(adapter, undefined, {
+        createBranch: async () => 'branch-tc06' as AgentBranchId,
+        mergeBranches: async () => ({
+          status: 'completed' as const,
+          mergedClaimIds: ['claim-merged' as ClaimId],
+          conflictsResolved: [{
+            conflictId: 'conflict-1',
+            resolution: 'keep_a' as const,
+            winningClaimId: 'claim-a' as ClaimId,
+          }],
+          unresolvedConflicts: [],
+          manualMergeState: null,
+        }),
+        appendAudit: async () => 'evt-001' as EventId,
+      });
+
+      const ctx = makeCtx(session);
+
+      // Create branch
+      const branchResult = await adapter.createBranch(ctx, 'claim-base' as ClaimId, 'test branch');
+      assert.ok(branchResult.ok);
+      assert.equal(branchResult.value, 'branch-tc06');
+
+      // Merge
+      const mergeResult = await adapter.mergeBranches(ctx, ['branch-tc06' as AgentBranchId], 'highest_confidence');
+      assert.ok(mergeResult.ok);
+      assert.equal(mergeResult.value.status, 'completed');
+      assert.equal(mergeResult.value.conflictsResolved.length, 1);
     });
   });
 
@@ -593,31 +639,121 @@ describe('CrewAI Adapter', () => {
     });
   });
 
-  /** TC-13: CREWAI_ADAPTER_CONTRACT.md S10 -- CrewAI Tool Hook Payload Translation */
-  describe('TC-13: CrewAI Tool Hook Payload Translation', () => {
-    it('normalizes hook context from tool_name and tool_input', () => {
-      const hookCtx = {
-        tool_name: 'limen_remember',
-        tool_input: { content: 'test data' },
+  /** TC-12: CREWAI_ADAPTER_CONTRACT.md S10 -- Manual Merge with Pending Resolution */
+  describe('TC-12: Manual Merge with Pending Resolution', () => {
+    it('returns pending_resolution with non-null manualMergeState for manual strategy', async () => {
+      const manualMergeState: ManualMergeState = {
+        mergeId: 'merge-manual-01',
+        pendingConflicts: [{
+          conflictId: 'conflict-01',
+          claimIdA: 'claim-a' as ClaimId,
+          claimIdB: 'claim-b' as ClaimId,
+          predicate: 'knows',
+          valueA: 'value A',
+          valueB: 'value B',
+          confidenceA: 0.8,
+          confidenceB: 0.6,
+        }],
+        resolvedConflicts: [],
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
       };
 
-      const result = normalizeHookContext(
-        hookCtx,
-        'crew-1', 'researcher', null, 0, 'sequential', 'before_tool_call', 'call-1',
+      const adapter = makeAdapter();
+      const session = await initAdapterWithSession(adapter, undefined, {
+        mergeBranches: async () => ({
+          status: 'pending_resolution' as const,
+          mergedClaimIds: [],
+          conflictsResolved: [],
+          unresolvedConflicts: manualMergeState.pendingConflicts,
+          manualMergeState,
+        }),
+        appendAudit: async () => 'evt-001' as EventId,
+      });
+
+      const ctx = makeCtx(session);
+      const result = await adapter.mergeBranches(
+        ctx,
+        ['branch-1' as AgentBranchId, 'branch-2' as AgentBranchId],
+        'manual',
       );
 
-      assert.equal(result.toolName, 'limen_remember');
-      assert.equal(result.tool, 'limen_remember');
-      assert.deepEqual(result.toolArgs, { content: 'test data' });
-      assert.deepEqual(result.args, { content: 'test data' });
-      assert.equal(result.agentFramework, 'crew_ai');
-      assert.equal(result.context.crewId, 'crew-1');
-      assert.equal(result.context.agentRole, 'researcher');
+      assert.ok(result.ok);
+      assert.equal(result.value.status, 'pending_resolution');
+      assert.ok(result.value.manualMergeState !== null);
+      assert.equal(result.value.manualMergeState!.pendingConflicts.length, 1);
+      assert.equal(result.value.unresolvedConflicts.length, 1);
     });
   });
 
-  /** TC-14: CREWAI_ADAPTER_CONTRACT.md S10 -- Tool Translation */
-  describe('TC-14: CrewAI BaseTool / args_schema Integration', () => {
+  /** TC-13: CREWAI_ADAPTER_CONTRACT.md S10 -- Manual Conflict Resolution API */
+  describe('TC-13: Manual Conflict Resolution', () => {
+    it('resolves conflicts deterministically and rejects malformed resolutions', async () => {
+      const adapter = makeAdapter();
+      const session = await initAdapterWithSession(adapter, undefined, {
+        resolveConflict: async () => ({
+          status: 'completed' as const,
+          mergedClaimIds: ['claim-resolved' as ClaimId],
+          conflictsResolved: [{
+            conflictId: 'conflict-01',
+            resolution: 'keep_a' as const,
+            winningClaimId: 'claim-a' as ClaimId,
+          }],
+          unresolvedConflicts: [],
+          manualMergeState: null,
+        }),
+        appendAudit: async () => 'evt-001' as EventId,
+      });
+
+      const ctx = makeCtx(session);
+
+      // Valid resolution
+      const validResult = await adapter.resolveConflict(ctx, {
+        mergeId: 'merge-01',
+        conflictId: 'conflict-01',
+        resolution: 'keep_a',
+      });
+      assert.ok(validResult.ok);
+      assert.equal(validResult.value.status, 'completed');
+
+      // Malformed: merge_new_value without newValue
+      const malformedResult = await adapter.resolveConflict(ctx, {
+        mergeId: 'merge-01',
+        conflictId: 'conflict-02',
+        resolution: 'merge_new_value',
+        // Missing newValue and newConfidence
+      });
+      assert.ok(!malformedResult.ok);
+      assert.equal(malformedResult.error.code, 'SERDE_ERROR');
+    });
+  });
+
+  /** TC-14: CREWAI_ADAPTER_CONTRACT.md S10 -- Unknown Tool Handling */
+  describe('TC-14: Unknown Tool Handling', () => {
+    it('returns UNKNOWN_TOOL with available operations', async () => {
+      const adapter = makeAdapter();
+      await initAdapterWithSession(adapter);
+
+      const result = await adapter.translateToolCall({
+        toolName: 'delete_everything',
+        toolArgs: {},
+        callId: 'c1',
+        agentFramework: 'crew_ai',
+        rawPayload: {},
+      });
+
+      assert.ok(!result.ok);
+      assert.equal(result.error.code, 'UNKNOWN_TOOL');
+      const violations = result.error.violations;
+      assert.ok(violations);
+      const ctx = violations[0] as Record<string, unknown>;
+      assert.ok(Array.isArray(ctx.availableOperations));
+      assert.ok((ctx.availableOperations as string[]).length > 0);
+    });
+  });
+
+  /** TC-15: CREWAI_ADAPTER_CONTRACT.md S10 -- Tool Translation for Each Declared Capability */
+  describe('TC-15: Tool Translation for Each Declared Capability', () => {
     it('translates known tools into LimenOperations', () => {
       const toolCall: CrewAIToolCall = {
         toolName: 'limen_remember',
@@ -681,127 +817,157 @@ describe('CrewAI Adapter', () => {
     });
   });
 
-  /** TC-15: CREWAI_ADAPTER_CONTRACT.md S10 -- Tool Call with Governance Refusal */
-  describe('TC-15: CrewAI Tool Call with Governance Refusal', () => {
-    it('returns GOVERNANCE_REFUSAL when governor refuses', async () => {
-      const adapter = makeAdapter();
-      const refusalVerdict: GovernanceVerdict = {
-        verdict: 'refuse',
-        auditId: 'evt-refuse-001' as EventId,
-        reason: 'Policy violation',
-        rule: 'no_remember_in_test',
-      };
-      const session = await initAdapterWithSession(adapter, undefined, undefined, {
-        beforeAction: async () => refusalVerdict,
-      });
-
-      const ctx = makeCtx(session);
-      const result = await adapter.remember(ctx, 'test');
-      assert.ok(!result.ok);
-      assert.equal(result.error.code, 'GOVERNANCE_REFUSAL');
-    });
-  });
-
-  /** TC-16: CREWAI_ADAPTER_CONTRACT.md S10 -- Tool Call with Budget Exceeded */
-  describe('TC-16: CrewAI Tool Call with Budget Exceeded', () => {
-    it('returns BUDGET_EXCEEDED when session budget exhausted', async () => {
-      const adapter = makeAdapter();
+  /** TC-16: CREWAI_ADAPTER_CONTRACT.md S10 -- NativeAgentAction Translation */
+  describe('TC-16: NativeAgentAction Translation', () => {
+    it('translates crew_delegation to ComputerAction', async () => {
+      const adapter = new LimenCrewAIAdapter(
+        TEST_ADAPTER_ID,
+        makeCapabilities('memory_read', 'memory_write', 'mission_delegation'),
+      );
       const session = await initAdapterWithSession(adapter, {
-        tokenBudget: {
-          maxTokensPerOperation: 1000,
-          maxTokensPerSession: 1,
-          encoding: 'cl100k_base',
-          warningThresholdPct: 80,
-          replenishmentWindowSeconds: null,
-        },
+        capabilities: makeCapabilities('memory_read', 'memory_write', 'mission_delegation'),
       });
 
-      const ctx = makeCtx(session);
-      const result = await adapter.remember(ctx, 'A'.repeat(100));
+      const action: NativeAgentAction = {
+        adapterId: TEST_ADAPTER_ID,
+        agentId: TEST_AGENT_ID,
+        sessionId: session.sessionId,
+        nativeType: 'crew_delegation',
+        nativePayload: { delegateTo: 'writer' },
+        timestamp: new Date().toISOString(),
+      };
+
+      const result = await adapter.translateActionToGovernance(action);
+      assert.ok(result.ok);
+      assert.equal(result.value.agentId, TEST_AGENT_ID);
+    });
+
+    it('rejects undeclared capability', async () => {
+      const adapter = makeAdapter(); // No mission_delegation
+      const session = await initAdapterWithSession(adapter);
+
+      const action: NativeAgentAction = {
+        adapterId: TEST_ADAPTER_ID,
+        agentId: TEST_AGENT_ID,
+        sessionId: session.sessionId,
+        nativeType: 'crew_delegation',
+        nativePayload: {},
+        timestamp: new Date().toISOString(),
+      };
+
+      const result = await adapter.translateActionToGovernance(action);
       assert.ok(!result.ok);
-      assert.equal(result.error.code, 'BUDGET_EXCEEDED');
+      assert.equal(result.error.code, 'CAPABILITY_NOT_DECLARED');
+    });
+
+    it('rejects malformed payload', async () => {
+      const adapter = makeAdapter();
+      await initAdapter(adapter);
+
+      const action: NativeAgentAction = {
+        adapterId: TEST_ADAPTER_ID,
+        agentId: TEST_AGENT_ID,
+        sessionId: '' as SessionId,
+        nativeType: '',
+        nativePayload: null,
+        timestamp: new Date().toISOString(),
+      };
+
+      const result = await adapter.translateActionToGovernance(action);
+      assert.ok(!result.ok);
+      assert.equal(result.error.code, 'SERDE_ERROR');
     });
   });
 
-  /** TC-17: CREWAI_ADAPTER_CONTRACT.md S10 -- Session Timeout Handling */
-  describe('TC-17: CrewAI Session Timeout Handling', () => {
-    it('handles session end with timeout outcome', async () => {
+  /** TC-17: CREWAI_ADAPTER_CONTRACT.md S10 -- Session Lifecycle Bridge */
+  describe('TC-17: Session Lifecycle Bridge', () => {
+    it('preserves crew metadata in session and returns SessionSummary', async () => {
       const adapter = makeAdapter();
-      const session = await initAdapterWithSession(adapter);
+      await initAdapter(adapter);
+
+      const sessionResult = await adapter.onAgentSessionStart({
+        crewId: 'crew-alpha',
+        agentRole: 'researcher',
+        processType: 'sequential',
+        taskId: 'task-1' as TaskId,
+        metadata: { extra: 'data' },
+      });
+      assert.ok(sessionResult.ok);
+      const session = sessionResult.value;
+
+      assert.equal(session.metadata.crewId, 'crew-alpha');
+      assert.equal(session.metadata.agentRole, 'researcher');
+      assert.equal(session.metadata.processType, 'sequential');
+      assert.equal(session.metadata.taskId, 'task-1');
 
       const endResult = await adapter.onAgentSessionEnd({
         sessionId: session.sessionId,
         crewId: 'crew-alpha',
-        outcome: 'timeout',
+        outcome: 'completed',
         metadata: {},
       });
-
       assert.ok(endResult.ok);
-      assert.equal(endResult.value.outcome, 'timeout');
+      assert.equal(endResult.value.outcome, 'completed');
     });
   });
 
-  /** TC-18: CREWAI_ADAPTER_CONTRACT.md S10 -- Concurrent Tool Calls */
-  describe('TC-18: CrewAI Concurrent Tool Calls (Rate Limit)', () => {
-    it('handles concurrent tool translation calls', async () => {
-      const adapter = makeAdapter();
-      const session = await initAdapterWithSession(adapter);
-
-      const toolCall = {
-        toolName: 'limen_remember',
-        toolArgs: { content: 'test' },
-        callId: 'c1',
-        agentFramework: 'crew_ai' as const,
-        rawPayload: {},
+  /** TC-18: CREWAI_ADAPTER_CONTRACT.md S10 -- Event Bridge Mapping */
+  describe('TC-18: Event Bridge Mapping', () => {
+    it('maps native before_tool_call event to AgentEventPayload', () => {
+      const nativeEvent: CrewAIHookEvent = {
+        type: 'before_tool_call',
+        context: {
+          tool_name: 'limen_remember',
+          tool_input: { content: 'test' },
+        },
       };
 
-      const results = await Promise.all(
-        Array.from({ length: 5 }, () => adapter.translateToolCall(toolCall)),
-      );
+      const result = mapNativeEvent(nativeEvent, TEST_ADAPTER_ID, TEST_AGENT_ID, 'ses-1' as SessionId);
+      assert.ok(result !== null);
+      assert.equal(result!.event, 'hook:before_tool_call');
+      assert.equal(result!.data.toolName, 'limen_remember');
+    });
 
-      // All should succeed (within rate limits for this test)
-      for (const r of results) {
-        assert.ok(r.ok);
-      }
+    it('maps Limen event back to CrewAI event', () => {
+      const limenEvent: AgentEventPayload = {
+        eventId: 'evt-1' as EventId,
+        event: 'hook:after_tool_call',
+        timestamp: new Date().toISOString(),
+        adapterId: TEST_ADAPTER_ID,
+        sessionId: 'ses-1' as SessionId,
+        agentId: TEST_AGENT_ID,
+        data: {
+          toolName: 'limen_recall',
+          toolInput: { query: 'test' },
+          toolResult: 'found 3 beliefs',
+        },
+      };
+
+      const result = mapLimenEvent(limenEvent);
+      assert.ok(result !== null);
+      assert.equal(result!.type, 'after_tool_call');
+      assert.equal(result!.context.tool_name, 'limen_recall');
+    });
+
+    it('returns null for unmappable events', () => {
+      const limenEvent: AgentEventPayload = {
+        eventId: 'evt-1' as EventId,
+        event: 'some:unknown:event',
+        timestamp: new Date().toISOString(),
+        adapterId: TEST_ADAPTER_ID,
+        sessionId: null,
+        agentId: TEST_AGENT_ID,
+        data: {},
+      };
+
+      const result = mapLimenEvent(limenEvent);
+      assert.equal(result, null);
     });
   });
 
-  /** TC-19: CREWAI_ADAPTER_CONTRACT.md S10 -- Error Translation */
-  describe('TC-19: CrewAI Error Translation', () => {
-    it('creates properly structured CrewAIAdapterError', () => {
-      const err = new CrewAIAdapterError({
-        code: 'GOVERNANCE_REFUSAL',
-        message: 'test refusal',
-        adapterId: TEST_ADAPTER_ID,
-        retryable: true, // Should be overridden to false
-        context: { rule: 'test_rule' },
-      });
-
-      assert.equal(err.code, 'GOVERNANCE_REFUSAL');
-      assert.equal(err.retryable, false); // Claim 4.2: NEVER retryable
-      assert.equal(err.adapterId, TEST_ADAPTER_ID);
-    });
-
-    it('NOT_INITIALIZED is never retryable', () => {
-      const err = new CrewAIAdapterError({
-        code: 'NOT_INITIALIZED',
-        message: 'test',
-        adapterId: TEST_ADAPTER_ID,
-        retryable: true, // Should be overridden
-      });
-      assert.equal(err.retryable, false); // Claim 4.3
-    });
-
-    it('NEVER_RETRYABLE contains correct codes', () => {
-      assert.ok(NEVER_RETRYABLE.has('NOT_INITIALIZED'));
-      assert.ok(NEVER_RETRYABLE.has('GOVERNANCE_REFUSAL'));
-      assert.ok(!NEVER_RETRYABLE.has('CORE_PORT_UNAVAILABLE'));
-    });
-  });
-
-  /** TC-20: CREWAI_ADAPTER_CONTRACT.md S10 -- Ungoverned Bypass Attempt */
-  describe('TC-20: CrewAI Ungoverned Bypass Attempt', () => {
-    it('rejects governed:false even with verified trust and governance_admin', async () => {
+  /** TC-19: CREWAI_ADAPTER_CONTRACT.md S10 -- Governed False Rejection */
+  describe('TC-19: Governed False Rejection', () => {
+    it('rejects governed: false even with verified trust and governance_admin', async () => {
       const adapter = makeAdapter(['memory_read', 'memory_write', 'governance_admin']);
       const config = makeConfig({
         trustLevel: 'verified',
@@ -812,6 +978,32 @@ describe('CrewAI Adapter', () => {
       const result = await adapter.initialize(makeMockClient(), makeMockGovernor(), config);
       assert.ok(!result.ok);
       assert.equal(result.error.code, 'GOVERNANCE_REFUSAL');
+    });
+  });
+
+  /** TC-20: CREWAI_ADAPTER_CONTRACT.md S10 -- Rate Limit Inheritance */
+  describe('TC-20: Rate Limit Inheritance', () => {
+    it('rejects rate limits that weaken defaults (Claim 2.7)', async () => {
+      const adapter = makeAdapter();
+      const r = await adapter.initialize(makeMockClient(), makeMockGovernor(), makeConfig({
+        rateLimits: [{
+          scope: 'per_session',
+          operation: 'memory:write',
+          maxRequests: 999, // Weaker than default 100
+          windowMs: 60000,
+          verdict: 'refuse',
+        }],
+      }));
+      assert.ok(!r.ok);
+      assert.equal(r.error.code, 'GOVERNANCE_REFUSAL');
+    });
+
+    it('accepts empty rate limits (inherit defaults)', async () => {
+      const adapter = makeAdapter();
+      const r = await adapter.initialize(makeMockClient(), makeMockGovernor(), makeConfig({
+        rateLimits: [],
+      }));
+      assert.ok(r.ok);
     });
   });
 
@@ -830,7 +1022,7 @@ describe('CrewAI Adapter', () => {
   });
 
   /** TC-22: CREWAI_ADAPTER_CONTRACT.md S10 -- Sandbox Expansion */
-  describe('TC-22: AdapterSandboxDefaults Expansion (TC-05 from parent)', () => {
+  describe('TC-22: AdapterSandboxDefaults Expansion', () => {
     it('sandbox verdict is handled by governance pipeline', async () => {
       const sandboxVerdict: GovernanceVerdict = {
         verdict: 'sandbox',
@@ -850,6 +1042,36 @@ describe('CrewAI Adapter', () => {
       const result = await adapter.remember(ctx, 'sandboxed content');
       // Sandbox is not a refusal -- operation proceeds
       assert.ok(result.ok);
+    });
+  });
+
+  /** TC-23: CREWAI_ADAPTER_CONTRACT.md S10 -- CrewAI Delegation Depth Hostile Case */
+  describe('TC-23: Delegation Depth Hostile', () => {
+    it('rejects delegation from agent without mission_delegation capability', async () => {
+      const adapter = makeAdapter(); // Does NOT have mission_delegation
+      const session = await initAdapterWithSession(adapter);
+
+      const action: NativeAgentAction = {
+        adapterId: TEST_ADAPTER_ID,
+        agentId: TEST_AGENT_ID,
+        sessionId: session.sessionId,
+        nativeType: 'crew_delegation',
+        nativePayload: { delegateTo: 'writer', depth: 5 },
+        timestamp: new Date().toISOString(),
+      };
+
+      const result = await adapter.translateActionToGovernance(action);
+      assert.ok(!result.ok);
+      assert.equal(result.error.code, 'CAPABILITY_NOT_DECLARED');
+    });
+
+    it('rejects config with delegationDepthMax exceeding 10', async () => {
+      const adapter = makeAdapter();
+      const r = await adapter.initialize(makeMockClient(), makeMockGovernor(), makeConfig({
+        delegationDepthMax: 15,
+      }));
+      assert.ok(!r.ok);
+      assert.equal(r.error.code, 'SERDE_ERROR');
     });
   });
 
@@ -1020,9 +1242,7 @@ describe('CrewAI Adapter', () => {
       adapter.off(subId);
       adapter._setAgentState('active');
       adapter._setAgentState('suspended');
-      const prevLen = events.length;
       await adapter.remember(ctx, 'test2');
-      // Events may still fire from other paths, but this specific subscription is gone
 
       // off() with unknown ID is no-op
       adapter.off('nonexistent-id');
@@ -1078,163 +1298,39 @@ describe('CrewAI Adapter', () => {
       assert.ok(!r.ok);
       assert.equal(r.error.code, 'SERDE_ERROR');
     });
-
-    it('rejects rate limits that weaken defaults (Claim 2.7)', async () => {
-      const adapter = makeAdapter();
-      const r = await adapter.initialize(makeMockClient(), makeMockGovernor(), makeConfig({
-        rateLimits: [{
-          scope: 'per_session',
-          operation: 'memory:write',
-          maxRequests: 999, // Weaker than default 100
-          windowMs: 60000,
-          verdict: 'refuse',
-        }],
-      }));
-      assert.ok(!r.ok);
-      assert.equal(r.error.code, 'GOVERNANCE_REFUSAL');
-    });
   });
 
-  // ── Event Bridge Tests ──
+  // ── Error Code Tests ──
 
-  describe('Event Bridge', () => {
-    it('maps native before_tool_call event to AgentEventPayload', () => {
-      const nativeEvent: CrewAIHookEvent = {
-        type: 'before_tool_call',
-        context: {
-          tool_name: 'limen_remember',
-          tool_input: { content: 'test' },
-        },
-      };
-
-      const result = mapNativeEvent(nativeEvent, TEST_ADAPTER_ID, TEST_AGENT_ID, 'ses-1' as SessionId);
-      assert.ok(result !== null);
-      assert.equal(result!.event, 'hook:before_tool_call');
-      assert.equal(result!.data.toolName, 'limen_remember');
-    });
-
-    it('maps Limen event back to CrewAI event', () => {
-      const limenEvent: AgentEventPayload = {
-        eventId: 'evt-1' as EventId,
-        event: 'hook:after_tool_call',
-        timestamp: new Date().toISOString(),
+  describe('Error Codes', () => {
+    it('creates properly structured CrewAIAdapterError', () => {
+      const err = new CrewAIAdapterError({
+        code: 'GOVERNANCE_REFUSAL',
+        message: 'test refusal',
         adapterId: TEST_ADAPTER_ID,
-        sessionId: 'ses-1' as SessionId,
-        agentId: TEST_AGENT_ID,
-        data: {
-          toolName: 'limen_recall',
-          toolInput: { query: 'test' },
-          toolResult: 'found 3 beliefs',
-        },
-      };
-
-      const result = mapLimenEvent(limenEvent);
-      assert.ok(result !== null);
-      assert.equal(result!.type, 'after_tool_call');
-      assert.equal(result!.context.tool_name, 'limen_recall');
-    });
-
-    it('returns null for unmappable events', () => {
-      const limenEvent: AgentEventPayload = {
-        eventId: 'evt-1' as EventId,
-        event: 'some:unknown:event',
-        timestamp: new Date().toISOString(),
-        adapterId: TEST_ADAPTER_ID,
-        sessionId: null,
-        agentId: TEST_AGENT_ID,
-        data: {},
-      };
-
-      const result = mapLimenEvent(limenEvent);
-      assert.equal(result, null);
-    });
-  });
-
-  // ── translateActionToGovernance Tests ──
-
-  describe('translateActionToGovernance', () => {
-    it('translates crew_delegation to ComputerAction', async () => {
-      const adapter = new LimenCrewAIAdapter(
-        TEST_ADAPTER_ID,
-        makeCapabilities('memory_read', 'memory_write', 'mission_delegation'),
-      );
-      const session = await initAdapterWithSession(adapter, {
-        capabilities: makeCapabilities('memory_read', 'memory_write', 'mission_delegation'),
+        retryable: true, // Should be overridden to false
+        context: { rule: 'test_rule' },
       });
 
-      const action: NativeAgentAction = {
-        adapterId: TEST_ADAPTER_ID,
-        agentId: TEST_AGENT_ID,
-        sessionId: session.sessionId,
-        nativeType: 'crew_delegation',
-        nativePayload: { delegateTo: 'writer' },
-        timestamp: new Date().toISOString(),
-      };
-
-      const result = await adapter.translateActionToGovernance(action);
-      assert.ok(result.ok);
-      assert.equal(result.value.agentId, TEST_AGENT_ID);
+      assert.equal(err.code, 'GOVERNANCE_REFUSAL');
+      assert.equal(err.retryable, false); // Claim 4.2: NEVER retryable
+      assert.equal(err.adapterId, TEST_ADAPTER_ID);
     });
 
-    it('rejects undeclared capability', async () => {
-      const adapter = makeAdapter(); // No mission_delegation
-      const session = await initAdapterWithSession(adapter);
-
-      const action: NativeAgentAction = {
+    it('NOT_INITIALIZED is never retryable', () => {
+      const err = new CrewAIAdapterError({
+        code: 'NOT_INITIALIZED',
+        message: 'test',
         adapterId: TEST_ADAPTER_ID,
-        agentId: TEST_AGENT_ID,
-        sessionId: session.sessionId,
-        nativeType: 'crew_delegation',
-        nativePayload: {},
-        timestamp: new Date().toISOString(),
-      };
-
-      const result = await adapter.translateActionToGovernance(action);
-      assert.ok(!result.ok);
-      assert.equal(result.error.code, 'CAPABILITY_NOT_DECLARED');
-    });
-
-    it('rejects malformed payload', async () => {
-      const adapter = makeAdapter();
-      await initAdapter(adapter);
-
-      const action: NativeAgentAction = {
-        adapterId: TEST_ADAPTER_ID,
-        agentId: TEST_AGENT_ID,
-        sessionId: '' as SessionId,
-        nativeType: '',
-        nativePayload: null,
-        timestamp: new Date().toISOString(),
-      };
-
-      const result = await adapter.translateActionToGovernance(action);
-      assert.ok(!result.ok);
-      assert.equal(result.error.code, 'SERDE_ERROR');
-    });
-  });
-
-  // ── Unknown Tool Test (TC-14 from parent contract) ──
-
-  describe('TC-02 (Parent): Unknown Tool Error Handling', () => {
-    it('returns UNKNOWN_TOOL with available operations', async () => {
-      const adapter = makeAdapter();
-      await initAdapterWithSession(adapter);
-
-      const result = await adapter.translateToolCall({
-        toolName: 'delete_everything',
-        toolArgs: {},
-        callId: 'c1',
-        agentFramework: 'crew_ai',
-        rawPayload: {},
+        retryable: true, // Should be overridden
       });
+      assert.equal(err.retryable, false); // Claim 4.3
+    });
 
-      assert.ok(!result.ok);
-      assert.equal(result.error.code, 'UNKNOWN_TOOL');
-      const violations = result.error.violations;
-      assert.ok(violations);
-      const ctx = violations[0] as Record<string, unknown>;
-      assert.ok(Array.isArray(ctx.availableOperations));
-      assert.ok((ctx.availableOperations as string[]).length > 0);
+    it('NEVER_RETRYABLE contains correct codes', () => {
+      assert.ok(NEVER_RETRYABLE.has('NOT_INITIALIZED'));
+      assert.ok(NEVER_RETRYABLE.has('GOVERNANCE_REFUSAL'));
+      assert.ok(!NEVER_RETRYABLE.has('CORE_PORT_UNAVAILABLE'));
     });
   });
 
@@ -1290,7 +1386,7 @@ describe('CrewAI Adapter', () => {
 
   // ── Config Digest Tests (Claim 2.10) ──
 
-  describe('Config Digest', () => {
+  describe('Config Digest (SHA-256)', () => {
     it('identical configs produce identical digests', () => {
       const c1 = makeConfig();
       const c2 = makeConfig();
@@ -1301,6 +1397,13 @@ describe('CrewAI Adapter', () => {
       const c1 = makeConfig();
       const c2 = makeConfig({ crewId: 'different-crew' });
       assert.notEqual(computeConfigDigest(c1), computeConfigDigest(c2));
+    });
+
+    it('digest is a hex SHA-256 (64 chars)', () => {
+      const digest = computeConfigDigest(makeConfig());
+      // SHA-256 hex is 64 characters, all hex digits
+      assert.equal(digest.length, 64);
+      assert.match(digest, /^[0-9a-f]{64}$/);
     });
   });
 
@@ -1333,6 +1436,202 @@ describe('CrewAI Adapter', () => {
       await adapter.shutdown();
       const h3 = adapter.getHealth();
       assert.equal(h3.status, 'unhealthy');
+    });
+  });
+
+  // ── F-02: Session ID Required Tests ──
+
+  describe('F-02: Session ID Required', () => {
+    it('returns SESSION_NOT_FOUND when ctx.sessionId is missing', async () => {
+      const adapter = makeAdapter();
+      await initAdapterWithSession(adapter);
+
+      // Context without sessionId
+      const ctx: OperationContext = {
+        tenantId: TEST_TENANT_ID,
+        userId: null,
+        agentId: TEST_AGENT_ID,
+        permissions: new Set(),
+        // No sessionId!
+      };
+
+      const result = await adapter.remember(ctx, 'test');
+      assert.ok(!result.ok);
+      assert.equal(result.error.code, 'SESSION_NOT_FOUND');
+    });
+  });
+
+  // ── F-09: Session Start Governance Gate ──
+
+  describe('F-09: onAgentSessionStart Governance Gate', () => {
+    it('suspended agents cannot start sessions', async () => {
+      const adapter = makeAdapter();
+      await initAdapter(adapter);
+
+      adapter._setAgentState('suspended');
+
+      const result = await adapter.onAgentSessionStart({
+        crewId: 'crew-alpha',
+        agentRole: 'researcher',
+        processType: 'sequential',
+        metadata: {},
+      });
+
+      assert.ok(!result.ok);
+      assert.equal(result.error.code, 'GOVERNANCE_REFUSAL');
+    });
+  });
+
+  // ── F-10: Session End Agent State Check ──
+
+  describe('F-10: onAgentSessionEnd Agent State Check', () => {
+    it('suspended agents cannot end sessions', async () => {
+      const adapter = makeAdapter();
+      const session = await initAdapterWithSession(adapter);
+
+      adapter._setAgentState('suspended');
+
+      const result = await adapter.onAgentSessionEnd({
+        sessionId: session.sessionId,
+        crewId: 'crew-alpha',
+        outcome: 'completed',
+        metadata: {},
+      });
+
+      assert.ok(!result.ok);
+      assert.equal(result.error.code, 'GOVERNANCE_REFUSAL');
+    });
+  });
+
+  // ── F-11: translateActionToGovernance Governance Gate ──
+
+  describe('F-11: translateActionToGovernance Governance Gate', () => {
+    it('evaluates governance before translation', async () => {
+      const adapter = new LimenCrewAIAdapter(
+        TEST_ADAPTER_ID,
+        makeCapabilities('memory_read', 'memory_write', 'mission_delegation'),
+      );
+      const session = await initAdapterWithSession(adapter, {
+        capabilities: makeCapabilities('memory_read', 'memory_write', 'mission_delegation'),
+      });
+
+      // Set agent to suspended
+      adapter._setAgentState('suspended');
+
+      const action: NativeAgentAction = {
+        adapterId: TEST_ADAPTER_ID,
+        agentId: TEST_AGENT_ID,
+        sessionId: session.sessionId,
+        nativeType: 'crew_delegation',
+        nativePayload: { delegateTo: 'writer' },
+        timestamp: new Date().toISOString(),
+      };
+
+      const result = await adapter.translateActionToGovernance(action);
+      assert.ok(!result.ok);
+      assert.equal(result.error.code, 'GOVERNANCE_REFUSAL');
+    });
+  });
+
+  // ── F-16: enrichRememberOptions never returns undefined ──
+
+  describe('F-16: enrichRememberOptions', () => {
+    it('auto-populates crewContext when options is undefined', async () => {
+      const adapter = makeAdapter();
+      let capturedOptions: unknown;
+      const session = await initAdapterWithSession(adapter, undefined, {
+        remember: async (_ctx, _content, options) => {
+          capturedOptions = options;
+          return 'claim-001' as ClaimId;
+        },
+        appendAudit: async () => 'evt-001' as EventId,
+      });
+
+      const ctx = makeCtx(session);
+      // Call remember with NO options (undefined)
+      const result = await adapter.remember(ctx, 'test content');
+      assert.ok(result.ok);
+      // The captured options should NOT be undefined -- should have crewContext
+      assert.ok(capturedOptions !== undefined);
+      const opts = capturedOptions as { crewContext?: unknown };
+      assert.ok(opts.crewContext !== undefined);
+    });
+  });
+
+  // ── F-19: Session IDs use crypto.randomUUID ──
+
+  describe('F-19: Cryptographic Session IDs', () => {
+    it('session IDs are valid UUIDs', async () => {
+      const adapter = makeAdapter();
+      await initAdapter(adapter);
+
+      const result = await adapter.onAgentSessionStart({
+        crewId: 'crew-alpha',
+        agentRole: 'researcher',
+        processType: 'sequential',
+        metadata: {},
+      });
+      assert.ok(result.ok);
+
+      // UUID v4 format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      assert.match(result.value.sessionId, uuidRegex);
+    });
+  });
+
+  // ── F-21: Shutdown Race Prevention ──
+
+  describe('F-21: Shutdown Race Prevention', () => {
+    it('transitions to SHUTDOWN before session cleanup', async () => {
+      const adapter = makeAdapter();
+      await initAdapter(adapter);
+      await adapter.onAgentSessionStart({
+        crewId: 'crew-alpha',
+        agentRole: 'researcher',
+        processType: 'sequential',
+        metadata: {},
+      });
+
+      // Start shutdown -- concurrent session start should fail
+      const shutdownPromise = adapter.shutdown();
+
+      // Attempt concurrent session start (adapter should already be SHUTDOWN)
+      const sessionResult = await adapter.onAgentSessionStart({
+        crewId: 'crew-beta',
+        agentRole: 'writer',
+        processType: 'sequential',
+        metadata: {},
+      });
+
+      await shutdownPromise;
+
+      // The concurrent session start should have failed
+      assert.ok(!sessionResult.ok);
+      assert.equal(sessionResult.error.code, 'NOT_INITIALIZED');
+    });
+  });
+
+  // ── Hook Normalization Tests ──
+
+  describe('Hook Normalization', () => {
+    it('normalizes hook context from tool_name and tool_input', () => {
+      const hookCtx = {
+        tool_name: 'limen_remember',
+        tool_input: { content: 'test data' },
+      };
+
+      const result = normalizeHookContext(
+        hookCtx,
+        'crew-1', 'researcher', null, 0, 'sequential', 'before_tool_call', 'call-1',
+      );
+
+      assert.equal(result.toolName, 'limen_remember');
+      assert.equal(result.tool, 'limen_remember');
+      assert.deepEqual(result.toolArgs, { content: 'test data' });
+      assert.deepEqual(result.args, { content: 'test data' });
+      assert.equal(result.agentFramework, 'crew_ai');
+      assert.equal(result.context.crewId, 'crew-1');
+      assert.equal(result.context.agentRole, 'researcher');
     });
   });
 });

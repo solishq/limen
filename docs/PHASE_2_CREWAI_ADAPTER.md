@@ -3,7 +3,7 @@
 **Contract:** CREWAI_ADAPTER_CONTRACT.md v1.0.0
 **Architecture:** AGENT_ADAPTER_ARCHITECTURE.md v2.3.0
 **Shared Types:** SHARED_TYPES.md v1.4.1
-**Status:** COMPLETE — 54 tests passing
+**Status:** REMEDIATED — 65 tests passing (20 findings fixed, 5 missing TCs added)
 
 ---
 
@@ -117,34 +117,36 @@
 | 104 | Crew context auto-population | Logic | CREWAI Claim 2.3 | adapter.ts | _enrichRememberOptions |
 | 105 | Token budget check | Logic | CREWAI S7.2, Claims 5.1/5.2 | adapter.ts | _checkTokenBudget |
 | 106 | Audit-before-success | Invariant | CREWAI S8.1, Claim 6.1 | adapter.ts | _appendAudit |
-| 107 | TC-01 | Test | CREWAI S10 (Happy Path) | adapter.test.ts | TC-01 |
-| 108 | TC-02 | Test | CREWAI S10 (Auth-First) | adapter.test.ts | TC-02 |
-| 109 | TC-03 | Test | CREWAI S10 (Budget) | adapter.test.ts | TC-03 |
-| 110 | TC-04 | Test | CREWAI S10 (Audit) | adapter.test.ts | TC-04 |
-| 111 | TC-05 | Test | CREWAI S10 (Port Loss) | adapter.test.ts | TC-05 |
-| 112 | TC-06 | Test | CREWAI S10 (Ungoverned) | adapter.test.ts | TC-06 |
+| 107 | TC-01 | Test | CREWAI S10 (Happy Path Lifecycle) | adapter.test.ts | TC-01 |
+| 108 | TC-02 | Test | CREWAI S10 (Governance Auth-First) | adapter.test.ts | TC-02 |
+| 109 | TC-03 | Test | CREWAI S10 (Token Budget Exceeded) | adapter.test.ts | TC-03 |
+| 110 | TC-04 | Test | CREWAI S10 (Audit Failure Blocks, pre+post) | adapter.test.ts | TC-04 |
+| 111 | TC-05 | Test | CREWAI S10 (Core Port Loss/Recovery) | adapter.test.ts | TC-05 |
+| 112 | TC-06 | Test | CREWAI S10 (Branch+Merge w/ Conflicts) | adapter.test.ts | TC-06 |
 | 113 | TC-07 | Test | CREWAI S10 (Use-Before-Init) | adapter.test.ts | TC-07 |
 | 114 | TC-08 | Test | CREWAI S10 (Shutdown Idempotent) | adapter.test.ts | TC-08 |
 | 115 | TC-08A | Test | CREWAI S10 (Init Idempotent) | adapter.test.ts | TC-08A |
 | 116 | TC-09 | Test | CREWAI S10 (Concurrent DEGRADED) | adapter.test.ts | TC-09 |
 | 117 | TC-10 | Test | CREWAI S10 (Error Precedence) | adapter.test.ts | TC-10 |
 | 118 | TC-11 | Test | CREWAI S10 (Confidence Cap) | adapter.test.ts | TC-11 |
-| 119 | TC-13 | Test | CREWAI S10 (Hook Translation) | adapter.test.ts | TC-13 |
-| 120 | TC-14 | Test | CREWAI S10 (BaseTool) | adapter.test.ts | TC-14 |
-| 121 | TC-15 | Test | CREWAI S10 (Gov Refusal) | adapter.test.ts | TC-15 |
-| 122 | TC-16 | Test | CREWAI S10 (Budget Exceeded) | adapter.test.ts | TC-16 |
-| 123 | TC-17 | Test | CREWAI S10 (Session Timeout) | adapter.test.ts | TC-17 |
-| 124 | TC-18 | Test | CREWAI S10 (Concurrent Tools) | adapter.test.ts | TC-18 |
-| 125 | TC-19 | Test | CREWAI S10 (Error Translation) | adapter.test.ts | TC-19 |
-| 126 | TC-20 | Test | CREWAI S10 (Ungoverned Bypass) | adapter.test.ts | TC-20 |
-| 127 | TC-21 | Test | CREWAI S10 (Dual Parity) | adapter.test.ts | TC-21 |
-| 128 | TC-22 | Test | CREWAI S10 (Sandbox) | adapter.test.ts | TC-22 |
-| 129 | TC-24 | Test | CREWAI S10 (Hostile Payload) | adapter.test.ts | TC-24 |
-| 130 | TC-25 | Test | CREWAI S10 (Client Error) | adapter.test.ts | TC-25 |
-| 131 | TC-26 | Test | CREWAI S10 (Session Isolation) | adapter.test.ts | TC-26 |
-| 132 | TC-27 | Test | CREWAI S10 (Shutdown Sessions) | adapter.test.ts | TC-27 |
-| 133 | TC-28 | Test | CREWAI S10 (Health States) | adapter.test.ts | TC-28 |
-| 134 | TC-29 | Test | CREWAI S10 (Subscriptions) | adapter.test.ts | TC-29 |
+| 119 | TC-12 | Test | CREWAI S10 (Manual Merge Pending) | adapter.test.ts | TC-12 |
+| 120 | TC-13 | Test | CREWAI S10 (Manual Conflict Resolution) | adapter.test.ts | TC-13 |
+| 121 | TC-14 | Test | CREWAI S10 (Unknown Tool) | adapter.test.ts | TC-14 |
+| 122 | TC-15 | Test | CREWAI S10 (Tool Translation) | adapter.test.ts | TC-15 |
+| 123 | TC-16 | Test | CREWAI S10 (NativeAction Translation) | adapter.test.ts | TC-16 |
+| 124 | TC-17 | Test | CREWAI S10 (Session Lifecycle Bridge) | adapter.test.ts | TC-17 |
+| 125 | TC-18 | Test | CREWAI S10 (Event Bridge Mapping) | adapter.test.ts | TC-18 |
+| 126 | TC-19 | Test | CREWAI S10 (Governed False Rejection) | adapter.test.ts | TC-19 |
+| 127 | TC-20 | Test | CREWAI S10 (Rate Limit Inheritance) | adapter.test.ts | TC-20 |
+| 128 | TC-21 | Test | CREWAI S10 (Dual Projection Parity) | adapter.test.ts | TC-21 |
+| 129 | TC-22 | Test | CREWAI S10 (Sandbox Expansion) | adapter.test.ts | TC-22 |
+| 130 | TC-23 | Test | CREWAI S10 (Delegation Depth Hostile) | adapter.test.ts | TC-23 |
+| 131 | TC-24 | Test | CREWAI S10 (Hook Payload Hostile) | adapter.test.ts | TC-24 |
+| 132 | TC-25 | Test | CREWAI S10 (Client Error Propagation) | adapter.test.ts | TC-25 |
+| 133 | TC-26 | Test | CREWAI S10 (Session Isolation) | adapter.test.ts | TC-26 |
+| 134 | TC-27 | Test | CREWAI S10 (Shutdown w/ Active Sessions) | adapter.test.ts | TC-27 |
+| 135 | TC-28 | Test | CREWAI S10 (Health States) | adapter.test.ts | TC-28 |
+| 136 | TC-29 | Test | CREWAI S10 (Subscription Lifecycle) | adapter.test.ts | TC-29 |
 | 135 | Config connectionTimeoutMs | Test | CREWAI Claim 2.2 | adapter.test.ts | Config Validation |
 | 136 | Config delegationDepthMax | Test | CREWAI Claim 2.13 | adapter.test.ts | Config Validation |
 | 137 | Config warningThresholdPct | Test | CREWAI Claim 2.12 | adapter.test.ts | Config Validation |

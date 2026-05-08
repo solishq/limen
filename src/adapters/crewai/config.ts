@@ -7,6 +7,7 @@
  * Claims covered: 2.1, 2.2, 2.7, 2.10, 2.12, 2.13, 4.7
  */
 
+import { createHash } from 'node:crypto';
 import type {
   AgentId,
   TenantId,
@@ -73,7 +74,7 @@ export function validateConfig(
   adapterId: AdapterId,
 ): CrewAIAdapterError | null {
   // Claim 2.1: governed: false is always rejected
-  if (config.governed === false || (config as Record<string, unknown>).governed === false) {
+  if ((config as unknown as Record<string, unknown>).governed === false) {
     const refusalVerdict: GovernanceVerdict = {
       verdict: 'refuse',
       auditId: 'evt-config-rejection' as EventId,
@@ -172,7 +173,7 @@ function checkRateLimitWeakening(
  */
 export function computeConfigDigest(config: CrewAIAdapterConfig): string {
   const canonical = canonicalizeForDigest(config);
-  return simpleHash(canonical);
+  return sha256Hex(canonical);
 }
 
 /**
@@ -185,7 +186,7 @@ function canonicalizeForDigest(value: unknown): string {
   if (typeof value === 'string') return JSON.stringify(value);
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
 
-  if (value instanceof Set || value instanceof ReadonlySetPolyfill) {
+  if (value instanceof Set) {
     const sorted = [...value].sort();
     return '[' + sorted.map(v => canonicalizeForDigest(v)).join(',') + ']';
   }
@@ -204,22 +205,12 @@ function canonicalizeForDigest(value: unknown): string {
   return String(value);
 }
 
-// Polyfill marker for ReadonlySet detection
-class ReadonlySetPolyfill {}
-
 /**
- * Simple hash for config digest (non-cryptographic, deterministic).
- * In production this would be SHA-256; for adapter purposes a
- * deterministic string hash suffices.
+ * CREWAI_ADAPTER_CONTRACT.md S3.2, Claim 2.10 --
+ * SHA-256 hash of canonical JSON config serialization.
+ * Contract requires SHA-256, not a 32-bit DJB hash.
  */
-function simpleHash(input: string): string {
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    const char = input.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  // Return as hex-like string for readability
-  const unsigned = hash >>> 0;
-  return 'digest-' + unsigned.toString(16).padStart(8, '0');
+function sha256Hex(input: string): string {
+  const hash = createHash('sha256').update(input).digest('hex');
+  return hash;
 }
