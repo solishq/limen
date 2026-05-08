@@ -44,10 +44,16 @@ pub fn verify_chain(
         let computed = blake3::hash(&payload);
         let computed_hash = Blake3Hash(computed.into());
 
-        let mut stored_arr = [0u8; 32];
-        if stored_hash.len() >= 32 {
-            stored_arr.copy_from_slice(&stored_hash[..32]);
+        if stored_hash.len() != 32 {
+            return Err(ChainStorageError::IntegrityViolation(
+                format!(
+                    "content_hash at global_sequence {} has {} bytes, expected 32",
+                    seq, stored_hash.len()
+                ),
+            ));
         }
+        let mut stored_arr = [0u8; 32];
+        stored_arr.copy_from_slice(&stored_hash[..32]);
         let stored_blake = Blake3Hash(stored_arr);
 
         // Check content hash matches
@@ -64,11 +70,22 @@ pub fn verify_chain(
         }
 
         // Check previous_hash linkage
-        let stored_prev_hash = stored_prev.map(|h| {
-            let mut arr = [0u8; 32];
-            if h.len() >= 32 { arr.copy_from_slice(&h[..32]); }
-            Blake3Hash(arr)
-        });
+        let stored_prev_hash = match stored_prev {
+            Some(h) => {
+                if h.len() != 32 {
+                    return Err(ChainStorageError::IntegrityViolation(
+                        format!(
+                            "previous_hash at global_sequence {} has {} bytes, expected 32",
+                            seq, h.len()
+                        ),
+                    ));
+                }
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(&h[..32]);
+                Some(Blake3Hash(arr))
+            }
+            None => None,
+        };
 
         if stored_prev_hash != prev_hash {
             return Ok(ChainVerifyReport {

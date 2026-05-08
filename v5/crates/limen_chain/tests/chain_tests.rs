@@ -458,6 +458,66 @@ fn test_h_canonical_serialize_rmp_serde_deserialize_roundtrip() {
     tx.rollback().unwrap();
 }
 
+// ============================================================
+// I. Malformed hash detection (Witness 8/10 Fix 3)
+// ============================================================
+
+/// Prove that verify_chain returns an IntegrityViolation error when a
+/// content_hash stored in SQLite has fewer than 32 bytes (corrupted row).
+/// Before this fix, the code silently zero-filled the array.
+#[test]
+fn test_i_malformed_hash_bytes_detected() {
+    let storage = test_storage();
+    commit_one(&storage, "entry-0", 1);
+
+    // Corrupt the content_hash to only 16 bytes
+    {
+        let conn = storage.lock_conn().unwrap();
+        conn.execute(
+            "UPDATE chain_entries SET content_hash = X'00112233445566778899AABBCCDDEEFF' WHERE global_sequence = 0",
+            [],
+        ).unwrap();
+    }
+
+    let result = verify_chain(&storage);
+    match result {
+        Err(limen_chain::storage::ChainStorageError::IntegrityViolation(msg)) => {
+            assert!(msg.contains("16 bytes"), "error should mention actual byte count: {}", msg);
+            assert!(msg.contains("expected 32"), "error should mention expected size: {}", msg);
+        }
+        Ok(report) => panic!("expected IntegrityViolation error, got report: integrity_ok={}", report.integrity_ok),
+        Err(other) => panic!("expected IntegrityViolation, got: {:?}", other),
+    }
+}
+
+/// Prove that verify_chain returns an IntegrityViolation error when a
+/// previous_hash stored in SQLite has fewer than 32 bytes.
+#[test]
+fn test_i_malformed_previous_hash_detected() {
+    let storage = test_storage();
+    commit_one(&storage, "entry-0", 1);
+    commit_one(&storage, "entry-1", 2);
+
+    // Corrupt the previous_hash of entry 1 to only 8 bytes
+    {
+        let conn = storage.lock_conn().unwrap();
+        conn.execute(
+            "UPDATE chain_entries SET previous_hash = X'0011223344556677' WHERE global_sequence = 1",
+            [],
+        ).unwrap();
+    }
+
+    let result = verify_chain(&storage);
+    match result {
+        Err(limen_chain::storage::ChainStorageError::IntegrityViolation(msg)) => {
+            assert!(msg.contains("8 bytes"), "error should mention actual byte count: {}", msg);
+            assert!(msg.contains("previous_hash"), "error should mention previous_hash: {}", msg);
+        }
+        Ok(report) => panic!("expected IntegrityViolation error, got report: integrity_ok={}", report.integrity_ok),
+        Err(other) => panic!("expected IntegrityViolation, got: {:?}", other),
+    }
+}
+
 /// F-05/F-08 supplemental: Prove that a Refusal entry also roundtrips correctly
 /// through canonical serialize -> rmp_serde deserialize.
 #[test]

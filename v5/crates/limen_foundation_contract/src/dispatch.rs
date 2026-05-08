@@ -378,6 +378,7 @@ pub fn run_commit_transaction_gated(
 /// audit-before-success fusion. Use `run_commit_transaction_gated` instead.
 /// Restricted to `pub(crate)` — external crates cannot call this function.
 #[deprecated(note = "NF-02: use run_commit_transaction_gated with lifecycle + commit_sink")]
+#[allow(dead_code)] // Retained as deprecated reference — will be removed in v5.1
 pub(crate) fn run_commit_transaction(
     reader: &dyn ChainReadContext,
     tenant_scope: TenantScope,

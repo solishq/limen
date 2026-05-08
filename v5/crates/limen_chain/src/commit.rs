@@ -60,8 +60,16 @@ pub fn commit_entry(
             [next_global - 1],
             |row| row.get(0),
         )?;
+        if hash_bytes.len() != 32 {
+            return Err(ChainStorageError::IntegrityViolation(
+                format!(
+                    "content_hash at global_sequence {} has {} bytes, expected 32",
+                    next_global - 1, hash_bytes.len()
+                ),
+            ));
+        }
         let mut arr = [0u8; 32];
-        if hash_bytes.len() >= 32 { arr.copy_from_slice(&hash_bytes[..32]); }
+        arr.copy_from_slice(&hash_bytes[..32]);
         Some(Blake3Hash(arr))
     } else {
         None

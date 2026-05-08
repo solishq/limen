@@ -102,6 +102,11 @@ impl<'ctx> FoundationReadCapability<'ctx> {
 pub struct NonAuthoritative<T>(T);
 
 impl<T> NonAuthoritative<T> {
+    /// Construct a `NonAuthoritative` wrapper around a projection-derived value.
+    ///
+    /// `pub(crate)` — only projection internals may wrap values. External code
+    /// receives `NonAuthoritative<T>` from substrate queries, never constructs it.
+    #[allow(dead_code)] // Reserved for projection layer (Phase 2)
     pub(crate) fn wrap(value: T) -> Self {
         Self(value)
     }

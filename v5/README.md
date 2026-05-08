@@ -11,7 +11,7 @@
 
 ## Workspace Structure
 
-Eleven crates per Document 27 v1.3 Section 0.1. Forbidden dependency edges enforced at compile time and CI.
+Thirteen crates per Document 27 v1.3 Section 0.1. Forbidden dependency edges enforced at compile time and CI.
 
 | Crate | Purpose |
 |---|---|
@@ -19,13 +19,15 @@ Eleven crates per Document 27 v1.3 Section 0.1. Forbidden dependency edges enfor
 | `limen_foundation_contract` | Foundation operation trait, capabilities, envelopes, verdicts |
 | `limen_foundation_ops` | Four concrete foundation operations |
 | `limen_chain` | SQLite-backed chain storage and commit path |
-| `limen_crypto` | Cryptographic key provider trait and Ed25519 software implementation |
 | `limen_projection` | Projection storage, projector, certification |
 | `limen_substrate_runtime` | Dispatcher, capability minting, sealed registry |
 | `limen_canonical` | Canonical serialization |
 | `limen_substrate` | Assembled substrate |
 | `limen_api` | Public API surface |
 | `limen_consensus` | Profile 3 consensus-replicated ChainReadContext implementation (Raft-based) |
+| `limen_graph` | Graph query HTTP service (Axum-based) |
+| `limen_observability` | Prometheus metrics registry and exporters |
+| `limen_postgres` | PostgreSQL-backed chain and projection storage |
 
 ## Governance
 
