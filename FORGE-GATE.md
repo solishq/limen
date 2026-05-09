@@ -80,7 +80,7 @@
 
 ## Phase 5 — Implementation
 
-- [ ] Implementation Spec produced (how contract is realized)
+- [x] Implementation Spec produced (`docs/LIMEN-IMPLEMENTATION-SPEC.md` — 1,086 lines, 5 subsystems, 835 reqs)
 - [x] Code exists (287 source files, 4,258 tests pass)
 - [x] Coverage report shows 59% implemented, 17% not implemented
 - [ ] Gap implementation: Consent Integration (ST-19) — IN PROGRESS (types done, gate not wired)
