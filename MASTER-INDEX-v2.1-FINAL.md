@@ -12,7 +12,7 @@
 | Path | Role | Version | Canonical Owner | Hash | Dependency Direction | LCI Note |
 |------|------|---------|-----------------|------|----------------------|----------|
 | `SolisForge Protocol v1.4` | Sole governing doctrine | 1.4 | SolisHQ Engineering Authority | `RATIFIED-2026-05-08` | Upstream of all artifacts, contracts, and enforcement gates | Supersedes Premier Engineering Standard v2.2 and CDM v2.1. Absorbs all prior mechanisms per §2.1 Disposition Table. |
-| `contracts/LIMEN_V5_INTEGRATION_CONTRACT.md` | Limen v5 convergence contract | 1.0.0 | Forge Critical Authority | `b9c486d5863110d7cc4567da5eff5fb4fd02ff05b75d6b47322d7edbb4713b83` | Upstream of all file compliance and validation | Declares SolisForge v1.4 sole governance, baseline freeze f4ead70, installs validation tools. |
+| `contracts/LIMEN_V5_INTEGRATION_CONTRACT.md` | Limen v5 convergence contract | 1.0.0 | Forge Critical Authority | `cf123370f3357e5597fa4fd0ade2849fcf879ff3d02cfcba51c5a8de3629710a` | Upstream of all file compliance and validation | Declares SolisForge v1.4 sole governance, baseline freeze f4ead70, installs validation tools. |
 | `CONTRACT-COMPLIANCE-v2.1.md` | Contract compliance doctrine [HISTORICAL — superseded by SolisForge v1.4] | 2.1 | SolisHQ CDM Authority | `b1ba24df1b6ab9bd04e21adc0e7b46aec3eb6d56e7dd2f98d2a62520646f52a8` | HISTORICAL — mechanisms absorbed into SolisForge §9 | Preserves Contract-First Discipline, HB-37, HB-38, LCI closure, and Zero-Orphan rules — all now enforced via SolisForge. |
 
 ## 2. Phase X -- AI Agent Integration Layer
@@ -28,7 +28,7 @@
 
 | Path | Role | Version | Canonical Owner | Hash | Dependency Direction | LCI Note |
 |------|------|---------|-----------------|------|----------------------|----------|
-| `contracts/phase-x.contracts.json` | Machine-readable Phase X compliance authority | manifest 1.0.0 | Phase X Contract Authority | `94c71a3fbc264eeb0efe4ec8db6d95090839530d78805ae56343df9d975349cb` | Upstream of Phase X hash verification, HB-37/HB-38 proof, and LCI closure | Records versioned list, hashes, defense sets, monotonicity proof, LCI assertion, and closure proof. |
+| `contracts/phase-x.contracts.json` | Machine-readable Phase X compliance authority | manifest 1.0.0 | Phase X Contract Authority | `22e6527726dbc4b0247a39720d142b0c83ba83bea2b0f6ec5f4d8d17c7c9baa0` | Upstream of Phase X hash verification, HB-37/HB-38 proof, and LCI closure | Records versioned list, hashes, defense sets, monotonicity proof, LCI assertion, and closure proof. |
 
 ### 2.2 Prompt-Required Core Phase X Files
 
