@@ -38,7 +38,7 @@ is_exempt() {
     case "$f" in
         */node_modules/*|node_modules/*|dist/*|.git/*|*.lock|*.json|*.svg|*.png|*.jpg|*.ico|*.woff*|*.ttf|*.map)
             return 0 ;;
-        .gitignore|.nvmrc|.env*|.dockerignore|LICENSE|NOTICE|.provenance.json)
+        .gitignore|.nvmrc|.env*|.dockerignore|LICENSE|NOTICE|.provenance.json|promises/*)
             return 0 ;;
         *.d.ts|*/target/*|*.stderr)
             return 0 ;;

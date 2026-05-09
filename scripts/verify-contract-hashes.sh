@@ -51,6 +51,32 @@ for (const entry of contracts) {
   }
 }
 
+// Phase 2: Verify Master Index entries (meta-level hash integrity)
+const miPath = 'MASTER-INDEX-v2.1-FINAL.md';
+if (fs.existsSync(miPath)) {
+  const miContent = fs.readFileSync(miPath, 'utf-8');
+  // Extract all path-hash pairs from Master Index table rows
+  const miPattern = /\| \x60([^\x60]+)\x60 \|[^|]*\|[^|]*\|[^|]*\| \x60([a-f0-9]{64})\x60 \|/g;
+  let match;
+  let miChecked = 0;
+  while ((match = miPattern.exec(miContent)) !== null) {
+    const miFile = match[1];
+    const miHash = match[2];
+    if (!fs.existsSync(miFile)) continue;
+    const actual = crypto.createHash('sha256').update(fs.readFileSync(miFile)).digest('hex');
+    miChecked++;
+    if (actual === miHash) {
+      ok++;
+    } else {
+      console.log('MI-MISMATCH: ' + miFile);
+      console.log('  MI expected: ' + miHash);
+      console.log('  actual:      ' + actual);
+      fail++;
+    }
+  }
+  console.log('Master Index: ' + miChecked + ' entries verified');
+}
+
 console.log('');
 console.log(ok + ' OK, ' + fail + ' FAILED' + (missing > 0 ? ' (' + missing + ' missing)' : ''));
 process.exit(fail > 0 ? 1 : 0);
