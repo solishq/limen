@@ -981,4 +981,4 @@
 | S25 Rust Equivalents | 84 |
 | S26 Type Ownership Index | 3 |
 | S27 Import Directive | 4 |
-| **GRAND TOTAL** | **471** |
+| **GRAND TOTAL** | **477** |

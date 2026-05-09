@@ -113,15 +113,15 @@
 
 | ID | Requirement | Source |
 |---|---|---|
-| EG-3.26 | `MissionState` MUST be union: `'created' | 'planning' | 'executing' | 'reviewing' | 'paused' | 'completed' | 'failed' | 'degraded' | 'blocked' | 'cancelled'` (10 states) | S3.4 |
+| EG-3.30 | `MissionState` MUST be union: `'created' | 'planning' | 'executing' | 'reviewing' | 'paused' | 'completed' | 'failed' | 'degraded' | 'blocked' | 'cancelled'` (10 states) | S3.4 |
 
 ### 3.5 MissionTransition
 
 | ID | Requirement | Source |
 |---|---|---|
-| EG-3.27 | `MissionTransition` MUST have readonly fields: `from: MissionState`, `to: MissionState`, `reason: string`, `triggeredBy: AgentId` | S3.5 |
-| EG-3.28 | `created` MUST transition to: `planning`, `cancelled` only | S3.5 |
-| EG-3.29 | `planning` MUST transition to: `executing`, `cancelled` only | S3.5 |
+| EG-3.31 | `MissionTransition` MUST have readonly fields: `from: MissionState`, `to: MissionState`, `reason: string`, `triggeredBy: AgentId` | S3.5 |
+| EG-3.32 | `created` MUST transition to: `planning`, `cancelled` only | S3.5 |
+| EG-3.33 | `planning` MUST transition to: `executing`, `cancelled` only | S3.5 |
 | EG-3.30 | `executing` MUST transition to: `reviewing`, `paused`, `completed`, `failed`, `degraded`, `blocked`, `cancelled` | S3.5 |
 | EG-3.31 | `reviewing` MUST transition to: `executing`, `paused`, `cancelled` only | S3.5 |
 | EG-3.32 | `paused` MUST transition to: `executing`, `reviewing`, `cancelled` only | S3.5 |
@@ -151,7 +151,7 @@
 | EG-3.46 | `MissionCompletionResult.missionId` MUST be readonly `MissionId` identifying the completed mission | S3.10 |
 | EG-3.47 | `MissionCompletionResult.duration` MUST be readonly number (milliseconds from creation to completion) | S3.10 |
 | EG-3.48 | `MissionCompletionResult.outcome` MUST be readonly `MissionOutcome` containing the completion summary | S3.10 |
-| EG-3.46 | A degraded mission has NOT completed; agent MUST transition it to `failed`/`cancelled` explicitly or resolve the degradation | S3.10 Note |
+| EG-3.49 | A degraded mission has NOT completed; agent MUST transition it to `failed`/`cancelled` explicitly or resolve the degradation | S3.10 Note |
 
 **Totals: 53 requirements**
 
@@ -161,8 +161,8 @@
 
 | ID | Requirement | Source |
 |---|---|---|
-| EG-3.47 | `ResolvedMissionConstraints.budget` MUST have readonly fields: `tokens: number`, `deliberations: number` | S3.11 |
-| EG-3.48 | `ResolvedMissionConstraints` MUST have readonly fields: `deadline`, `maxTasks`, `maxDepth`, `maxChildren`, `budgetDecayFactor` | S3.11 |
+| EG-3.50 | `ResolvedMissionConstraints.budget` MUST have readonly fields: `tokens: number`, `deliberations: number` | S3.11 |
+| EG-3.51 | `ResolvedMissionConstraints` MUST have readonly fields: `deadline`, `maxTasks`, `maxDepth`, `maxChildren`, `budgetDecayFactor` | S3.11 |
 | EG-3.49 | Default `budget.tokens` MUST be `100_000` | S3.11 |
 | EG-3.50 | Default `budget.deliberations` MUST be `10` | S3.11 |
 | EG-3.51 | Default `deadline` MUST be `null` | S3.11 |
