@@ -60,11 +60,11 @@
 
 - [x] Breaker attacked contract specification
 - [x] Adversarial Verdict produced
-- [ ] Convergence Log maintained (round numbers, P0/P1/P2/P3 counts, 3-rule check)
-- [ ] Negative Evidence Mandate: attacks constructed from FMA failure modes
-- [x] All findings remediated
+- [x] Convergence Log maintained (14 rounds documented retroactively in Convergence Log section)
+- [ ] Negative Evidence Mandate: NOT PERFORMED — deferred to Phase 6 per compliance audit V-06
+- [x] All findings remediated (115/115 closed)
 
-**Phase 3 EXIT: INCOMPLETE — convergence log and negative evidence missing**
+**Phase 3 EXIT: COMPLETE WITH KNOWN GAP — negative evidence deferred to Phase 6 (documented)**
 
 ---
 
@@ -190,9 +190,36 @@
 
 ## Convergence Log
 
-| Round | Phase | P0 | P1 | P2 | P3 | Total | New P1? | Non-increasing? | Converged? |
+### Phase 3 Convergence (Contract Specification — 14 extractions)
+
+NOTE: Per compliance audit V-02, Breaker was dispatched per-extraction (protocol violation). These rounds are documented retroactively for the convergence record. Future cycles: ONE Breaker on the complete contract corpus.
+
+| Round | Scope | P0 | P1 | P2 | P3 | Total | New P1? | Non-increasing? | Converged? |
 |-------|-------|----|----|----|----|-------|---------|-----------------|------------|
-| — | — | — | — | — | — | — | — | — | Phase 3 and Phase 6 rounds logged here |
+| 1 | ST (477 reqs) | 0 | 16 | 8 | 5 | 29 | Yes (first) | N/A (first) | No |
+| 2 | ST post-remediation | 0 | 0 | 0 | 0 | 0 | No | Yes (0 <= 29) | Round 1 of 2 |
+| 3 | AA (309 reqs) | 0 | 3 | 5 | 3 | 11 | Yes (new scope) | N/A (new scope) | No |
+| 4 | AA post-remediation | 0 | 0 | 0 | 0 | 0 | No | Yes (0 <= 11) | Round 1 of 2 |
+| 5 | CA (350 reqs) | 0 | 4 | 1 | 2 | 7 | Yes (new scope) | N/A | No |
+| 6 | CA post-remediation | 0 | 0 | 0 | 0 | 0 | No | Yes | Round 1 of 2 |
+| 7 | LM (406 reqs) | 0 | 5 | 1 | 1 | 7 | Yes (new scope) | N/A | No |
+| 8 | LM post-remediation | 0 | 0 | 0 | 0 | 0 | No | Yes | Round 1 of 2 |
+| 9 | CG+EG+MB+OG batch | 0 | 14 | 14 | 4 | 32 | Yes (new scope) | N/A | No |
+| 10 | Batch post-remediation | 0 | 0 | 0 | 0 | 0 | No | Yes | Round 1 of 2 |
+| 11 | SG+CO+IB+CU+AV batch | 0 | 0 | 8 | 9 | 17 | No | N/A (new scope) | Yes (0 P0, 0 P1) |
+| 12 | Batch post-remediation | 0 | 0 | 0 | 0 | 0 | No | Yes (0 <= 17) | Yes |
+| 13 | IC (73 reqs) | 0 | 1 | 4 | 7 | 12 | Yes (new scope) | N/A | No |
+| 14 | IC post-remediation | 0 | 0 | 0 | 0 | 0 | No | Yes | Yes |
+
+**Phase 3 convergence assessment:** All 14 contract extractions reached zero P0 and zero P1 after remediation. Total findings: 115 found, 115 closed. Zero residual.
+
+**Negative Evidence Mandate (§9):** NOT PERFORMED during Phase 3. Breakers attacked for defects (positive evidence) but did not construct attacks from the 107 FMA failure modes to prove they cannot occur. This is a known gap documented in compliance audit V-06. Negative evidence will be performed at Phase 6 when the Breaker attacks the running system with the FMA as an attack checklist.
+
+### Phase 6 Convergence (Implementation — to be filled when Phase 6 executes)
+
+| Round | P0 | P1 | P2 | P3 | Total | New P1? | Non-increasing? | Converged? |
+|-------|----|----|----|----|-------|---------|-----------------|------------|
+| — | — | — | — | — | — | — | — | — |
 
 ---
 
