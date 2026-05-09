@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * TEST-GAP-007: Checkpoint Governance — S24
  * Verifies: Checkpoint fire/respond lifecycle, confidence-driven behavior, expiry.

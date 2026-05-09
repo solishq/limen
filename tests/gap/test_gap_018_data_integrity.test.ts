@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Phase 4D-4: Data Integrity & Contract Completion — Gap Tests
  * S ref: I-02, I-06, S3.6, S35, S36, FM-02, GDPR Art. 17

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * FR-006: Context Compiler — compiles claims into reasoning-ready context.
  *

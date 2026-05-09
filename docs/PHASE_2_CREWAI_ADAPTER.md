@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Phase 2: CrewAI Adapter — Traceability Matrix
 
 **Contract:** CREWAI_ADAPTER_CONTRACT.md v1.0.0

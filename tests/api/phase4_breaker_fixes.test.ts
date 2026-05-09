@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Phase 4 Breaker Fix Cycle: Discriminative tests for 6 HIGH findings.
  *

@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Hook/Plugin Development Guide
 
 Build computational pipeline hooks that intercept Limen's core behavior — claim assertion, decay computation, and recall result transformation.

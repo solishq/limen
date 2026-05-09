@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Limen — Learning System (S29) Type Definitions
  * Phase 4E-1: Truth Model Executable Contract

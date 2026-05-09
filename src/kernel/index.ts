@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Kernel factory: createKernel and destroyKernel.
  * S ref: C-07 (Object.freeze), C-06 (no shared mutable state), §3.3 (engine not framework)

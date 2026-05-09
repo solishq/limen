@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Wire-EGP-03: Terminal Release — reservation released atomically with terminal state.
  * Spec ref: I-83 (reservation release), EGP-I3 (atomic reclaim), EGP-I13 (conservation)

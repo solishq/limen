@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Rejection-Path Tests: Constitutional Debt Remediation
  * Closes 3 surviving mutations from Review Pass on Debts 2 & 3.

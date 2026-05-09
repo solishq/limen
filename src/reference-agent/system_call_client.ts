@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * SystemCallClient -- thin wrapper over MissionHandle system call methods.
  * S ref: S14 (interface design principles), SD-07 (thin wrapper rationale),

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Tenant-scoped connection facade.
  * S ref: FM-10 (tenant data leakage prevention), RDD-3 (transparent tenancy)

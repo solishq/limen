@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Budget Governance -- Resource management and constraint enforcement.
  * S ref: S11 (Resource/Budget), S22 (request_budget), I-20 (never-negative),

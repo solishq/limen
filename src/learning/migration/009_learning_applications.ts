@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Forward-only migration v18: Learning System Application Log
  * S ref: S29.4 (application recording), I-03 (audit), I-07 (agent isolation)

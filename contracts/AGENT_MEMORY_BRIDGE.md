@@ -1,7 +1,10 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Agent Memory Bridge Contract v1.3.1
 
 **Status:** RATIFIED DESIGN — Pending Implementation
-**Governing:** CDM v2.1 + Contract Compliance v2.1
+**Governing:** SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1 + Contract Compliance v2.1 — superseded]
 **Scope:** Universal agent-to-Limen memory interface
 **Contract Hash:** Tracked in `contracts/phase-x.contracts.json`
 **Date:** 2026-05-05

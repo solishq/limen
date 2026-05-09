@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Migration v36: Interactions Retention Policy.
  * PRR-PE-016: core_interactions table had no retention policy, causing unbounded growth.

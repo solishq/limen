@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * SC-4 Contract Tests: create_artifact -- Facade-Level Verification
  * S ref: S18 (create_artifact), S8 (artifact workspace), I-03 (atomic audit),

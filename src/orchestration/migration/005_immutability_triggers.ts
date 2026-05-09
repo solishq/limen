@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Forward-only migration v14: Immutability Enforcement Triggers
  * S ref: I-19 (Artifact Immutability), I-24 (Goal Anchoring)

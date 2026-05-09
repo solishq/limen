@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Substrate facade -- composes all six subsystems into a frozen object.
  * S ref: §2 (Three-layer model), §25 (Execution Substrate), C-07 (Object.freeze)

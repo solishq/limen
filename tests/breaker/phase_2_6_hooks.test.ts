@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Phase 2.6 Regression Tests — Validates fixes for Breaker findings F-001 through F-012.
  * Originally attack tests that proved defects; now regression tests that prove fixes hold.

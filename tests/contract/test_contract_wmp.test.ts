@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Limen v1.0 — WMP (Working Memory Protocol) Executable Contract Tests
  * Phase 1G: Truth Model Verification

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * SC-4: create_artifact -- Creates an immutable artifact version.
  * S ref: S18, I-19 (immutability), I-20 (artifact limits), I-03 (atomic audit)

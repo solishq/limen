@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Failure Mode Defense Inventory
 
 **Project:** Limen v3.3.0 (internal spec version; npm package: v2.0.0)

@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 <!-- R2-45: This file is Contract Compliance v2.1, which references and is governed by
      MASTER-INDEX v2.1 (MASTER-INDEX-v2.1-FINAL.md). The filename v2.1 matches the
      referenced version. The parent project's governance may have CDM v2.2, but this
@@ -5,9 +8,9 @@
 
 # Contract Compliance v2.1
 
-**Status:** Active doctrine
-**Governing:** CDM v2.1
-**Scope:** Contract-first discipline, monotonicity enforcement, LCI closure, and canonical contract adoption rules.
+**Status:** HISTORICAL — superseded by SolisForge Protocol v1.4 (effective 2026-05-09)
+**Governing:** SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1 — all mechanisms absorbed into SolisForge §9]
+**Scope:** Contract-first discipline, monotonicity enforcement, LCI closure, and canonical contract adoption rules — now enforced via SolisForge §9 Enforcement Mechanisms.
 
 ## 1. Contract-First Discipline
 
@@ -17,7 +20,7 @@ Phase-level contract families MUST be integrated as indexed canonical families, 
 
 ## 2. Canonical Example: Phase X Contract-First Integration
 
-Phase X -- AI Agent Integration Layer is the canonical example for contract-first phase integration under CDM v2.1.
+Phase X -- AI Agent Integration Layer is the canonical example for contract-first phase integration under SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1].
 
 | Discipline | Phase X Evidence | Compliance Requirement |
 |------------|------------------|------------------------|

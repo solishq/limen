@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Eval Schema interfaces for Phase 0A governance layer.
  * Truth Model: Deliverable 8 (Eval Schema)

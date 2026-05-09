@@ -1,7 +1,10 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Agent Execution Governance Contract v1.2.1
 
 **Status:** RATIFIED DESIGN --- Pending Implementation
-**Governing:** CDM v2.1 + Contract Compliance v2.1
+**Governing:** SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1 + Contract Compliance v2.1 — superseded]
 **Scope:** Mission lifecycle, task orchestration, budget governance, and execution scheduling for AI agents
 **Classification:** internal
 

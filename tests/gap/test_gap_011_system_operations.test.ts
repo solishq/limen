@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Layer 4: System Operations Verification Tests
  * Verifies: SYSTEM_SCOPE paths work correctly — expireOverdue() operates across

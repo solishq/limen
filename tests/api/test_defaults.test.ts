@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 // Verifies: S3.3 (engine not framework — smart defaults, not magic)
 // Tests: detectProviders(), resolveMasterKey(), resolveDataDir(), resolveDefaults()
 //

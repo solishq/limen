@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * BREAKER: Sprint 2 Admin Guard Trigger v2 Attack Tests
  * Target: trg_core_agents_trust_admin_guard_v2 (migration v33)

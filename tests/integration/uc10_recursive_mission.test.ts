@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 // Verifies: §41 UC-10, §6, §15, §16, §23, I-20, I-21, I-24, FM-19, FM-13
 // Phase 4: API Surface -- UC-10 recursive 3-level mission verification
 //

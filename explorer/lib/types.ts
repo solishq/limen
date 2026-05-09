@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 // Frontend types — derived from backend v5/crates/limen_graph/src/types.rs
 // serde(rename_all = "snake_case") means JSON uses snake_case enum variants
 

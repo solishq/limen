@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Shared logic tests — filter, namespace, encoding, type guards
  * Covers: Claims 2.9–2.13, 3.7, 3.17, 8.9

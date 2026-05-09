@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * TEST-GAP-005: Budget Enforcement — S11, S22, FM-02
  * Verifies: Never-negative budget, BUDGET_EXCEEDED, parent-child transfer, human approval gate.

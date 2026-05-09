@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Limen Phase 0A — Governance Migration Verification
  * Tests the 6 governance migration files (021–026) against real SQLite.

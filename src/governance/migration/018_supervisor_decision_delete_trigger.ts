@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Migration v27: Add missing DELETE trigger for gov_supervisor_decisions.
  * Truth Model: Deliverable 5 — BC-060 immutability.

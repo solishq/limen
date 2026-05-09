@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * BREAKER: Sprint 2 Trust Progression Attack Tests
  * Target: I-09 Trust State Machine (trust_progression.ts, agent_api.ts, migration v33)

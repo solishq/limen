@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Wire-EGP-02: Invocation Gate — pre-invocation admissibility check.
  * Spec ref: I-86 (pre-invocation admissibility), EGP-I4 (dual-dimension)

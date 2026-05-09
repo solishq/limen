@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * BREAKER: Sprint 1 Cross-Feature Attack Tests
  * Target: Cross-feature interactions between I-08 + CCP-01 + CCP-02

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Run Identity Model + Attempt Entity + Causal Ordering.
  * Truth Model ref: Deliverable 2 — BC-010 through BC-019, ST-010, ST-020

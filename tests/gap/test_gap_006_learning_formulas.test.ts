@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * TEST-GAP-006 (tests 1-2): Learning system formulas — S29, I-10
  * Verifies: EMA calculation and retirement threshold logic from spec.

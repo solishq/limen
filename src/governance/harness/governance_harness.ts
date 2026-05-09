@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Phase 0A Governance Harness — Factory for the complete governance system.
  * Truth Model: Deliverables 1-12 (286 assertions)

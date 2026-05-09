@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Contract Tests: Drift Engine (I-24 — Goal Drift Detection)
  * Sprint 3: Knowledge Graph

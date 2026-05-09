@@ -1,9 +1,12 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Limen v5 — Phase 3 Design Source
 
 **Version:** 1.1.0 (Post-Final Remediation, May 7, 2026)
 **Status:** RATIFIED (May 6, 2026)
 **Authority:** Founder (Lanre Osibodu)
-**Governing Doctrine:** SolisHQ CDM v2.1 + Contract Compliance v2.1
+**Governing Doctrine:** SolisForge Protocol v1.4 [HISTORICAL: SolisHQ CDM v2.1 — superseded]
 
 ---
 

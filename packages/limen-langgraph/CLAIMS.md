@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # @limen-ai/langgraph -- Design Claims
 
 All 124 claims from the LangGraph Adapter Design Document (Revision 8). Each claim is atomic and testable. Grouped by section.

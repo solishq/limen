@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Migration v28: CCP (Claim Protocol) tables.
  * Spec ref: CCP v2.0 Design Source §6-§9, §13, §14

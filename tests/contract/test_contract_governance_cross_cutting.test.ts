@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Limen Phase 0A — Cross-Cutting Invariants
  * Truth Model: INV-X01 through INV-X13

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Contract tests for CCP-01 (Memory Evidence) + CCP-02 (Capability Results).
  * Validates real evidence validators and capability result scope validator.

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Limen v1.0 — CCP Governance Integration Contract Tests
  * Phase 1: Controls 2-3 Verification — Test Extension (Stage 3)

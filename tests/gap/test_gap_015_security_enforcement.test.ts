@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * TEST-GAP-015: Phase 4D-1 Security Enforcement
  * Tests for 7 findings: CF-005, CF-006, CF-007, CF-010, CF-019, CF-028, CF-029

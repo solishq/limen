@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Limen Phase 0A — Capability Manifest + Retry/Replay Matrix Contract Tests
  * Truth Model: Deliverable 9 (Capability Manifest Schema), Deliverable 10 (Retry/Replay Safety Matrix)

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Rate limit enforcement guard for the API surface.
  * S ref: §36 (rate limiting), SD-14 (RBAC -> Rate Limit -> Execute ordering),

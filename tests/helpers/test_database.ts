@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Test Database Harness for Limen v1.0
  * Phase 4A-1: Foundation for all behavioral verification tests.

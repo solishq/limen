@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Forward-only migration definitions for Phase 1.
  * S ref: C-05 (forward-only migrations), C-09 (namespace prefixes)

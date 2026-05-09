@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Forward-only migration v17: Learning Outcome Tracking
  * S ref: S29.5 (effectiveness tracking), I-07 (agent isolation), FM-10 (tenant isolation)

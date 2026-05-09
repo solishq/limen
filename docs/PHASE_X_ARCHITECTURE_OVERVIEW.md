@@ -1,8 +1,11 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Phase X: AI Agent Integration Layer — Architecture Overview
 
 **Version:** 1.3.0
 **Status:** RATIFIED DESIGN — Pending Implementation
-**Governing:** CDM v2.1 + Contract Compliance v2.1
+**Governing:** SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1 + Contract Compliance v2.1 — superseded]
 **Date:** May 5, 2026
 **Phase 8 Gate:** `contracts/phase-x.contracts.json` is the machine-readable compliance authority for contract versions, hashes, HB-37/HB-38 coverage, LCI, and monotonicity.
 

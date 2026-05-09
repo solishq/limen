@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Limen Phase 0A — Idempotency + Resume-Token Semantics Contract Tests
  * Truth Model: Deliverable 12 (Idempotency / Resume-Token Semantics)

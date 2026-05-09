@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Contract Tests: Cascade Walker (I-23 — Artifact Dependency Cascading)
  * Sprint 3: Knowledge Graph

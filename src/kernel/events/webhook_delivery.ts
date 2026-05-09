@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Webhook delivery module — async HTTP delivery with HMAC-SHA256 signing.
  * S ref: IP-6 (Webhook delivery with at-least-once semantics, max 3 retries)

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * SC-3: propose_task_execution -- Requests execution of a task.
  * S ref: S17, I-05, I-12, I-14, I-17, I-22

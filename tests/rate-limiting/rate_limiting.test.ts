@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 // Verifies: §36, §14, FM-13
 // Phase 4: API Surface -- Rate limiting and backpressure verification
 //

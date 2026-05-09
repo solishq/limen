@@ -1,7 +1,10 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Phase X Shared Types Registry v1.4.1
 
 **Status:** RATIFIED --- Canonical Authority for All Phase X Contracts
-**Governing:** CDM v2.1 + Contract Compliance v2.1
+**Governing:** SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1 + Contract Compliance v2.1 — superseded]
 **Rule:** Types defined here are the SOLE definitions. All Phase X contracts reference this document. No contract may redefine any shared type listed here. Local types are contract-specific and not used by other contracts.
 **Phase 8 Gate:** Machine-readable status, HB-37/HB-38 coverage, LCI assertion, and monotonicity proof are recorded in `contracts/phase-x.contracts.json`.
 

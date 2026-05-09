@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Health check for the API surface.
  * S ref: S32.4 (health check), FM-06 (provider dependency), I-16 (graceful degradation)

@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Deployment Guide
 
 Limen runs as an embedded library in your Node.js application. There is no separate server to deploy, no external database to manage, and no container orchestration required.

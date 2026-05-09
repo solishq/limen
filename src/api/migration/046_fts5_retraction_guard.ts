@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Migration v46: FTS5 retraction zombie fix.
  * Phase 5: Data integrity — prevent retracted claims from haunting the search index.

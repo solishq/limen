@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * ReferenceAgent -- the cognitive agent entry point and execution orchestrator.
  * S ref: S41 (UC-10, UC-11, UC-12), S14-S24 (10 system calls),

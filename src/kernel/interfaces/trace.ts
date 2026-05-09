@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Trace Event Grammar + TraceEmitter + RunSequencer.
  * Truth Model ref: Deliverable 3 — BC-020 through BC-028

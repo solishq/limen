@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 export default {
   // Target QAL-4 critical modules first, then QAL-3

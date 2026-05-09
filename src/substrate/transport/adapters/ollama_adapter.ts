@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Ollama API adapter (local-only, NDJSON, no auth).
  * S ref: §25.4 (LLM Gateway), I-01 (no SDK deps), I-04 (provider independence)

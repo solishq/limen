@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Verifies: §3.2, §4 I-04, §4 I-16, §42 C-02, FM-06
  * Phase: 1 (Kernel)

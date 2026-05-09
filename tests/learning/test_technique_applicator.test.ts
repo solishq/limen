@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Limen — TechniqueApplicator Unit Tests
  * Phase 4E-2c: Supplementary tests beyond contract tests (#15-#18, #50)

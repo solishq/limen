@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Agent management API wrapper for the API surface.
  * S ref: S12 (agent definitions), DL-2 (agent lifecycle), UC-4 (agent pipeline),

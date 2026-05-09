@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * BREAKER: Sprint 3 Cascade Walker Attack Tests
  * Target: I-23 Artifact Dependency Cascading (cascade_walker.ts, artifact_store.ts)

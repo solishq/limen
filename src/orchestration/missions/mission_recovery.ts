@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Mission Recovery — Safe recovery of non-terminal missions after engine restart.
  * Spec ref: I-18 (Mission Persistence/Recovery), S6 (Mission Lifecycle)

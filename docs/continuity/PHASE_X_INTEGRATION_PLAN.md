@@ -1,14 +1,17 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Phase X Integration Plan
 
 **Status:** Draft integration handoff  
-**Governing:** CDM v2.1 + Contract Compliance v2.1  
+**Governing:** SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1 + Contract Compliance v2.1 — superseded]  
 **Source branch:** `phase-x-remediation`  
 **Clean commit:** `5fdbf68`  
 **Target branch:** `main`  
 
 ## Executive Summary
 
-Integrate Phase X as a canonical, indexed CDM v2.1 contract family, not as loose documentation. The merge must preserve HB-37 monotonicity, update the Master Index and Contract Compliance doctrine in the same PR, and leave a traceable handoff path for future engineers.
+Integrate Phase X as a canonical, indexed contract family [HISTORICAL: CDM v2.1], not as loose documentation. The merge must preserve HB-37 monotonicity, update the Master Index and Contract Compliance doctrine in the same PR, and leave a traceable handoff path for future engineers.
 
 ## Merge Strategy
 
@@ -103,20 +106,20 @@ Continuity updates:
 Recommended commit message:
 
 ```text
-merge: adopt Phase X canonical contracts under CDM v2.1
+merge: adopt Phase X canonical contracts under SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1]
 ```
 
 Recommended PR title:
 
 ```text
-Adopt Phase X contract family into internal-OS CDM v2.1 index
+Adopt Phase X contract family into SolisForge v1.4-governed index [HISTORICAL: CDM v2.1]
 ```
 
 Recommended PR description:
 
 ```markdown
 ## Summary
-Integrates the CLEAN Phase X remediation branch into main and registers Phase X as a canonical CDM v2.1 contract family.
+Integrates the CLEAN Phase X remediation branch into main and registers Phase X as a canonical contract family [under CDM v2.1, now governed by SolisForge v1.4].
 
 ## Traceability
 - Source branch: phase-x-remediation

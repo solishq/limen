@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Evidence source validator — CCP-01 (Memory Evidence) + Sprint 1 Foundation.
  * Replaces the accept-all stub in createLimen() with real database validation.

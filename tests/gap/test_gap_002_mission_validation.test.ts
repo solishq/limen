@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * TEST-GAP-002: Mission Store Validation — S15, I-20, I-22, FM-19
  * Verifies: Tree constraint enforcement, capability immutability, delegation cycle detection.

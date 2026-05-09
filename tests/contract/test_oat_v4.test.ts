@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * v4.0.0 Operational Acceptance Testing (OAT)
  * Phase 8: Verify every v4 spec promise works end-to-end.

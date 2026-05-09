@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Resource Accounting implementation.
  * S ref: §25.6 (Resource Accounting), §11 (Resource Model), FM-02 (Cost Explosion)

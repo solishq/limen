@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * TaskExecutor -- drives tasks through their lifecycle.
  * S ref: S17 (propose_task_execution), S21 (request_capability),

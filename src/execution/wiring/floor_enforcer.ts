@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Wire-EGP-04: Floor Enforcer — unreserved floor enforcement.
  * Spec ref: I-87 (reservation fairness), EGP-I4 (dual-dimension)

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Forward-only migration v20: Learning System Transfer Requests
  * S ref: S29.8 (cross-agent transfer protocol), I-07 (agent isolation), DEC-4E-002

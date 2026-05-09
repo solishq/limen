@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 
 /**
  * Limen CLI — JSON-first command-line interface to the Limen Cognitive OS.

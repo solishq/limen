@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Sprint 3A: Happy Path E2E Lifecycle Integration Tests
  * Phase 3 — Orchestration Engine Composition Verification

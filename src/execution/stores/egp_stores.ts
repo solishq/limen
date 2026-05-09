@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * EGP (Execution Governance Protocol) implementation — all 13 subsystems.
  * Spec ref: EGP v1.0 Design Source (FINAL), Architecture Freeze CF-06/CF-11

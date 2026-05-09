@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * SC-9 Contract Tests: submit_result -- Facade-Level Verification
  * S ref: S23 (submit_result), S6 (Mission lifecycle), I-03 (atomic audit),

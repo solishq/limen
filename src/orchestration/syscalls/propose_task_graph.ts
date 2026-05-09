@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * SC-2: propose_task_graph -- Validates and installs a DAG of tasks.
  * S ref: S16, I-24 (objectiveAlignment), I-20 (task limits)

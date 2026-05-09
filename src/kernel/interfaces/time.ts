@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Time provider interface for deterministic clock injection.
  * S ref: Hard Stop #7 (clock injection), C-06 (no shared mutable state)

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Forward-only migration v19: Learning System Quarantine Entries
  * S ref: S29.7 (quarantine cascade), FM-01 (memory poisoning defense), I-03 (audit)

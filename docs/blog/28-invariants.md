@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # 28 Invariants: Engineering Trust Into AI Infrastructure
 
 Your agent ran overnight. You weren't watching. Here's what you can prove about what happened — and what you can't.

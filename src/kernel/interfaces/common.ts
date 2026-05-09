@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Common types shared across all kernel modules.
  * S ref: S6-S13 (core objects), C-03 (TypeScript strict), C-09 (namespaces)

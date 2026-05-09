@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * LimenError: Public API error class and error mapping utilities.
  * S ref: S39 IP-4 (error redaction), SD-02 (exception model), §6.13 (error codes)

@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Phase X PR Readiness Package
 
 **Date:** 2026-05-03
@@ -28,7 +31,7 @@
 
 ```markdown
 ## Summary
-- Registers Phase X (AI Agent Integration Layer) as a canonical CDM v2.1 contract family
+- Registers Phase X (AI Agent Integration Layer) as a canonical contract family [under CDM v2.1, now governed by SolisForge v1.4]
 - 13 contracts: shared types, memory bridge, computer use governance, audit visualization, adapter architecture, intelligence bridge, execution governance, context governance, lifecycle management, architecture overview, search governance, coordination governance, output governance
 - Adds Master Index, Contract Compliance doctrine, and continuity artifacts
 
@@ -60,7 +63,7 @@
 
 ## 3. Ready for PR Summary
 
-Phase X is complete and verified. Thirteen contracts define the AI Agent Integration Layer under CDM v2.1 governance. Every contract is RATIFIED, version-headed, and SHA256-verified against `phase-x.contracts.json`. The Master Index registers all contracts, the compliance authority, and three continuity artifacts. Contract Compliance v2.1 codifies Phase X as the canonical example for contract-first integration and defines the adoption rule for future phase-level families.
+Phase X is complete and verified. Thirteen contracts define the AI Agent Integration Layer under SolisForge Protocol v1.4 governance [HISTORICAL: originally CDM v2.1]. Every contract is RATIFIED, version-headed, and SHA256-verified against `phase-x.contracts.json`. The Master Index registers all contracts, the compliance authority, and three continuity artifacts. Contract Compliance v2.1 codifies Phase X as the canonical example for contract-first integration and defines the adoption rule for future phase-level families.
 
 Defense-set monotonicity is proven: 37 defenses after, 8 before, zero removed. LCI closure holds across 12 gates with formal derivation. Zero TODO/FIXME. Zero open Breaker findings. Witness 10/10.
 

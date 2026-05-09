@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Mission System Guide
 
 Missions are how agents perform complex, multi-step work within enforced boundaries. An agent proposes an objective with a token budget and deadline. The system validates the proposal, and the agent works through planning, execution, artifact creation, checkpoints, and result submission — all through the 16 system calls.

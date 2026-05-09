@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Phase 1 Foundation Traceability Matrix
 
 > **NOTE (Finding-16):** This document was originally written for the v5 Rust substrate

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 // Verifies: §34, I-13, §3.7, FM-10
 // Phase 4: API Surface -- RBAC at API boundary verification
 //

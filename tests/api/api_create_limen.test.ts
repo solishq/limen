@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 // Verifies: §3.3, §39 IP-4, C-07, C-06, I-13, §34, §32.4
 // Phase 4: API Surface -- createLimen() factory verification
 //

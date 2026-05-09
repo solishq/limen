@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Verifies: §4 I-24, §6, §16, FM-14, FM-16
  * Phase: 4G (Test Hardening Sweep — CF-003)

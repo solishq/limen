@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 // Verifies: §41 UC-1, §26, §27, I-26, I-27, §48
 // Phase 4: API Surface -- UC-1 single-agent chat assistant integration
 //

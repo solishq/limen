@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Limen vs Vercel AI SDK: When You Need More Than a Wrapper
 
 The Vercel AI SDK is an excellent tool for calling LLM APIs. If all you need is to make requests to Claude, GPT, or Gemini — with streaming, structured output, and React integration — the AI SDK does that well.

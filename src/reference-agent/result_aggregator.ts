@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * ResultAggregator -- mission completion and result synthesis.
  * S ref: S23 (submit_result), SD-01 (lifecycle-phase grouping)

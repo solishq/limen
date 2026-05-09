@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Limen v1.0 — Phase 5 Sprint 5A: Shared Transport Infrastructure + Anthropic Adapter
  * Contract tests for transport types, migration, parsers, engine, adapter, and gateway integration.

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Forward-only migration v29: TGP (Technique Governance Protocol) Schema Extensions
  * Spec ref: TGP v1.0 Design Source §5-§9, Architecture Freeze CF-12/CF-13

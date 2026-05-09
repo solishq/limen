@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Data management API wrapper for the API surface.
  * S ref: I-02 (user data ownership), S3.6 (data directory),

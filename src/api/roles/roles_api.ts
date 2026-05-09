@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * RBAC administration API wrapper for the API surface.
  * S ref: §34 (RBAC), I-13 (authorization completeness)

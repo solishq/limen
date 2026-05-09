@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Limen Error Codes
 
 Every error thrown by Limen is a `LimenError` with a typed `code`, a human-readable `message`, a `retryable` flag, and optional `cooldownMs` and `suggestion` fields.

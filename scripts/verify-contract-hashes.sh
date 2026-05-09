@@ -1,4 +1,6 @@
 #!/bin/bash
+# @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+# @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 # R2-11: Verify contract manifest SHA-256 hashes.
 # Reads contracts/phase-x.contracts.json and verifies each listed contract
 # file's SHA-256 hash matches the recorded value. Exits 1 on any mismatch.

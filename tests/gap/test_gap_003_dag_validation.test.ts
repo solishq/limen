@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * TEST-GAP-003: Task graph DAG validation — S16, SD-14
  * Verifies: kahnsAlgorithm rejects cyclic graphs and accepts valid DAGs.

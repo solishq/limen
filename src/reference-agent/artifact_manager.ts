@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * ArtifactManager -- workspace management for artifacts.
  * S ref: S18 (create_artifact), S19 (read_artifact),

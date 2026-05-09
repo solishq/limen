@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Layer 1 + 1B: TenantScopedConnection Facade Unit Tests
  * Verifies: injectTenantPredicate SQL injection logic, facade mode switching,

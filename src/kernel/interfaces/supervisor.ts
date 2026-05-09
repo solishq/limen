@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Supervisor Decision Model interfaces for Phase 0A governance layer.
  * Truth Model: Deliverable 5 (Supervisor Decision Model)

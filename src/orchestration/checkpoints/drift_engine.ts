@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Drift Engine — Semantic drift detection at checkpoints.
  * S ref: I-24 (Goal Anchoring), FM-14 (Semantic Drift), FM-16 (Mission Drift)

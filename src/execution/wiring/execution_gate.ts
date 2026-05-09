@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Wire-EGP-01: Execution Gate — EGP reservation check before SCHEDULED→RUNNING.
  * Spec ref: EGP-I14 (reservation requirement), I-76, DC-EGP-064

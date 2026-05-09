@@ -1,14 +1,19 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # internal-OS Master Index v2.1-FINAL
 
 **Status:** Active canonical index
-**Governing:** CDM v2.1 + Contract Compliance v2.1
-**Rule:** This index is the canonical entrypoint for adopted internal-OS contracts and continuity artifacts. Indexed contract families may not be implemented from stale, unindexed, or hash-mismatched files.
+**Governing:** SolisForge Protocol v1.4 — Sole Governing Doctrine [HISTORICAL: CDM v2.1 + Contract Compliance v2.1 — superseded per SolisForge §2]
+**Rule:** This index is the canonical entrypoint for adopted contracts and continuity artifacts. Indexed contract families may not be implemented from stale, unindexed, or hash-mismatched files.
 
 ## 1. Doctrine Anchors
 
 | Path | Role | Version | Canonical Owner | Hash | Dependency Direction | LCI Note |
 |------|------|---------|-----------------|------|----------------------|----------|
-| `CONTRACT-COMPLIANCE-v2.1.md` | Contract compliance doctrine | 2.1 | SolisHQ CDM Authority | `2f53b85b3800c303a79b603205ec3de32c5c6a8ae7ed9189ae32341041a2b45f` | Upstream of all contract-family adoption gates | Preserves Contract-First Discipline, HB-37, HB-38, LCI closure, and Zero-Orphan rules. |
+| `SolisForge Protocol v1.4` | Sole governing doctrine | 1.4 | SolisHQ Engineering Authority | `RATIFIED-2026-05-08` | Upstream of all artifacts, contracts, and enforcement gates | Supersedes Premier Engineering Standard v2.2 and CDM v2.1. Absorbs all prior mechanisms per §2.1 Disposition Table. |
+| `contracts/LIMEN_V5_INTEGRATION_CONTRACT.md` | Limen v5 convergence contract | 1.0.0 | Forge Critical Authority | `1b49a944e26e277902f68b868f25c3d8513dc30ff7b2ddd0005fc7a802bc7e10` | Upstream of all file compliance and validation | Declares SolisForge v1.4 sole governance, baseline freeze f4ead70, installs validation tools. |
+| `CONTRACT-COMPLIANCE-v2.1.md` | Contract compliance doctrine [HISTORICAL — superseded by SolisForge v1.4] | 2.1 | SolisHQ CDM Authority | `2f53b85b3800c303a79b603205ec3de32c5c6a8ae7ed9189ae32341041a2b45f` | HISTORICAL — mechanisms absorbed into SolisForge §9 | Preserves Contract-First Discipline, HB-37, HB-38, LCI closure, and Zero-Orphan rules — all now enforced via SolisForge. |
 
 ## 2. Phase X -- AI Agent Integration Layer
 

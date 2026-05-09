@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * SC-9: submit_result -- Completes a mission with result.
  * S ref: S23, S6 (Mission lifecycle), I-03, I-17, I-18, I-21, I-25

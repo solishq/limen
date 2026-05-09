@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Mission Store -- Foundation store for all orchestration.
  * S ref: S6 (Mission lifecycle), I-18 (persistence), I-20 (tree limits),

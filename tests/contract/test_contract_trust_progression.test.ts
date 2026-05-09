@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Contract tests for I-09 Trust Progression (Sprint 2 Trust & Learning).
  * Validates trust state machine, safety demotion, append-only audit, and tenant isolation.

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Database lifecycle interface types.
  * S ref: §3.1, §3.4, §3.6, I-01, I-05, C-05, FM-05

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Bounded Cognition -- Eager compaction of completed subtrees.
  * S ref: I-21 (bounded cognitive state), S40 (operational failure defense),

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * WMP (Working Memory Protocol) harness — thin factory + cross-subsystem wiring.
  * Spec ref: WMP v1.0 Design Source (FINAL DRAFT), C-07 (Object.freeze)

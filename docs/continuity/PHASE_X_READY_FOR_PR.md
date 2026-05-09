@@ -1,7 +1,10 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Phase X Ready for PR Package
 
 **Status:** Ready package
-**Governing:** CDM v2.1 + Contract Compliance v2.1
+**Governing:** SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1 + Contract Compliance v2.1 — superseded]
 **Source branch:** `phase-x-remediation`
 **Clean commit:** `5fdbf68`
 **Target integration branch:** `integrate/phase-x-contracts`
@@ -28,7 +31,7 @@
 
 ```markdown
 ## Summary
-Integrates the CLEAN Phase X remediation branch into main and registers Phase X as a canonical CDM v2.1 contract family.
+Integrates the CLEAN Phase X remediation branch into main and registers Phase X as a canonical contract family [under CDM v2.1, now governed by SolisForge v1.4].
 
 ## Traceability
 - Source branch: phase-x-remediation
@@ -62,7 +65,7 @@ CanonicalTypes ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩
 
 ## 3. Ready for PR Summary
 
-The Phase X documentation package is ready for PR preparation under CDM v2.1. `MASTER-INDEX-v2.1-FINAL.md` registers Phase X as a canonical contract family, names `contracts/phase-x.contracts.json` as the compliance authority, records hashes and dependency direction, and indexes continuity artifacts so Phase X is not orphaned.
+The Phase X documentation package is ready for PR preparation under SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1]. `MASTER-INDEX-v2.1-FINAL.md` registers Phase X as a canonical contract family, names `contracts/phase-x.contracts.json` as the compliance authority, records hashes and dependency direction, and indexes continuity artifacts so Phase X is not orphaned.
 
 `CONTRACT-COMPLIANCE-v2.1.md` now adopts Phase X as the canonical example for contract-first phase integration, HB-37 defense-set monotonicity, HB-38 interface/hash binding, LCI closure, and shared-type discipline. It also defines the required rule for future phase-level contract families: versioned contract list, sha256 hashes, defense sets, monotonicity proof, LCI assertion and closure proof, independent Breaker/CLEAN evidence, Master Index registration, and continuity handoff.
 

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Limen v1.0 — TGP (Technique Governance Protocol) Executable Contract Tests
  * Phase: Implementation Verification (replaces NOT_IMPLEMENTED harness tests)

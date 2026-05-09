@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Contributing to Limen
 
 Thank you for your interest in contributing to Limen. This document provides guidelines for contributing to the project.

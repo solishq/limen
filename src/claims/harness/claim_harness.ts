@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * CCP (Claim Protocol) harness — factory + wiring.
  * Spec ref: CCP v2.0 Design Source, C-07 (Object.freeze)

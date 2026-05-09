@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Limen v1.0 — Phase 5 Sprint 5D: Integration Tests
  * Proves end-to-end composition: transport engine + real adapters + retry + circuit breaker + streaming + credential scrubbing.

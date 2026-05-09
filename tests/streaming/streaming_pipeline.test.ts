@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 // Verifies: §27, §38 T8, FM-06, FM-02, I-26, I-27
 // Phase 4: API Surface -- Streaming pipeline phases verification
 //

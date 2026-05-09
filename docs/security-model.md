@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Security Model
 
 Limen treats security as infrastructure, not an add-on. Every layer of the architecture enforces security properties independently.

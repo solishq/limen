@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Orchestration Layer interface types.
  * S ref: S6-S11, S14-S24, S26, I-17-I-28, FM-13-FM-19

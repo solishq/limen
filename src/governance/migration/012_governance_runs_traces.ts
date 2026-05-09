@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Migration v21: Governance runs, attempts, and trace events.
  * Truth Model: Deliverable 2 (Run Identity), Deliverable 3 (Trace Events)

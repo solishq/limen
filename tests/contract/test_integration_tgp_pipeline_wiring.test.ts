@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Phase 2B Pipeline-Level Integration Tests: TGP ↔ ChatPipeline Call-Site Wiring
  * Findings: BPB-CROSS-01, BPB-TGP-01, BPB-TGP-02, BPB-TGP-03

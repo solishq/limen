@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Task Graph Engine -- DAG validation with Kahn's algorithm.
  * S ref: S16 (propose_task_graph), S7 (Task lifecycle), I-20 (task limits),

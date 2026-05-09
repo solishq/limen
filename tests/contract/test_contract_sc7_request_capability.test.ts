@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * SC-7 Contract Tests: request_capability -- Facade-Level Verification
  * S ref: S21 (request_capability), I-12 (sandboxing), I-22 (capability immutability),

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Contract test for F-WITNESS-001: replay snapshot on mission creation.
  * Verifies that missions.create() triggers a mission_start snapshot

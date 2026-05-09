@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * WMP (Working Memory Protocol) stores — SQLite-backed implementation.
  * Pattern P-010: All business logic lives here. Harness is thin wiring only.

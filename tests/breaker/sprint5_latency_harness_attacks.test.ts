@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Breaker attack tests for Latency Harness (I-14: Predictable Latency).
  * Sprint 5 — Performance & Events.

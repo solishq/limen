@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Getting Started with Limen
 
 Limen is a governed knowledge store for AI agents. This guide walks you through storing and recalling knowledge, then optionally connecting an LLM provider.

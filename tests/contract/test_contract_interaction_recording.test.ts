@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Contract tests for LEARNING-02 Interaction Recording (Sprint 2 Trust & Learning).
  * Validates core_interactions table, content immutability trigger, and tenant isolation.

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Cascade Walker — BFS STALE flag propagation through artifact dependency graph.
  * S ref: I-23 (Artifact Dependency Tracking), I-19 (Artifact Immutability)

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Event Propagation -- Event routing through mission trees.
  * S ref: S10 (Event), S20 (emit_event), FM-13 (unbounded autonomy),

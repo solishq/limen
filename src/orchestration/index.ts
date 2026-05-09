@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Orchestration Layer Facade -- createOrchestration() factory.
  * S ref: SD-10 (explicit DI), C-07 (Object.freeze), S2 (three-layer model)

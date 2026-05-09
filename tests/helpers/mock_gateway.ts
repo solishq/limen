@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Mock LLM Gateway for pipeline determinism tests.
  * Spec ref: I-28 (Pipeline Determinism), I-25 (Deterministic Replay)

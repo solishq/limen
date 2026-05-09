@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * SC-6: emit_event -- Agent signals something happened.
  * S ref: S20, S10 (Event), FM-13 (unbounded autonomy)

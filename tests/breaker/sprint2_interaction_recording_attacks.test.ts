@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * BREAKER: Sprint 2 Interaction Recording Attack Tests
  * Target: LEARNING-02 core_interactions table (migration v33, chat_pipeline.ts Phase 7)

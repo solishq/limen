@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * BREAKER: Sprint 2 Learning Pipeline Attack Tests
  * Target: collectCandidates in technique_extractor.ts (LEARNING-01)

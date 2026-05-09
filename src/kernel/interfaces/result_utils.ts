@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Result utility functions for type-safe error propagation.
  * S ref: C-03 (TypeScript strict), §3.1 (deterministic infrastructure)

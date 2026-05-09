@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 // Verifies: §41 UC-8, §28, I-03, I-04, FM-02
 // Phase 4: API Surface -- UC-8 structured automation verification
 //

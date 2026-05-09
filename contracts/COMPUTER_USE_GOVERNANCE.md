@@ -1,7 +1,10 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Computer Use Governance Contract v2.2.0
 
 **Status:** RATIFIED DESIGN --- Pending Implementation
-**Governing:** CDM v2.1 + Contract Compliance v2.1
+**Governing:** SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1 + Contract Compliance v2.1 — superseded]
 **Scope:** Governance, refusal, and audit for all AI agent computer actions
 **Contract Hash:** Tracked in `contracts/phase-x.contracts.json`
 

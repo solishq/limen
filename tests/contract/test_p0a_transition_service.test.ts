@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * P0-A: OrchestrationTransitionService Contract Tests
  * Truth Model: S6 (Mission lifecycle), S7 (Task lifecycle), BC-062, BC-070, I-03, I-25

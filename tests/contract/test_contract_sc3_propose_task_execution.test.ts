@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * SC-3 Contract Tests: propose_task_execution -- Facade-Level Verification
  * S ref: S17 (propose_task_execution), S7 (task lifecycle), I-03 (atomic audit),

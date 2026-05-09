@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * SC-5: read_artifact -- Reads an artifact with dependency tracking.
  * S ref: S19, I-23 (dependency tracking), I-03 (atomic audit)

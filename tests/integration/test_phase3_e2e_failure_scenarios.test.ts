@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Sprint 3B: Failure Scenario E2E Integration Tests
  * Phase 3 — Orchestration Engine Rejection & Consistency Verification

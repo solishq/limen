@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * LLM Gateway implementation.
  * S ref: §25.4 (LLM Gateway), DL-1 (Provider Routing), I-04 (Provider Independence)

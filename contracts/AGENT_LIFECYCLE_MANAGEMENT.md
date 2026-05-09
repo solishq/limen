@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Agent Lifecycle Management Contract v1.3.0
 
 > **Implementation Status (Finding-39):** This contract is RATIFIED DESIGN — Pending Implementation.
@@ -6,7 +9,7 @@
 > local lifecycle simulation but does not implement this contract's system-wide agent lifecycle.
 
 **Status:** RATIFIED DESIGN -- Pending Implementation
-**Governing:** CDM v2.1 + Contract Compliance v2.1
+**Governing:** SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1 + Contract Compliance v2.1 — superseded]
 **Scope:** Agent registration, capability evolution, consent governance, and knowledge exchange
 **Classification:** internal
 

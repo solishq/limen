@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Trust Progression Logic — I-09 (Trust is Earned)
  * Store-level implementation: trust state machine + safety demotion.

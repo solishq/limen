@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Sprint 3C: Recursive Mission Integration Tests (UC-10)
  * Phase 3 — Parent-Child Mission Composition Verification

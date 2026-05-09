@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Structured output (infer) pipeline for the API surface.
  * S ref: S28 (structured output), SD-09 (JSON Schema or Zod), FPD-6 (strict mode),

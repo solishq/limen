@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * createLimen() factory -- the sole entry point to the Limen engine.
  * S ref: S3.3 (engine not framework), C-06 (independent instances),

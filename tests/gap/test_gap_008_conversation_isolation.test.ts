@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * TEST-GAP-008: Conversation Isolation — S26, I-27
  * Verifies: Conversations scoped to session+agent, fork tenant verification.

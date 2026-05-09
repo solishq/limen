@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * BREAKER: Sprint 3 Drift Engine Attack Tests
  * Target: I-24 Goal Drift Detection (drift_engine.ts, checkpoint_coordinator.ts)

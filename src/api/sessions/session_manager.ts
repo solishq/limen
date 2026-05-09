@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Session management for the API surface.
  * S ref: S26 (conversation model), SD-07 (session resumption), SD-15 (default session caching),

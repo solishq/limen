@@ -1,7 +1,10 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Agent Intelligence Bridge Contract v1.2.0
 
 **Status:** RATIFIED DESIGN — Pending Implementation
-**Governing:** CDM v2.1 + Contract Compliance v2.1
+**Governing:** SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1 + Contract Compliance v2.1 — superseded]
 **QAL:** 3 (agent autonomy substrate — incorrect behavior degrades learning quality)
 **Scope:** Technique learning, cognitive health, and self-healing for AI agents
 **Contract Hash:** Tracked in `contracts/phase-x.contracts.json`

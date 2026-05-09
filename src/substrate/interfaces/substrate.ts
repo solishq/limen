@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Execution Substrate interface types.
  * S ref: S25 (Execution Substrate), S2 (Three-layer model), C-07 (Object.freeze)

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Layer 2B: Adversarial Tenant Isolation Tests
  * Verifies: The enforcement resists ATTACK, not just normal use.

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Stream parsers for SSE and NDJSON protocols.
  * S ref: §27 (Streaming Protocol), §25.4 (LLM Gateway)

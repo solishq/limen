@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Chat pipeline orchestration for the API surface.
  * S ref: S27 (streaming model), SD-01 (sync return), I-26 (streaming equivalence),

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Capability Manifest Schema interfaces for Phase 0A governance layer.
  * Truth Model: Deliverable 9 (Capability Manifest Schema), Deliverable 10 (Retry/Replay Safety Matrix)

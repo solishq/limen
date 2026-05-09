@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * TGP (Technique Governance Protocol) harness — factory + wiring.
  * Spec ref: TGP v1.0 Design Source (FINAL), Architecture Freeze CF-12/CF-13

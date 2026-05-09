@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Phase 2B Integration Tests: EGP ↔ Execution Wiring
  * Spec ref: EGP v1.0 Design Source, I-76/77/78/83/86/87

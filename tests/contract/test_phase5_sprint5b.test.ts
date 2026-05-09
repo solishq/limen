@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Limen v1.0 — Phase 5 Sprint 5B: OpenAI + Google Adapters
  * Contract tests for openai_compat, openai_adapter, and gemini_adapter.

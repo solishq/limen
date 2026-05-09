@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Artifact Store -- Immutable artifact workspace with dependency tracking.
  * S ref: S8 (Artifact), I-19 (immutability), I-23 (dependency tracking),

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 // SCAFFOLD: Decorative test — assert.ok(true) or local-constant assertions only.
 // Quarantined by audit-remediation (2026-03-19). Retained as Phase 2C implementation scaffolds.
 // To convert: replace assertions with real store/harness calls against implementation code.

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Contract tests for Webhook Delivery (EVENT-01: Webhook Delivery).
  * Phase: Sprint 5 (Performance & Events)

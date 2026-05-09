@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * CGP (Context Governance Protocol) stores — all business logic.
  * Spec ref: CGP v1.0 Design Source (FINAL), Architecture Freeze CF-01/CF-03/CF-04/CF-07/CF-08/CF-09/CF-10

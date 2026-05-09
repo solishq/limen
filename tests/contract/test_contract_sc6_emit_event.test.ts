@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * SC-6 Contract Tests: emit_event -- Facade-Level Verification
  * S ref: S20 (emit_event), S10 (Event), FM-13 (unbounded autonomy),

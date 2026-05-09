@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # @limen-ai/langgraph
 
 Governed LangGraph checkpoint and store adapter for Limen. Bridges LangGraph's `BaseCheckpointSaver` and `BaseStore` interfaces to Limen's append-only chain + projection architecture with governance gates that enforce projection validity before reads.

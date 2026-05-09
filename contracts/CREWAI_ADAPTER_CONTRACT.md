@@ -1,7 +1,10 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # CrewAI Adapter Contract v1.0.0
 
 **Status:** RATIFIED (Final Breaker: CLEAN, 25/25 findings resolved)
-**Governing:** CDM v2.1 + Contract Compliance v2.1
+**Governing:** SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1 + Contract Compliance v2.1 — superseded]
 **Scope:** CrewAI framework adapter for Limen governance substrate integration
 **Classification:** internal
 **Phase:** Phase 3 (Enterprise Readiness) / Phase X (Agent Integration Layer)

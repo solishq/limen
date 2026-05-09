@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Forward-only migration v16: Learning System Technique Storage
  * S ref: S29.2 (technique schema), I-07 (agent isolation), FM-10 (tenant isolation)

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * DBA Contract Tests — Limen v1.0
  * Spec ref: DBA v1.0 Design Source §11 (26 conformance tests CT-DBA-01..CT-DBA-26)

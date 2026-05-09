@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * API Surface public type definitions.
  * S ref: S2 (three-layer model), S3.3 (engine not framework), S14-S24 (10 system calls),

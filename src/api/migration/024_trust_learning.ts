@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
  * Migration v33: Trust Progression + Safety Violations + Interactions.
  * Spec ref: I-09 (Trust is Earned), LEARNING-01 (Cross-Agent Learning),
