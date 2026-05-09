@@ -85,16 +85,18 @@ if [ -f "MASTER-INDEX-v2.1-FINAL.md" ]; then
     fi
 fi
 
-# CHECK 8: Source file sampling (check 10 random files for headers)
-SAMPLE_FILES=$(find src -name "*.ts" -type f 2>/dev/null | shuf | head -10)
-SAMPLE_MISSING=0
-for f in $SAMPLE_FILES; do
-    if ! head -3 "$f" | grep -q "@governance SolisForge Protocol v1.4" 2>/dev/null; then
-        SAMPLE_MISSING=$((SAMPLE_MISSING + 1))
+# CHECK 8: Invoke Traceability Scanner for full deterministic check
+if [ -x "$SCRIPT_DIR/solisforge-traceability-scanner.sh" ]; then
+    SCANNER_OUTPUT=$(bash "$SCRIPT_DIR/solisforge-traceability-scanner.sh" --ci 2>&1)
+    SCANNER_EXIT=$?
+    if [ "$SCANNER_EXIT" -ne 0 ]; then
+        VIOLATION_COUNT=$(echo "$SCANNER_OUTPUT" | grep "Violations:" | awk '{print $2}')
+        add_finding "P1" "TRACEABILITY SCANNER: $VIOLATION_COUNT file(s) missing governance declaration (run scanner for details)"
+    else
+        echo "  OK: Traceability Scanner COMPLIANT"
     fi
-done
-if [ "$SAMPLE_MISSING" -gt 0 ]; then
-    add_finding "P1" "SOURCE DRIFT: $SAMPLE_MISSING of 10 sampled source files missing governance declaration"
+else
+    add_finding "P1" "TRACEABILITY SCANNER: Not found or not executable at $SCRIPT_DIR/solisforge-traceability-scanner.sh"
 fi
 
 echo ""

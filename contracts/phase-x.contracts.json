@@ -1,8 +1,8 @@
 {
   "schemaVersion": "1.0.0",
-  "manifestVersion": "1.0.0",
-  "generatedAt": "2026-05-05T13:22:00+01:00",
-  "governing": "SolisForge Protocol v1.4 — Sole Governing Doctrine [HISTORICAL: CDM v2.1 — superseded]",
+  "manifestVersion": "1.1.0",
+  "generatedAt": "2026-05-09T08:50:00+01:00",
+  "governing": "SolisForge Protocol v1.4 \u2014 Sole Governing Doctrine [HISTORICAL: CDM v2.1 \u2014 superseded]",
   "phase": "Phase X",
   "status": "complete",
   "hardBansCovered": {
@@ -93,6 +93,12 @@
       "contractVersion": "1.0.0",
       "sha256": "ec9f5f16669bc8f9fae45593f646c6414ec7d7df54555b2c6a4cfb1699fc7728",
       "role": "crewai_adapter"
+    },
+    {
+      "path": "contracts/LIMEN_V5_INTEGRATION_CONTRACT.md",
+      "contractVersion": "1.0.0",
+      "sha256": "329e6e3b1ab644b2bab70e857b896479dc5e362fc25712404ee68acad40d1e85",
+      "role": "solisforge_convergence"
     }
   ],
   "defenseSetBefore": [
@@ -150,7 +156,7 @@
   ],
   "monotonicityProof": {
     "claim": "defenseSetAfter is a strict superset of defenseSetBefore; no defense from the previous remediated suite is removed or weakened.",
-    "setRelation": "defenseSetAfter ⊇ defenseSetBefore",
+    "setRelation": "defenseSetAfter \u2287 defenseSetBefore",
     "removedDefenses": [],
     "addedDefenses": [
       "cdm_v2_1_phase8_manifest",
@@ -188,12 +194,12 @@
       "crewai_adapter_manifest_tracking"
     ],
     "closure": "Any future interface, defense, or contract hash change must update this manifest before certification.",
-    "ciEnforcement": "PENDING — Finding-55: Add CI check that computes set difference and fails if any defense is removed without explicit override"
+    "ciEnforcement": "PENDING \u2014 Finding-55: Add CI check that computes set difference and fails if any defense is removed without explicit override"
   },
   "lci": {
     "name": "Phase X Contract Integrity",
     "assertion": "For every Phase X agent operation, canonical types, governance gates, consent checks, rate limits, and audit obligations compose into one closed contract family with no authority expansion outside Limen Core.",
-    "tau": "tau_PhaseX = CanonicalTypes ∩ CorePermissionMapping ∩ GovernanceGate ∩ ConsentGate ∩ AuditPath ∩ EventBus ∩ RateLimit ∩ TokenEstimator ∩ SearchGate ∩ CoordinationGate ∩ OutputGate ∩ LifecycleState",
+    "tau": "tau_PhaseX = CanonicalTypes \u2229 CorePermissionMapping \u2229 GovernanceGate \u2229 ConsentGate \u2229 AuditPath \u2229 EventBus \u2229 RateLimit \u2229 TokenEstimator \u2229 SearchGate \u2229 CoordinationGate \u2229 OutputGate \u2229 LifecycleState",
     "tauDerivation": [
       "CanonicalTypes: all shared cross-contract types, including adapter-facing memory request DTOs, are defined only in SHARED_TYPES.md.",
       "CorePermissionMapping: Phase X permissions are limited to Limen Core Permission strings.",

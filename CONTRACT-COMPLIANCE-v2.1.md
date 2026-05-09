@@ -12,11 +12,11 @@
 **Governing:** SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1 — all mechanisms absorbed into SolisForge §9]
 **Scope:** Contract-first discipline, monotonicity enforcement, LCI closure, and canonical contract adoption rules — now enforced via SolisForge §9 Enforcement Mechanisms.
 
-## 1. Contract-First Discipline
+## 1. Contract-First Discipline [HISTORICAL — now enforced via SolisForge §9 Contract-First Gate]
 
-Every governed implementation MUST be preceded by a ratified contract or by an explicit contract amendment. Implementation may not create a parallel standard, broaden authority, redefine shared types, or silently bypass governance obligations.
+Every governed implementation MUST be preceded by a ratified contract or by an explicit contract amendment. Implementation may not create a parallel standard, broaden authority, redefine shared types, or silently bypass governance obligations. [HISTORICAL — absorbed into SolisForge §9]
 
-Phase-level contract families MUST be integrated as indexed canonical families, not as loose documentation.
+Phase-level contract families MUST be integrated as indexed canonical families, not as loose documentation. [HISTORICAL — absorbed into SolisForge §9]
 
 ## 2. Canonical Example: Phase X Contract-First Integration
 
@@ -30,9 +30,9 @@ Phase X -- AI Agent Integration Layer is the canonical example for contract-firs
 | LCI closure proof | Phase X defines `tau_PhaseX` and closure assertions | Contract families must close authority, type, event, audit, token, projection, and lifecycle boundaries before adoption. |
 | Shared-type discipline | `contracts/SHARED_TYPES.md` is the sole cross-contract type registry | Contracts may reference shared types but may not redefine them locally or create conflicting aliases. |
 
-## 3. Rule: Phase-Level Contract Family Adoption
+## 3. Rule: Phase-Level Contract Family Adoption [HISTORICAL — now governed by SolisForge §6 Forge Cycle]
 
-Any future phase-level contract family MUST include all of the following before it can be adopted as canonical:
+Any future phase-level contract family MUST include all of the following before it can be adopted as canonical: [HISTORICAL — absorbed into SolisForge §6, §8.1, §9]
 
 1. Versioned contract list.
 2. sha256 hashes for every public contract and required architecture document.
@@ -52,9 +52,9 @@ Any future phase-level contract family MUST include all of the following before 
 - No contract family may be merged with orphaned contract files, orphaned continuity artifacts, or unverified manifest hashes.
 - No implementation may treat documentation-only adoption as equivalent to canonical index adoption.
 
-## 5. Verification Gate
+## 5. Verification Gate [HISTORICAL — now enforced via SolisForge §6 Phase 7 Certifier Evidence Gate]
 
-Before merge or implementation, the reviewing authority MUST verify:
+Before merge or implementation, the reviewing authority MUST verify: [HISTORICAL — absorbed into SolisForge §6 Phase 7]
 
 1. The Master Index references every adopted phase file.
 2. The manifest hashes match the workspace contents.

@@ -9,7 +9,7 @@
 # Usage: bash scripts/solisforge-traceability-scanner.sh [--ci] [--verbose]
 #
 # Options:
-#   --ci       Exit with code 1 on any violation (for CI pipelines)
+#   --ci       Exit with code 1 on any violation (for manual or future CI use)
 #   --verbose  Print every file checked, not just violations
 
 set -euo pipefail
@@ -75,7 +75,8 @@ echo ""
 while IFS= read -r f; do
     check_file "$f"
 done < <(find src tests contracts docs packages scripts \
-    -type f \( -name "*.ts" -o -name "*.js" -o -name "*.mjs" -o -name "*.md" -o -name "*.sh" -o -name "*.rs" \) \
+    examples explorer benchmarks self-host promises .github \
+    -type f \( -name "*.ts" -o -name "*.js" -o -name "*.mjs" -o -name "*.md" -o -name "*.sh" -o -name "*.rs" -o -name "*.yml" -o -name "*.yaml" \) \
     2>/dev/null | sort)
 
 # Scan top-level files

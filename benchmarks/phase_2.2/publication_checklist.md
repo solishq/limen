@@ -1,3 +1,6 @@
+<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+
 # Phase 2.2 Publication Checklist
 
 **Version:** 1.0.0
