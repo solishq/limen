@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! `SqliteTransactionReadContext<'tx>` — implements `ChainReadContext` from
 //! `limen_foundation_contract` for Profile 1/2 SQLite backend (v1.3 §2.1).
 //!

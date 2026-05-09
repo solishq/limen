@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+# @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 # Limen v5 — Forbidden dependency edge checker
 # Enforces Document 27 v1.3 Section 0.2 at CI time.
 # Uses `cargo metadata` to parse the workspace dependency graph.

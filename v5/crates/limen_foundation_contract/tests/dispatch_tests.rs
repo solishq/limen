@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! M6 Dispatch Tests — operation order, composition, fresh fields, end-to-end.
 //!
 //! NF-02 amendment: all tests use `run_commit_transaction_gated` with a proper

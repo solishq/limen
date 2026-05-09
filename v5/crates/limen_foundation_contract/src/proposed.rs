@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! ProposedTransitionEnvelope and related types (v1.3 §4.1).
 
 use std::marker::PhantomData;

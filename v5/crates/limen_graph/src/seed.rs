@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 use crate::store::InMemoryGraphStore;
 use crate::types::{EdgeType, NodeLifecycleState, GraphEdge, GraphNode, NodeType};
 use crate::versioning::{BeliefBranch, BeliefVersion, BeliefVersionStore};

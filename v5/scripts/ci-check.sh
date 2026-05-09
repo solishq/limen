@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+# @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 # Limen v5 — Local CI check script
 # Runs all verification steps that would run in CI.
 # Execute before every commit/PR. Exit 1 on any failure.

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! PostgreSQL projection storage for Limen v5.
 //!
 //! Provides the same 5-table projection schema as the SQLite backend:

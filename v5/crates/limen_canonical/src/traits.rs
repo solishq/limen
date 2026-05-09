@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! Canonical serialization traits (v1.3 §10.3).
 //!
 //! CONTRACT: `canonical_bytes()` and `canonical_json_bytes()` serialize from

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! GovernanceEvaluation — Property 6: Governance before commit (v1.3 §1.2).
 //!
 //! Structural contract: evaluates whether governance constraints permit

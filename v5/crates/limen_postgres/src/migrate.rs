@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! SQLite-to-PostgreSQL migration for Limen v5 chain and projection data.
 //!
 //! The migration is a one-shot, forward-only transfer:

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! Prometheus metrics for Limen v5 substrate operations.
 //!
 //! All metrics use the `prometheus-client` crate's type-safe registry model.

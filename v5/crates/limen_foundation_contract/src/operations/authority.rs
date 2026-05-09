@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! AuthorityAndCommitEvaluation — Property 5 + Property 2 (v1.3 §1.2).
 //!
 //! Structural contract: evaluates whether the proposer's claimed authority

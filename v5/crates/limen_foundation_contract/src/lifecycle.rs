@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! Lifecycle state machine for substrate dispatch gating.
 //!
 //! Enforces valid state transitions and provides a thread-safe guard

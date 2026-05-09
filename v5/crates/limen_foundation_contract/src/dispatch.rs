@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! Substrate dispatch loop and public entry point (M6).
 //!
 //! v1.3 §1.3 fixed order: Refusal → Authority → Governance → Cascade.

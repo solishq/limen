@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! SQLite chain storage — opens DB, configures WAL, holds connection.
 //! Storage-layer types that do NOT redefine v1.3 §0.7 contract types.
 

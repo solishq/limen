@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! Commit path per v1.3 §6.4 steps 1–8.
 //!
 //! P0 amendment: actual `VerdictSet` from dispatch loop is threaded through

@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! Typed, unforgeable, substrate-owned read capabilities (v1.3 §2.1).
 //!
 //! `FoundationReadCapability` — bound to canonical chain state.

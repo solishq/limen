@@ -40,7 +40,7 @@ is_exempt() {
             return 0 ;;
         .gitignore|.nvmrc|.env*|.dockerignore|LICENSE|NOTICE|.provenance.json)
             return 0 ;;
-        *.d.ts|*/target/*)
+        *.d.ts|*/target/*|*.stderr)
             return 0 ;;
         *)
             return 1 ;;
@@ -75,8 +75,8 @@ echo ""
 while IFS= read -r f; do
     check_file "$f"
 done < <(find src tests contracts docs packages scripts \
-    examples explorer benchmarks self-host promises .github \
-    -type f \( -name "*.ts" -o -name "*.js" -o -name "*.mjs" -o -name "*.md" -o -name "*.sh" -o -name "*.rs" -o -name "*.yml" -o -name "*.yaml" \) \
+    examples explorer benchmarks self-host promises .github v5 reports \
+    -type f \( -name "*.ts" -o -name "*.js" -o -name "*.mjs" -o -name "*.md" -o -name "*.sh" -o -name "*.rs" -o -name "*.yml" -o -name "*.yaml" -o -name "*.toml" \) \
     2>/dev/null | sort)
 
 # Scan top-level files

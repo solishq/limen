@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! CascadeIntegrityEvaluation — Property 8: Provenance and cascade integrity (v1.3 §1.2).
 //!
 //! Structural contract: evaluates whether provenance and cascade relationships

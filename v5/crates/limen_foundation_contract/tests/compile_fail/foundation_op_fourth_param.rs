@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /// Compile-fail test: a foundation operation accepting a fourth parameter does not type-check.
 /// The FoundationOperation trait signature admits exactly three input classes.
 /// This file MUST fail to compile.

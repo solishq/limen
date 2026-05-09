@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! M3 Chain Storage Tests — Interface-First Contract Testing
 //! Tests A through G per DOC-28 M3 requirements.
 

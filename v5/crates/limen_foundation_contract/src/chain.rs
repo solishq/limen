@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! Chain entry types owned by the foundation contract (v1.3 §6.1, §0.7).
 //! Storage representation lives in `limen_chain`; type definitions live here.
 

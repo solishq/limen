@@ -1,3 +1,5 @@
+# @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+# @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 [package]
 name = "limen_foundation_contract"
 description = "Foundation contract: FoundationOperation trait, capability types, envelope types, verdict types, ChainReadContext trait."

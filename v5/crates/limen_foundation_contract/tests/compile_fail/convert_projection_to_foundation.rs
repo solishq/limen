@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /// Compile-fail test: ProjectionReadCapability cannot convert to FoundationReadCapability.
 /// No From, Into, AsRef, or any conversion path exists.
 /// This file MUST fail to compile.

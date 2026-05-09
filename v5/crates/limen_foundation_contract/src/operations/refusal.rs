@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! RefusalEvaluation — Property 3: Refusal at commit (v1.3 §1.2).
 //!
 //! Structural contract: evaluates whether a proposed transition should be

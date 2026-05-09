@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! Error types for PostgreSQL storage operations.
 //!
 //! All errors map to `ChainReadError::StorageError` at the trait boundary,

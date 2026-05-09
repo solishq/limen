@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! FoundationOperation trait — the three-input-class signature (v1.3 §1.1).
 
 use limen_types::OperationType;

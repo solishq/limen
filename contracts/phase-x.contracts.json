@@ -13,85 +13,85 @@
     {
       "path": "contracts/SHARED_TYPES.md",
       "contractVersion": "1.4.1",
-      "sha256": "1158992f413e2e1653432fe22b0d39a494117af600257570595c40113cbd3b3f",
+      "sha256": "d5ee1d695ebb098ac3606592a090e6b5f4996d064e766468e19ab21845dd1451",
       "role": "canonical_shared_types"
     },
     {
       "path": "contracts/AGENT_MEMORY_BRIDGE.md",
       "contractVersion": "1.3.1",
-      "sha256": "c761bc31588b5ffe8de782241353e99a5137cb7c8cebc808d4cc1136de68e186",
+      "sha256": "a09dd37f1c36779c8b8c9dbbc3403ef1e15b3dff26d1fca70bdaeabf670bb1a2",
       "role": "memory_bridge"
     },
     {
       "path": "contracts/COMPUTER_USE_GOVERNANCE.md",
       "contractVersion": "2.2.0",
-      "sha256": "4fc9cea15f7201ebf96df9f5fc86197763d754655d053246f39bdf1f0a16dea3",
+      "sha256": "9ecef56cc89382b01cb4d0e85df94bd889af935116ed2be8b7306db8bb77fac3",
       "role": "computer_use_governance"
     },
     {
       "path": "contracts/AUDIT_VISUALIZATION_SCHEMA.md",
       "contractVersion": "1.2.0",
-      "sha256": "4aeb64cd2c61532643a8e84f375cf8237be5d243b8b5de9a6a5460da1836b322",
+      "sha256": "47efcadac4b1c99628e32c25f0832329f58360969aea66f04daaaa9aa6bc0ab7",
       "role": "audit_visualization"
     },
     {
       "path": "contracts/AGENT_ADAPTER_ARCHITECTURE.md",
       "contractVersion": "2.3.0",
-      "sha256": "a3c5fc11915b5baec864ea39aa90f501fc96c40810e54574e0a487c57ae02b5e",
+      "sha256": "11bf198a7ae7c142d58a17da34807657a99ab3bad050f7f4aaf9b53453e2261d",
       "role": "adapter_architecture"
     },
     {
       "path": "contracts/AGENT_INTELLIGENCE_BRIDGE.md",
       "contractVersion": "1.2.0",
-      "sha256": "34a0bb0d06cf77758d62b23de8ed4a1ad3b2b47d8b09eadcbb332d3354338c1d",
+      "sha256": "bdb9ee6d2b0d47cb9802a7b23206eccf0c3ec46f17224a12454222c73c63599b",
       "role": "intelligence_bridge"
     },
     {
       "path": "contracts/AGENT_EXECUTION_GOVERNANCE.md",
       "contractVersion": "1.2.1",
-      "sha256": "e01815604f8705b36655ea05f37b10dd2629ab65edc9d4a0817064acaa3464d0",
+      "sha256": "fc3ab621bb3a4bbeb73befbb44022c76951934cdc5e3d0b708f56921f72fb06a",
       "role": "execution_governance"
     },
     {
       "path": "contracts/AGENT_CONTEXT_GOVERNANCE.md",
       "contractVersion": "1.2.2",
-      "sha256": "1e60d5905022cb8a31d4bbe5ed2d0984f5c443b5f5d1353fde80f7f0c4db0aa0",
+      "sha256": "16734eac3539e5c36a14ce6cf30cb4229e55c55443aa55604fb832ffb9a90460",
       "role": "context_governance"
     },
     {
       "path": "contracts/AGENT_LIFECYCLE_MANAGEMENT.md",
       "contractVersion": "1.3.0",
-      "sha256": "bab7eaf100d9bbc937829f64e0097099024f6481403d5fd14682a817b113ad68",
+      "sha256": "c08b987f496ccdab1e6a78c67a974ad1eb740cb42ec99d1578b87e6a9d65552d",
       "role": "lifecycle_management"
     },
     {
       "path": "docs/PHASE_X_ARCHITECTURE_OVERVIEW.md",
       "contractVersion": "1.3.0",
-      "sha256": "7292b247d518e1435a1432c1b974d48b38cfe9fccd06ba26d9d189701c92e2bb",
+      "sha256": "32bded9d0e5cb3b90278b5081bff0a74e4e0d6bea5cfb68142c7d5d8c5035676",
       "role": "architecture_overview"
     },
     {
       "path": "contracts/AGENT_SEARCH_GOVERNANCE.md",
       "contractVersion": "1.0.0",
-      "sha256": "bbda03be7b5f5005d0f706262e9c51a25aee6c2c9dfc17e5e2c8d10a80f74213",
+      "sha256": "bfb41cafce2d1f506f7cc3abf957c0828d4f110b5372e27d2290d69862a20cd5",
       "role": "search_governance"
     },
     {
       "path": "contracts/AGENT_COORDINATION_GOVERNANCE.md",
       "contractVersion": "1.0.0",
-      "sha256": "769083f1f98a2c3cf836f47bb54a920390fee13a383ef2a3bc2b8d290ec6199f",
+      "sha256": "af8bcfe0e06660f37ae2ab658fdcc60b5ddd14f5797ac414bc722e284ba81fc2",
       "role": "coordination_governance"
     },
     {
       "path": "contracts/AGENT_OUTPUT_GOVERNANCE.md",
       "contractVersion": "1.0.0",
-      "sha256": "b330de27349ecf386631142d13db18ccf2bc26eea1e22c2a56d8d29eb4ab581d",
+      "sha256": "6c13d904839aa4eca2362c6ef11af33c17b934309324e7f690621ca8fa65794f",
       "role": "output_governance"
     },
     {
       "path": "contracts/CREWAI_ADAPTER_CONTRACT.md",
       "contractVersion": "1.0.0",
-      "sha256": "ec9f5f16669bc8f9fae45593f646c6414ec7d7df54555b2c6a4cfb1699fc7728",
+      "sha256": "4f1e58879e0a61ba8a6fee5751f930a498f3f617e96640cb4f669e21ea0a8312",
       "role": "crewai_adapter"
     },
     {

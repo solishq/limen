@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! Canonical serialization adapter — delegates to `limen_canonical::CanonicalMsgPackSerializer`.
 //!
 //! M3 originally had a standalone `rmp_serde::to_vec` helper. M4 v1.1 replaced

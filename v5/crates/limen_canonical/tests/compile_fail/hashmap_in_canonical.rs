@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /// Compile-fail test: HashMap cannot be used where CanonicalBTreeMap is expected.
 /// v1.3 §10.2 rule 1: HashMap is forbidden in canonical structures.
 /// This tests that the type system prevents HashMap from entering canonical paths.

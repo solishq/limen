@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! Type-level guards against forbidden types in canonical structures.
 //!
 //! `CanonicalBTreeMap` — the only map type permitted in canonical structures.

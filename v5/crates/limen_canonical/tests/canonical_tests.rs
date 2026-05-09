@@ -1,3 +1,5 @@
+// @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+// @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 //! M4 v1.1 Canonical Serialization Tests
 //! Authority: v1.3 §10.2 + Founder length-prefix clarification.
 //! All tests assert fixed-width integer encoding + fixed-width length prefixes.
