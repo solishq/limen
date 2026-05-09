@@ -151,14 +151,72 @@ These are lessons learned from this session. Per §8.2, they require Breaker att
 
 ---
 
-## 4. Living Document Notice
+## 4. Lessons Learned (Living — updated as we go)
 
-This audit and its amendments are updated with new findings or lessons as development continues. Each update includes date and evidence reference.
+### L-01: Phase order is load-bearing, not advisory
+We built first, extracted requirements second, wrote intent last. Every artifact we produced was correct in isolation but disconnected from the derivation chain. Intent should shape failure modes, which shape contracts, which shape architecture, which shapes code. Reversing this produces artifacts that describe reality instead of defining it. The difference matters when reality needs to change.
 
-| Date | Update | Evidence |
-|------|--------|----------|
-| 2026-05-09 | Initial audit: 9 violations, 6 amendment proposals | This session's work vs protocol text |
+### L-02: Breaker is a phase, not a quality reflex
+Dispatching Breaker on every file felt thorough but violated the protocol and consumed 55% of total tokens. The protocol's design is deliberate: Phase 3 attacks the COMPLETE contract, Phase 6 attacks the RUNNING system. Between those phases, the Builder builds without interruption. Per-file Breaker creates a false sense of security while preventing the Builder from maintaining flow.
+
+### L-03: When agents fail, the answer is STOP — not takeover
+Three times during this session, sub-agents hit usage limits. Each time, the Orchestrator took over their role directly — editing code, producing artifacts, evaluating quality. This violated role separation every time. The correct action: stop, note the incomplete work, resume in a new session with a fresh agent. Shipping slower is better than shipping with blurred accountability.
+
+### L-04: Unit tests are not a test stand
+We ran `npm test` (4,258 pass) and produced a coverage report. We called this Phase 5.5. It is not. The protocol says "Run the system. Generate real output. Observe behavior." For Limen, that means: create an agent, store a belief, trigger governance, verify the audit trail. We never did this. Static analysis tells you the code compiles. The test stand tells you the system works.
+
+### L-05: Count declarations are redundant data that drifts
+We failed the Witness twice on count mismatches — section headers declaring "N requirements" that didn't match actual row counts. The root cause: writing a number that the document itself contains. The fix: never declare counts in headers. The table IS the count. This is proposed as Amendment A-07 below.
+
+### L-06: The FORGE-GATE.md pattern is the enforcement mechanism
+SolisForge v1.4 defines WHAT to do but not HOW to enforce it session-to-session. The FORGE-GATE.md file solves this: a checklist at project root that declares the current phase, what's done, what's missing, and 10 non-negotiable rules. Read first every session. Update before every commit. This is the structural enforcement that prevents the protocol from being aspirational.
+
+### L-07: Existing projects need a modified convergence path
+SolisForge assumes greenfield (Phase 0 first). Limen v5 had 287 source files and 4,258 tests when SolisForge governance began. The protocol's §2 says "existing projects may transition at Orchestrator's discretion" but gives no guidance on HOW. Amendment A-01 proposes a modified phase order for initial convergence. This was the single most impactful gap in the protocol for our use case.
+
+### L-08: Certifier and Witness must NEVER share an agent
+We combined Certifier + Witness in single dispatches to save tokens. The Witness scored 88/100 in a combined run — but the Certifier verdict influenced the Witness context. SolisForge §4 says each role is a separate sub-agent invocation. The Witness must experience from IGNORANCE. If it reads the Certifier verdict first, it is no longer ignorant.
+
+### L-09: Negative evidence is harder than positive evidence
+We dispatched 20+ Breaker rounds and found 115+ findings. Every finding was positive evidence — "here is a defect." We never performed the Negative Evidence Mandate: constructing attacks from the FMA to prove failure modes DO NOT occur. This is the harder discipline. Finding bugs is reactive. Proving safety is proactive. Phase 6 must include the FMA as an attack checklist.
+
+### L-10: Token efficiency and protocol compliance are in tension
+SolisForge §12 targets <=40% governance overhead. But strict protocol compliance (separate Certifier + Witness dispatches, fresh agents on failure, formal convergence tracking) consumes more tokens. The resolution is NOT to cut corners on compliance. The resolution is to be more efficient in Builder dispatches — denser prompts, less exploration, more targeted work. Governance overhead should be fixed; Builder efficiency should improve.
 
 ---
 
-**This document is Phase 10 (Self-Audit) evidence. It feeds into SolisForge v1.5 per §8.2.**
+## 5. Recommendations for Next Session
+
+1. **Read FORGE-GATE.md first.** Current phase: 5. Do not advance without completing Phase 5 checkboxes.
+2. **Produce Implementation Spec** (Phase 5 artifact) — the plan for how each of the 5 gap subsystems gets built. This requires deep architectural reasoning and should be the FIRST action.
+3. **Build gap subsystems** in dependency order: Consent wiring -> Lifecycle -> Output -> Coordination -> Audit Viz.
+4. **Do NOT dispatch Breaker.** Not until Phase 5 is complete and Phase 5.5 (test stand) demonstrates the system runs end-to-end.
+5. **Track token usage.** Estimate governance overhead at end of session. If >30%, invoke Reality Anchor.
+6. **If agents fail, STOP.** Do not take over. Resume next session.
+
+---
+
+## 6. Proposed Amendments (Complete List)
+
+| ID | Title | Evidence | Status |
+|---|---|---|---|
+| A-01 | Existing Project Convergence | Phase order violated for existing codebase | Drafted |
+| A-02 | Breaker Cadence Clarification | 20+ rounds vs 2 prescribed phases | Drafted |
+| A-03 | Sub-Agent Failure Protocol | Orchestrator role takeover on agent failure | Drafted |
+| A-04 | Convergence Tracking Artifact | No formal convergence log | Drafted |
+| A-05 | Reality Anchor Trigger Automation | 55% overhead, never invoked | Drafted |
+| A-06 | Test Stand Definition Clarification | Static audit substituted for execution | Drafted |
+| A-07 | Count Declaration Prohibition | Witness failed twice on count drift | Drafted (from L-05) |
+
+---
+
+## 7. Living Document Log
+
+| Date | Update | Evidence |
+|------|--------|----------|
+| 2026-05-09 | Initial audit: 9 violations, 6 amendment proposals | Session work vs protocol text |
+| 2026-05-09 | Added 10 lessons learned, 6 recommendations, Amendment A-07 | End-of-session reflection |
+
+---
+
+**This document is Phase 10 (Self-Audit) evidence. It feeds into SolisForge v1.5 per §8.2. Updated as development continues.**
