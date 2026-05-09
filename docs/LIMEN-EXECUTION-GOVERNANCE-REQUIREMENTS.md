@@ -122,36 +122,36 @@
 | EG-3.31 | `MissionTransition` MUST have readonly fields: `from: MissionState`, `to: MissionState`, `reason: string`, `triggeredBy: AgentId` | S3.5 |
 | EG-3.32 | `created` MUST transition to: `planning`, `cancelled` only | S3.5 |
 | EG-3.33 | `planning` MUST transition to: `executing`, `cancelled` only | S3.5 |
-| EG-3.30 | `executing` MUST transition to: `reviewing`, `paused`, `completed`, `failed`, `degraded`, `blocked`, `cancelled` | S3.5 |
-| EG-3.31 | `reviewing` MUST transition to: `executing`, `paused`, `cancelled` only | S3.5 |
-| EG-3.32 | `paused` MUST transition to: `executing`, `reviewing`, `cancelled` only | S3.5 |
-| EG-3.33 | `blocked` MUST transition to: `executing`, `cancelled` only | S3.5 |
-| EG-3.34 | `degraded` MUST transition to: `executing`, `cancelled` only | S3.5 |
-| EG-3.35 | `completed` MUST have zero valid outgoing transitions (terminal) | S3.5 |
-| EG-3.36 | `failed` MUST have zero valid outgoing transitions (terminal) | S3.5 |
-| EG-3.37 | `cancelled` MUST have zero valid outgoing transitions (terminal) | S3.5 |
+| EG-3.34 | `executing` MUST transition to: `reviewing`, `paused`, `completed`, `failed`, `degraded`, `blocked`, `cancelled` | S3.5 |
+| EG-3.35 | `reviewing` MUST transition to: `executing`, `paused`, `cancelled` only | S3.5 |
+| EG-3.36 | `paused` MUST transition to: `executing`, `reviewing`, `cancelled` only | S3.5 |
+| EG-3.37 | `blocked` MUST transition to: `executing`, `cancelled` only | S3.5 |
+| EG-3.38 | `degraded` MUST transition to: `executing`, `cancelled` only | S3.5 |
+| EG-3.39 | `completed` MUST have zero valid outgoing transitions (terminal) | S3.5 |
+| EG-3.40 | `failed` MUST have zero valid outgoing transitions (terminal) | S3.5 |
+| EG-3.41 | `cancelled` MUST have zero valid outgoing transitions (terminal) | S3.5 |
 
 ### 3.6 MissionFilter
 
 | ID | Requirement | Source |
 |---|---|---|
-| EG-3.38 | `MissionFilter` MUST have optional readonly fields: `state`, `agentId`, `parentId`, `classification`, `createdAfter`, `limit` | S3.6 |
-| EG-3.39 | `MissionFilter.state` MUST accept `MissionState | readonly MissionState[]` | S3.6 |
-| EG-3.40 | `MissionFilter.parentId` MUST accept `MissionId | null` (null filters for root missions) | S3.6 |
+| EG-3.42 | `MissionFilter` MUST have optional readonly fields: `state`, `agentId`, `parentId`, `classification`, `createdAfter`, `limit` | S3.6 |
+| EG-3.43 | `MissionFilter.state` MUST accept `MissionState | readonly MissionState[]` | S3.6 |
+| EG-3.44 | `MissionFilter.parentId` MUST accept `MissionId | null` (null filters for root missions) | S3.6 |
 
 ### 3.7-3.12 Remaining Mission Models
 
 | ID | Requirement | Source |
 |---|---|---|
-| EG-3.41 | `DelegationConstraints` MUST have optional readonly fields: `budgetFraction` (0.0-1.0), `maxDepth`, `capabilities`, `deadline` (ISO-8601, must not exceed parent), `failurePolicy` | S3.7 |
-| EG-3.42 | `DelegationRecord` MUST have readonly fields: `fromAgentId`, `toAgentId`, `delegatedAt`, `constraints` | S3.8 |
-| EG-3.43 | `MissionOutcome` MUST have readonly fields: `success`, `summary`, `claimsProduced`, `artifactsProduced`, `budgetConsumed` | S3.9 |
-| EG-3.44 | `MissionCompletionResult.finalState` MUST be `'completed' | 'failed' | 'cancelled'` | S3.10 |
-| EG-3.45 | `MissionCompletionResult.tasksSummary` MUST have readonly fields: `total`, `completed`, `failed`, `cancelled` | S3.10 |
-| EG-3.46 | `MissionCompletionResult.missionId` MUST be readonly `MissionId` identifying the completed mission | S3.10 |
-| EG-3.47 | `MissionCompletionResult.duration` MUST be readonly number (milliseconds from creation to completion) | S3.10 |
-| EG-3.48 | `MissionCompletionResult.outcome` MUST be readonly `MissionOutcome` containing the completion summary | S3.10 |
-| EG-3.49 | A degraded mission has NOT completed; agent MUST transition it to `failed`/`cancelled` explicitly or resolve the degradation | S3.10 Note |
+| EG-3.45 | `DelegationConstraints` MUST have optional readonly fields: `budgetFraction` (0.0-1.0), `maxDepth`, `capabilities`, `deadline` (ISO-8601, must not exceed parent), `failurePolicy` | S3.7 |
+| EG-3.46 | `DelegationRecord` MUST have readonly fields: `fromAgentId`, `toAgentId`, `delegatedAt`, `constraints` | S3.8 |
+| EG-3.47 | `MissionOutcome` MUST have readonly fields: `success`, `summary`, `claimsProduced`, `artifactsProduced`, `budgetConsumed` | S3.9 |
+| EG-3.48 | `MissionCompletionResult.finalState` MUST be `'completed' | 'failed' | 'cancelled'` | S3.10 |
+| EG-3.49 | `MissionCompletionResult.tasksSummary` MUST have readonly fields: `total`, `completed`, `failed`, `cancelled` | S3.10 |
+| EG-3.50 | `MissionCompletionResult.missionId` MUST be readonly `MissionId` identifying the completed mission | S3.10 |
+| EG-3.51 | `MissionCompletionResult.duration` MUST be readonly number (milliseconds from creation to completion) | S3.10 |
+| EG-3.52 | `MissionCompletionResult.outcome` MUST be readonly `MissionOutcome` containing the completion summary | S3.10 |
+| EG-3.53 | A degraded mission has NOT completed; agent MUST transition it to `failed`/`cancelled` explicitly or resolve the degradation | S3.10 Note |
 
 **Totals: 53 requirements**
 
@@ -161,16 +161,16 @@
 
 | ID | Requirement | Source |
 |---|---|---|
-| EG-3.50 | `ResolvedMissionConstraints.budget` MUST have readonly fields: `tokens: number`, `deliberations: number` | S3.11 |
-| EG-3.51 | `ResolvedMissionConstraints` MUST have readonly fields: `deadline`, `maxTasks`, `maxDepth`, `maxChildren`, `budgetDecayFactor` | S3.11 |
-| EG-3.49 | Default `budget.tokens` MUST be `100_000` | S3.11 |
-| EG-3.50 | Default `budget.deliberations` MUST be `10` | S3.11 |
-| EG-3.51 | Default `deadline` MUST be `null` | S3.11 |
-| EG-3.52 | Default `maxTasks` MUST be `50` | S3.11 |
-| EG-3.53 | Default `maxDepth` MUST be `5` | S3.11 |
-| EG-3.54 | Default `maxChildren` MUST be `10` | S3.11 |
-| EG-3.55 | Default `budgetDecayFactor` MUST be `0.3` | S3.11 |
-| EG-3.56 | `BudgetConsumed.percentage` MUST have readonly fields: `tokens` (0.0-100.0), `deliberations` (0.0-100.0) | S3.12 |
+| EG-3.54 | `ResolvedMissionConstraints.budget` MUST have readonly fields: `tokens: number`, `deliberations: number` | S3.11 |
+| EG-3.55 | `ResolvedMissionConstraints` MUST have readonly fields: `deadline`, `maxTasks`, `maxDepth`, `maxChildren`, `budgetDecayFactor` | S3.11 |
+| EG-3.56 | Default `budget.tokens` MUST be `100_000` | S3.11 |
+| EG-3.57 | Default `budget.deliberations` MUST be `10` | S3.11 |
+| EG-3.58 | Default `deadline` MUST be `null` | S3.11 |
+| EG-3.59 | Default `maxTasks` MUST be `50` | S3.11 |
+| EG-3.60 | Default `maxDepth` MUST be `5` | S3.11 |
+| EG-3.61 | Default `maxChildren` MUST be `10` | S3.11 |
+| EG-3.62 | Default `budgetDecayFactor` MUST be `0.3` | S3.11 |
+| EG-3.63 | `BudgetConsumed.percentage` MUST have readonly fields: `tokens` (0.0-100.0), `deliberations` (0.0-100.0) | S3.12 |
 
 **Totals: 10 requirements**
 
