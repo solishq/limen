@@ -11,7 +11,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGovernanceSystem } from '../../src/governance/harness/governance_harness.js';
 import type { GovernanceSystem } from '../../src/governance/harness/governance_harness.js';
-import { createTestDatabase, createTestOperationContext, tenantId, missionId, taskId } from '../helpers/test_database.js';
+import { createTestDatabase, createTestOperationContext, tenantId, missionId, taskId, seedMission } from '../helpers/test_database.js';
 import type { DatabaseConnection, OperationContext } from '../../src/kernel/interfaces/index.js';
 import { runId, attemptId, traceEventId, testTimestamp } from '../helpers/governance_test_helpers.js';
 import type { Run, RunState, Attempt, AttemptState, AttemptPinnedVersions, AttemptFailureRef, AttemptStrategyDelta } from '../../src/kernel/interfaces/run_identity.js';
@@ -26,8 +26,16 @@ async function setup(): Promise<void> {
   conn = createTestDatabase();
   ctx = createTestOperationContext();
   gov = createGovernanceSystem();
-  // Debt 2: Seed runs — TransitionEnforcer now requires entities to exist
+  // Debt 2: Seed missions — TransitionEnforcer now requires entities to exist
+  seedMission(conn, { id: 'mission-001' });
   const now = testTimestamp();
+  // R2-24: Seed parent run for Attempt tests — AttemptStore.create validates parent run exists
+  conn.run(
+    `INSERT INTO gov_runs (run_id, tenant_id, mission_id, state, started_at, schema_version, origin)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ['run-001', 'test-tenant', 'mission-001', 'active', now, '0.1.0', 'runtime'],
+  );
+  // Debt 2: Seed runs — TransitionEnforcer now requires entities to exist
   const runIds = ['run-st020-comp', 'run-st020-fail', 'run-st020-aband', 'run-st020-rev'];
   for (const id of runIds) {
     conn.run(
@@ -101,11 +109,11 @@ describe('Phase 0A Contract Tests: Run Identity (Deliverable 2)', () => {
 
   describe('BC-010: Run creation returns complete entity', () => {
     it('should return Run with runId, tenantId, missionId, state=active, origin=runtime', () => {
-      const run = makeRun();
+      const run = makeRun({ runId: runId('run-bc010-shape') });
       const result = gov.runStore.create(conn, run);
       assert.equal(result.ok, true);
       if (!result.ok) return;
-      assert.equal(result.value.runId, 'run-001');
+      assert.equal(result.value.runId, 'run-bc010-shape');
       assert.equal(result.value.tenantId, 'test-tenant');
       assert.equal(result.value.missionId, 'mission-001');
       assert.equal(result.value.state, 'active');
@@ -113,7 +121,7 @@ describe('Phase 0A Contract Tests: Run Identity (Deliverable 2)', () => {
     });
 
     it('should return Run with startedAt as ISO timestamp string', () => {
-      const run = makeRun();
+      const run = makeRun({ runId: runId('run-bc010-ts') });
       const result = gov.runStore.create(conn, run);
       assert.equal(result.ok, true);
       if (!result.ok) return;
@@ -354,7 +362,7 @@ describe('Phase 0A Contract Tests: Run Identity (Deliverable 2)', () => {
 
   describe('INV-X04: Run carries schemaVersion', () => {
     it('should preserve schemaVersion on created Run', () => {
-      const run = makeRun({ schemaVersion: '0.2.0' });
+      const run = makeRun({ runId: runId('run-invx04-schema'), schemaVersion: '0.2.0' });
       const result = gov.runStore.create(conn, run);
       assert.equal(result.ok, true);
       if (!result.ok) return;
@@ -376,7 +384,7 @@ describe('Phase 0A Contract Tests: Run Identity (Deliverable 2)', () => {
 
   describe('INV-X12: Run with origin=migration-backfill', () => {
     it('should accept migration-backfill origin', () => {
-      const run = makeRun({ origin: 'migration-backfill' });
+      const run = makeRun({ runId: runId('run-invx12-origin'), origin: 'migration-backfill' });
       const result = gov.runStore.create(conn, run);
       assert.equal(result.ok, true);
       if (!result.ok) return;

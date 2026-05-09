@@ -266,8 +266,21 @@ describe('v1.5.0 E2E Integration — Cross-Phase Gap Verification', () => {
       // Verify chain integrity
       assert.equal(cert.chainVerification.valid, true, 'Hash chain should be valid after erasure');
 
-      // Verify deterministic hash: recompute from certificate fields
-      const certPayload = JSON.stringify({
+      // Verify deterministic hash: recompute from certificate fields using canonical JSON (R2-33)
+      function canonicalStringify(obj: unknown): string {
+        if (obj === null || obj === undefined) return JSON.stringify(obj);
+        if (typeof obj !== 'object') return JSON.stringify(obj);
+        if (Array.isArray(obj)) {
+          return '[' + obj.map(item => canonicalStringify(item)).join(',') + ']';
+        }
+        const record = obj as Record<string, unknown>;
+        const sortedKeys = Object.keys(record).sort();
+        const entries = sortedKeys.map(
+          k => JSON.stringify(k) + ':' + canonicalStringify(record[k]),
+        );
+        return '{' + entries.join(',') + '}';
+      }
+      const certPayload = canonicalStringify({
         id: cert.id,
         dataSubjectId: cert.dataSubjectId,
         requestedAt: cert.requestedAt,
@@ -279,7 +292,7 @@ describe('v1.5.0 E2E Integration — Cross-Phase Gap Verification', () => {
         chainVerification: cert.chainVerification,
       });
       const expectedHash = createHash('sha256').update(certPayload).digest('hex');
-      assert.equal(cert.certificateHash, expectedHash, 'Certificate hash should be deterministic');
+      assert.equal(cert.certificateHash, expectedHash, 'Certificate hash should be deterministic (R2-33: canonical JSON)');
 
       // ================================================================
       // Step 10: governance.exportAudit(soc2) — verify no raw PII in export

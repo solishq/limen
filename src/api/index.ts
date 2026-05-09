@@ -4,6 +4,11 @@
  *        C-07 (Object.freeze), FPD-2 (async factory), FPD-4 (deep freeze),
  *        S39 IP-4 (TypeScript API), SD-06 (shutdown on instance)
  *
+ * ARCHITECTURAL NOTE (Finding-47): This factory function is large (~2400 lines)
+ * because it wires all kernel components in a single composition root.
+ * Future refactor: decompose into buildKernelLayer(), buildSubstrateLayer(),
+ * buildOrchestrationLayer(), wireEventHandlers(), buildPublicApi().
+ *
  * Phase: 4 (API Surface)
  * Implements: SDD §7 build order item 14 (final composition)
  *
@@ -162,10 +167,12 @@ import { resolveStability } from '../cognitive/stability.js';
 import { classifyFreshness } from '../cognitive/freshness.js';
 
 // Phase 5 fix: FTS5 retraction guard migration (v46)
-import { getFts5RetractionGuardMigrations } from './migration/037_fts5_retraction_guard.js';
+// Finding-25: Renamed from 037_ to 046_ to match internal version number
+import { getFts5RetractionGuardMigrations } from './migration/046_fts5_retraction_guard.js';
 
 // Phase 13A: Sync Foundation migration (v47)
-import { getSyncFoundationMigrations } from './migration/037_sync_foundation.js';
+// Finding-25: Renamed from 037_ to 047_ to match internal version number
+import { getSyncFoundationMigrations } from './migration/047_sync_foundation.js';
 
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
@@ -1477,8 +1484,11 @@ export async function createLimen(
   }
 
 
-  // V4-AUD-003: Version derived from package.json, never hardcoded
-  const limenVersion = '4.0.0';
+  // Finding-18: Read version from package.json at factory time (was hardcoded '4.0.0')
+  // Uses createRequire (already imported at top of file) for ESM-compatible JSON resolution
+  const esmRequirePkg = createRequire(import.meta.url);
+  const pkgJson = esmRequirePkg('../../package.json') as { version: string };
+  const limenVersion = pkgJson.version;
 
   // Build the Limen object
   const engine: Limen = {

@@ -1535,7 +1535,7 @@ export class LimenCrewAIAdapter {
     data: Readonly<Record<string, unknown>>,
   ): void {
     const payload: AgentEventPayload = {
-      eventId: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` as EventId,
+      eventId: randomUUID() as unknown as EventId,
       event,
       timestamp: new Date().toISOString(),
       adapterId: this.adapterId,

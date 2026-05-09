@@ -7,7 +7,7 @@
  * Purpose: Types for the TokenBudgetManager.
  */
 
-import type { TokenEncoding } from '../../adapters/crewai/types.js';
+import type { TokenEncoding } from '../../adapters/shared/types.js';
 
 /**
  * Token reservation -- tracks a pending token allocation.
@@ -80,6 +80,29 @@ export interface BudgetEvent {
   readonly remaining: number;
   readonly timestamp: string;
 }
+
+/**
+ * R2-10: Token budget default should be finite and configurable.
+ * MAX_SAFE_INTEGER effectively disables token budget enforcement.
+ * 1M tokens is a reasonable default for most sessions — callers can
+ * override via TokenBudgetManagerConfig if they need more.
+ */
+export const DEFAULT_TOKEN_BUDGET = 1_000_000;
+
+/**
+ * R2-10: Default per-operation token ceiling.
+ * 100K tokens per individual operation prevents any single call
+ * from consuming a disproportionate share of the session budget.
+ */
+export const DEFAULT_TOKEN_BUDGET_PER_OPERATION = 100_000;
+
+/**
+ * R2-10: Maximum allowed token budget value.
+ * Prevents callers from setting effectively unlimited budgets.
+ * 100M tokens is the hard cap — well above any reasonable usage
+ * but far below MAX_SAFE_INTEGER, preserving overflow safety margin.
+ */
+export const MAX_TOKEN_BUDGET_CAP = 100_000_000;
 
 /**
  * Configuration for the TokenBudgetManager.

@@ -1261,6 +1261,15 @@ For every canonical type that requires a Rust representation in the governance h
 
 **Dual-Projection Parity Rule (v1.4.1):** Every TypeScript closed enum, branded type, and typed interface MUST have a structurally equivalent Rust projection. `String` is forbidden where TypeScript uses a union literal type. `serde_json::Value` is forbidden where TypeScript uses a typed interface or discriminated union. This rule is enforced by TC-21 (Dual Projection Parity) in every adapter contract.
 
+<!-- R2-49/50: Known TC-21 parity gaps between TS and Rust projections.
+     - AdapterSandboxDefaults: TS fields are optional (Partial<>), Rust fields are required
+       with Default derive. Reconcile when Rust adapter layer ships.
+     - SessionSummary.duration: TS uses `number` (IEEE 754 float), Rust uses `u64`.
+       Both represent milliseconds — the semantic gap is in precision, not meaning.
+     - NetworkSandbox.allowedProtocols: Rust accepts `Vec<String>` (unconstrained),
+       while TS uses a union literal type. Add Rust-side validation to match TS constraints.
+     These are tracked for resolution during v5 Rust integration. -->
+
 ```rust
 // --- Branded IDs (all newtypes over String) ---
 

@@ -187,7 +187,8 @@
       "dual_projection_parity_tc21",
       "crewai_adapter_manifest_tracking"
     ],
-    "closure": "Any future interface, defense, or contract hash change must update this manifest before certification."
+    "closure": "Any future interface, defense, or contract hash change must update this manifest before certification.",
+    "ciEnforcement": "PENDING — Finding-55: Add CI check that computes set difference and fails if any defense is removed without explicit override"
   },
   "lci": {
     "name": "Phase X Contract Integrity",

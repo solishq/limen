@@ -272,6 +272,7 @@ export class CheckpointHandler {
   ) {
     this.client = client;
     this.assessmentMode = assessmentMode;
+    // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
     this.clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   }
 

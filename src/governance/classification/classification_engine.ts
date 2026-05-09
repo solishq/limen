@@ -42,6 +42,9 @@ function predicateMatchesPattern(predicate: string, pattern: string): boolean {
  *
  * I-P10-04: If multiple rules match, the MOST RESTRICTIVE level wins.
  */
+// Finding-51: Loose union type accepts incomplete rule objects for DX convenience.
+// The guard at line 61 handles missing id/createdAt safely.
+// Consider: strict type + mapper function for cleaner contract.
 export function classify(
   predicate: string,
   rules: readonly (ClassificationRule | Omit<ClassificationRule, 'id' | 'createdAt'> & { id?: string; createdAt?: string })[],

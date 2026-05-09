@@ -69,12 +69,9 @@ export function detectStructuralConflicts(
   const allIds = conflicts.map(r => r.id);
 
   if (allIds.length > CONFLICT_CAP) {
-    // Log warning — this indicates a data quality issue (too many contradicting claims for one subject+predicate).
-    // Returning all would cause unbounded relationship creation and performance degradation.
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[conflict] Subject="${subject}" predicate="${predicate}" has ${allIds.length} structural conflicts (cap: ${CONFLICT_CAP}). Returning first ${CONFLICT_CAP} only.`,
-    );
+    // Finding-65: Removed console.warn — libraries must not write to stderr.
+    // Cap is enforced silently; callers can detect truncation via result count
+    // (conflictingClaimIds.length === CONFLICT_CAP implies truncation).
     return { conflictingClaimIds: allIds.slice(0, CONFLICT_CAP) };
   }
 

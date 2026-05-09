@@ -29,6 +29,8 @@ interface Subscription {
   readonly handler: EventHandler;
   /** FR-005: Optional payload-level filter for predicate/subject matching. */
   readonly filter?: EventSubscriptionFilter;
+  /** Finding-30: Pre-compiled regex for glob patterns. null = exact match (no wildcards). */
+  readonly compiledPattern: RegExp | null;
 }
 
 /**
@@ -114,6 +116,7 @@ interface EventBusEncryption {
 const MAX_SUBSCRIPTIONS = 10_000;
 
 export function createEventBus(encryption?: EventBusEncryption, time?: TimeProvider): EventBus {
+  // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   /** In-memory subscription registry. S ref: RDD-4. */
   const subscriptions = new Map<string, Subscription>();
@@ -175,7 +178,11 @@ export function createEventBus(encryption?: EventBusEncryption, time?: TimeProvi
         // Dispatched AFTER transaction commits — handlers can't be rolled back,
         // so they must only see committed state.
         for (const sub of subscriptions.values()) {
-          if (matchesPattern(event.type, sub.pattern)) {
+          // Finding-30: Use pre-compiled regex (or exact match) instead of recompiling per emission
+          const matches = sub.compiledPattern
+            ? sub.compiledPattern.test(event.type)
+            : sub.pattern === '*' || sub.pattern === event.type;
+          if (matches) {
             // FR-005: Apply payload-level filter if present
             if (sub.filter && !matchesFilter(event.payload, sub.filter)) {
               continue;
@@ -255,9 +262,13 @@ export function createEventBus(encryption?: EventBusEncryption, time?: TimeProvi
         }
 
         const id = randomUUID();
+        // Finding-30: Pre-compile glob-to-regex at subscription time instead of every emission
+        const compiledPattern = pattern.includes('*')
+          ? new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$')
+          : null; // null = exact match, no regex needed
         const sub: Subscription = filter
-          ? { id, pattern, handler, filter }
-          : { id, pattern, handler };
+          ? { id, pattern, handler, filter, compiledPattern }
+          : { id, pattern, handler, compiledPattern };
         subscriptions.set(id, sub);
         return { ok: true, value: id };
       } catch (err) {
@@ -322,10 +333,32 @@ export function createEventBus(encryption?: EventBusEncryption, time?: TimeProvi
 
         const id = randomUUID();
         // CF-010: Encrypt webhook secret before storage if encryption is available.
-        // LRA-002: On encryption failure, store plaintext and mark as unencrypted.
-        const encResult = encryption ? encryption.encrypt(secret) : null;
-        const storedSecret = encResult && encResult.ok ? encResult.value : secret;
-        const isEncrypted = encResult !== null && encResult.ok;
+        // Finding-3 fix: When encryption IS configured but FAILS, return hard error.
+        // Plaintext fallback is only acceptable when no encryption is configured at all.
+        // Previous behavior (LRA-002) fell back to plaintext on encryption failure,
+        // which silently stored secrets in cleartext when the crypto subsystem was broken.
+        let storedSecret: string;
+        let isEncrypted: boolean;
+        if (encryption) {
+          const encResult = encryption.encrypt(secret);
+          if (!encResult.ok) {
+            // Finding-3: Hard fail — do NOT fall back to plaintext storage
+            return {
+              ok: false,
+              error: {
+                code: 'ENCRYPTION_FAILED',
+                message: `Webhook secret encryption failed: ${encResult.error.message}`,
+                spec: 'I-11',
+              },
+            };
+          }
+          storedSecret = encResult.value;
+          isEncrypted = true;
+        } else {
+          // No encryption configured — plaintext is the only option
+          storedSecret = secret;
+          isEncrypted = false;
+        }
         const handlerConfig = JSON.stringify({ url, secret: storedSecret, encrypted: isEncrypted });
 
         conn.run(
@@ -407,22 +440,17 @@ export function createEventBus(encryption?: EventBusEncryption, time?: TimeProvi
           const newAttempts = delivery.attempts + 1;
 
           try {
-            // Attempt delivery using Node.js built-in fetch (A-3)
-            // NOTE: In production, this would be an actual HTTP call.
-            // For Phase 1, we record the attempt. The actual fetch implementation
-            // will be wired when the substrate provides HTTP capabilities.
-            // This is the correct Phase 1 boundary: we track delivery state
-            // without depending on HTTP infrastructure.
-
-            // Mark as delivered (placeholder for actual HTTP call)
+            // Finding-29: Webhook HTTP delivery is not yet implemented.
+            // Mark as 'pending' with a diagnostic note instead of false 'delivered' status.
+            // The actual fetch implementation will be wired when the substrate provides HTTP capabilities.
             conn.run(
               `UPDATE obs_webhook_deliveries SET
-               status = 'delivered', attempts = ?, last_attempt_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-               response_status = 200
+               status = 'pending', attempts = ?, last_attempt_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+               response_body = ?
                WHERE id = ?`,
-              [newAttempts, delivery.id]
+              [newAttempts, 'NOT_IMPLEMENTED: Webhook HTTP delivery is not yet wired. See Finding-29.', delivery.id]
             );
-            delivered++;
+            // Return 0 delivered so callers know nothing was actually sent
           } catch {
             // Delivery failed
             if (newAttempts >= delivery.max_attempts) {

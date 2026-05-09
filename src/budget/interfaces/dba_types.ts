@@ -701,6 +701,12 @@ export interface InvocationReconciliationService {
    * Records consumption, evaluates thresholds, handles overage.
    */
   reconcile(input: PostInvocationReconciliationInput): PostInvocationReconciliationResult;
+  /**
+   * R2-7: Release in-memory mission state for a terminal mission.
+   * Prevents unbounded growth of the internal missionStates Map.
+   * Idempotent — safe to call for unknown missionIds.
+   */
+  releaseMission(missionId: string): void;
 }
 
 /**
@@ -760,6 +766,13 @@ export interface BudgetGovernanceAmendment {
   readonly overhead: SystemOverheadService;
   readonly window: SubstrateWindowService;
   readonly estimator: DeliberationEstimator;
+  /**
+   * R2-7: Release all in-memory state for a completed/failed/revoked mission.
+   * Callers MUST invoke this when a mission reaches terminal state to prevent
+   * unbounded growth of missionStates and admissionReservations Maps.
+   * Idempotent — safe to call multiple times or for unknown missionIds.
+   */
+  readonly releaseMission: (missionId: string) => void;
 }
 
 // ============================================================================

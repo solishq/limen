@@ -43,11 +43,33 @@ function err<T>(code: string, message: string, spec: string): Result<T> {
 }
 
 /**
+ * R2-33: Deterministic JSON serialization with sorted keys.
+ * JSON.stringify does not guarantee key order for nested objects per the spec.
+ * V8 preserves insertion order for string keys, but this is implementation-
+ * dependent. Sorted-key serialization makes the hash defensively deterministic
+ * across engines and future refactors that might reorder object construction.
+ */
+function canonicalStringify(obj: unknown): string {
+  if (obj === null || obj === undefined) return JSON.stringify(obj);
+  if (typeof obj !== 'object') return JSON.stringify(obj);
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(item => canonicalStringify(item)).join(',') + ']';
+  }
+  const record = obj as Record<string, unknown>;
+  const sortedKeys = Object.keys(record).sort();
+  const entries = sortedKeys.map(
+    k => JSON.stringify(k) + ':' + canonicalStringify(record[k]),
+  );
+  return '{' + entries.join(',') + '}';
+}
+
+/**
  * Compute SHA-256 hash of the certificate content (excluding the hash itself).
  * I-P10-24: Deterministic — same inputs produce same hash.
+ * R2-33: Uses canonicalStringify for deterministic key ordering.
  */
 function computeCertificateHash(cert: Omit<ErasureCertificate, 'certificateHash'>): string {
-  const payload = JSON.stringify({
+  const payload = canonicalStringify({
     id: cert.id,
     dataSubjectId: cert.dataSubjectId,
     requestedAt: cert.requestedAt,
@@ -230,13 +252,23 @@ export function executeErasure(
     // 3c. GDPR: Delete claim_relationships involving tombstoned PII claims.
     // I-31 triggers prevent DELETE on claim_relationships (append-only invariant).
     // For GDPR erasure this must be overridden: relationships reference PII claim IDs
-    // which constitute personal data metadata. Strategy: temporarily drop the trigger,
-    // delete relationships, recreate it. Safe because better-sqlite3 is synchronous
-    // and single-threaded — no concurrent operation can exploit the window.
+    // which constitute personal data metadata.
+    //
+    // Finding-26: Trigger DROP/RECREATE race condition.
+    // The trigger is dropped, deletions happen, then trigger is recreated. If an error
+    // occurs between DROP and RECREATE, the trigger remains absent, silently disabling
+    // the I-31 immutability guard. This is safe because:
+    // 1. The entire executeErasure runs inside conn.transaction() (line 93), so any
+    //    exception triggers automatic ROLLBACK, restoring the trigger (DDL in SQLite
+    //    transactions is transactional).
+    // 2. better-sqlite3 is synchronous and single-connection per process -- no concurrent
+    //    operation can exploit the window between DROP and RECREATE.
+    // CONSTRAINT: Single-process deployment only. Multi-process with shared DB file
+    // would require an exclusive lock or a flag-table approach.
     {
       const tombstonedClaimIds = piiClaims.map((r: Record<string, unknown>) => r['id'] as string);
 
-      // Drop I-31 immutability triggers
+      // Drop I-31 immutability triggers (restored on COMMIT or ROLLBACK by SQLite)
       conn.run('DROP TRIGGER IF EXISTS claim_relationships_no_delete');
       conn.run('DROP TRIGGER IF EXISTS claim_relationships_no_update');
 
@@ -263,42 +295,34 @@ export function executeErasure(
     }
 
     // 4. Tombstone audit entries (I-P10-23: chain integrity preserved via re-hash)
-    // GAP-9 fix: In single-tenant mode (tenantId=null), the AuditTrail.tombstone()
-    // interface requires a non-null TenantId. For single-tenant, we sanitize audit
-    // entries whose detail JSON contains the data subject ID directly.
+    // R2-28: Erasure must be scoped to specific data subject, not entire tenant.
+    // Previous code called deps.audit.tombstone(conn, tenantId) in multi-tenant mode,
+    // which tombstoned ALL audit entries for the tenant — not just the data subject's.
+    // Now both multi-tenant and single-tenant paths use data-subject-scoped tombstoning.
+    // F-E2E-002b + F-E2E-008b: Escape SQL wildcards and use JSON-quoted boundary matching
+    // to prevent over-broad collateral tombstoning (e.g., 'user:alice' matching 'user:aliceberg').
     let auditEntriesTombstoned = 0;
-    if (tenantId !== null) {
-      const tombResult = deps.audit.tombstone(conn, tenantId);
-      if (tombResult.ok) {
-        auditEntriesTombstoned = tombResult.value.tombstonedEntries;
-      }
-    } else {
-      // Single-tenant mode: sanitize audit entries containing data subject PII.
-      // Query entries whose detail contains the data subject ID.
-      // F-E2E-002b + F-E2E-008b fix: Escape SQL wildcards in the dataSubjectId
-      // before using in LIKE, and use bounded matching to prevent over-broad
-      // collateral tombstoning (e.g., 'user:alice' matching 'user:aliceberg').
-      // F-E2E-002b + F-E2E-008b fix: Escape SQL wildcards in the dataSubjectId
-      // and use JSON-quoted boundary matching to prevent over-broad tombstoning.
-      // The detail field is JSON text; the ID appears as a quoted value like "user:alice".
-      // Quote boundaries prevent "user:alice" from matching "user:aliceberg".
-      // Handle both the raw dataSubjectId and the full URN form.
+    {
       const escapedId = escapeLikeWildcards(request.dataSubjectId);
       const escapedFullUrn = escapeLikeWildcards(fullUrn);
       const detailPattern1 = `%"${escapedId}"%`;
       const detailPattern2 = `%"${escapedFullUrn}"%`;
+      // R2-28: Scope to tenant_id when multi-tenant, tenant_id IS NULL when single-tenant
+      const tenantClause = tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL';
+      const tenantParams = tenantId !== null ? [tenantId] : [];
       const auditEntries = conn.query<{ seq_no: number }>(
-        `SELECT seq_no FROM core_audit_log WHERE (detail LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\') AND tenant_id IS NULL`,
-        [detailPattern1, detailPattern2],
+        `SELECT seq_no FROM core_audit_log WHERE (detail LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\') ${tenantClause}`,
+        [detailPattern1, detailPattern2, ...tenantParams],
       );
       if (auditEntries.length > 0) {
         const purgeDate = deps.time.nowISO().split('T')[0]!;
         const tombstoneDetail = JSON.stringify({ purged: true, purge_date: purgeDate });
         // Set tombstone flag to bypass I-06 UPDATE trigger
         conn.run(`INSERT OR IGNORE INTO core_audit_tombstone_active (id) VALUES (1)`);
+        // R2-28: UPDATE scoped to data subject + tenant (not entire tenant)
         conn.run(
-          `UPDATE core_audit_log SET detail = ?, actor_id = 'purged' WHERE (detail LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\') AND tenant_id IS NULL`,
-          [tombstoneDetail, detailPattern1, detailPattern2],
+          `UPDATE core_audit_log SET detail = ?, actor_id = 'purged' WHERE (detail LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\') ${tenantClause}`,
+          [tombstoneDetail, detailPattern1, detailPattern2, ...tenantParams],
         );
         auditEntriesTombstoned = auditEntries.length;
 
@@ -370,31 +394,37 @@ export function executeErasure(
       }
     }
 
-    // 5b. Second-pass audit tombstoning for single-tenant mode.
-    // Steps 2-5 (claim tombstoning, cascade, consent revocation) create new audit
+    // 5b. Second-pass audit tombstoning (both single-tenant and multi-tenant).
+    // R2-28: Steps 2-5 (claim tombstoning, cascade, consent revocation) create new audit
     // entries that may contain the dataSubjectId in their detail field. These entries
     // are created AFTER the initial tombstoning pass in step 4. We need to sanitize
     // them to prevent PII re-introduction (F-E2E-003).
-    if (tenantId === null) {
+    // Previously only ran for single-tenant mode (tenantId === null), but multi-tenant
+    // mode has the same re-introduction risk.
+    {
       const escapedId2 = escapeLikeWildcards(request.dataSubjectId);
       const escapedFullUrn2 = escapeLikeWildcards(fullUrn);
       const detailPattern2a = `%"${escapedId2}"%`;
       const detailPattern2b = `%"${escapedFullUrn2}"%`;
+      // R2-28: Scope second pass to same tenant clause as first pass
+      const tenantClause2 = tenantId !== null ? 'AND tenant_id = ?' : 'AND tenant_id IS NULL';
+      const tenantParams2 = tenantId !== null ? [tenantId] : [];
       const newPiiEntries = conn.query<{ seq_no: number }>(
         `SELECT seq_no FROM core_audit_log
          WHERE (detail LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\')
-         AND tenant_id IS NULL`,
-        [detailPattern2a, detailPattern2b],
+         ${tenantClause2}`,
+        [detailPattern2a, detailPattern2b, ...tenantParams2],
       );
       if (newPiiEntries.length > 0) {
         const purgeDate2 = deps.time.nowISO().split('T')[0]!;
         const tombstoneDetail2 = JSON.stringify({ purged: true, purge_date: purgeDate2 });
         conn.run(`INSERT OR IGNORE INTO core_audit_tombstone_active (id) VALUES (1)`);
+        // R2-28: UPDATE scoped to data subject + tenant
         conn.run(
           `UPDATE core_audit_log SET detail = ?, actor_id = 'purged'
            WHERE (detail LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\')
-           AND tenant_id IS NULL`,
-          [tombstoneDetail2, detailPattern2a, detailPattern2b],
+           ${tenantClause2}`,
+          [tombstoneDetail2, detailPattern2a, detailPattern2b, ...tenantParams2],
         );
         auditEntriesTombstoned += newPiiEntries.length;
 
@@ -470,9 +500,16 @@ export function executeErasure(
     // 7. Generate certificate (I-P10-24)
     const certId = randomUUID();
     const completedAt = deps.time.nowISO();
+    // R2-30: Hash dataSubjectId in erasure certificate to avoid retaining raw PII.
+    // The certificate proves erasure occurred without identifying the data subject.
+    // Raw dataSubjectId was used for the erasure operations above; only the hash
+    // is persisted in the certificate. SHA-256 is one-way — cannot recover the ID.
+    const hashedSubjectId = createHash('sha256')
+      .update(request.dataSubjectId)
+      .digest('hex');
     const certWithoutHash: Omit<ErasureCertificate, 'certificateHash'> = {
       id: certId,
-      dataSubjectId: request.dataSubjectId,
+      dataSubjectId: hashedSubjectId,
       requestedAt,
       completedAt,
       claimsTombstoned,

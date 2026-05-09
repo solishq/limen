@@ -288,7 +288,10 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
 
     // Update schema version
     this.projection!.setMetadata('lg_schema_version', String(ADAPTER_SCHEMA_VERSION));
-    this.projection!.setMetadata('lg_schema_version_migrating', undefined!);
+    // R2-41: Guard against undefined metadata — remove migration flag by setting empty string.
+    // The previous code passed `undefined!` which defeats TypeScript's type safety and
+    // may cause storage-layer errors if the implementation doesn't handle undefined.
+    this.projection!.setMetadata('lg_schema_version_migrating', '');
   }
 
   // =========================================================================
@@ -675,22 +678,28 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
   // awaited. Users should prefer the async methods directly.
   // =========================================================================
 
+  // R2-40: Sync wrappers are not supported by LangGraph adapter.
+  // LimenCheckpointSaver requires async execution because the underlying
+  // chain and projection storage layers use async I/O. LangGraph's sync
+  // execution mode (used in some Python-first workflows) cannot be supported.
+  // Each method throws LimenStorageError with the async alternative named.
+
   /**
-   * Sync wrapper for getTuple. Delegates to the async implementation.
+   * Sync wrapper for getTuple — NOT SUPPORTED.
    * F-02: Required by BaseCheckpointSaver contract for sync execution paths.
+   * R2-40: Throws with explicit guidance to use the async alternative.
    */
   getTupleSync(config: RunnableConfig): CheckpointTuple | undefined {
-    // In LangGraph's sync execution mode, this would be called.
-    // Since our implementation requires async I/O (chain/projection),
-    // we cannot provide a true sync path. Throw with guidance.
     throw new LimenStorageError(
-      'LimenCheckpointSaver requires async execution. Use getTuple() (async) instead of getTupleSync().'
+      'Sync execution not supported: LimenCheckpointSaver requires async I/O (chain + projection). '
+      + 'Use getTuple() instead. See: https://langchain-ai.github.io/langgraphjs/concepts/checkpointing/'
     );
   }
 
   /**
-   * Sync wrapper for put. Delegates to the async implementation.
+   * Sync wrapper for put — NOT SUPPORTED.
    * F-02: Required by BaseCheckpointSaver contract for sync execution paths.
+   * R2-40: Throws with explicit guidance to use the async alternative.
    */
   putSync(
     _config: RunnableConfig,
@@ -699,13 +708,15 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
     _newVersions: ChannelVersions,
   ): RunnableConfig {
     throw new LimenStorageError(
-      'LimenCheckpointSaver requires async execution. Use put() (async) instead of putSync().'
+      'Sync execution not supported: LimenCheckpointSaver requires async I/O (chain + projection). '
+      + 'Use put() instead. See: https://langchain-ai.github.io/langgraphjs/concepts/checkpointing/'
     );
   }
 
   /**
-   * Sync wrapper for putWrites. Delegates to the async implementation.
+   * Sync wrapper for putWrites — NOT SUPPORTED.
    * F-02: Required by BaseCheckpointSaver contract for sync execution paths.
+   * R2-40: Throws with explicit guidance to use the async alternative.
    */
   putWritesSync(
     _config: RunnableConfig,
@@ -713,7 +724,8 @@ export class LimenCheckpointSaver extends BaseCheckpointSaver {
     _taskId: string,
   ): void {
     throw new LimenStorageError(
-      'LimenCheckpointSaver requires async execution. Use putWrites() (async) instead of putWritesSync().'
+      'Sync execution not supported: LimenCheckpointSaver requires async I/O (chain + projection). '
+      + 'Use putWrites() instead. See: https://langchain-ai.github.io/langgraphjs/concepts/checkpointing/'
     );
   }
 

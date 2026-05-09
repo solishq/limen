@@ -3,7 +3,11 @@
 ## General
 
 ### What is Limen?
-A Cognitive Operating System for AI agents. It provides the infrastructure that makes AI agents reliable: persistence, audit trails, budget enforcement, multi-tenant isolation, and governance boundaries. One production dependency, 16 system calls, 99 continuously enforced invariants.
+<!-- R2-48: The invariant surface exceeds the stated count. Additional invariants
+     exist in SHARED_TYPES.md, adapter contracts (13 per AGENT_ADAPTER_ARCHITECTURE.md),
+     and compliance specifications. A comprehensive invariant catalog is needed to
+     produce an accurate count. The number below is the kernel + CCP invariant count. -->
+A Cognitive Operating System for AI agents. It provides the infrastructure that makes AI agents reliable: persistence, audit trails, budget enforcement, multi-tenant isolation, and governance boundaries. One production dependency, 16 system calls, 134+ continuously enforced invariants across 3 tiers.
 
 ### Why "Limen"?
 Latin for *threshold* — the architectural boundary where deterministic infrastructure meets stochastic cognition.

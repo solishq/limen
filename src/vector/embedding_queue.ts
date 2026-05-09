@@ -24,6 +24,10 @@ function err<T>(code: string, message: string, spec: string): Result<T> {
   return { ok: false, error: { code, message, spec } };
 }
 
+// R2-32: Embedding queue entries have max retries. After MAX_RETRIES,
+// move to dead-letter state instead of infinite retry.
+const MAX_EMBEDDING_RETRIES = 3;
+
 // ── Embedding Queue Interface ──
 
 export interface EmbeddingQueue {
@@ -38,14 +42,25 @@ export interface EmbeddingQueue {
     readonly batchSize: number;
     readonly dimensions: number;
     readonly modelId: string;
-  }): Promise<Result<{ processed: number; failed: number }>>;
+  }): Promise<Result<{ processed: number; failed: number; deadLettered: number }>>;
   /** Count pending embeddings. */
   count(conn: DatabaseConnection): Result<number>;
+  /** R2-32: Get count of dead-lettered embeddings (exceeded MAX_RETRIES). */
+  deadLetterCount(): number;
+  /** R2-32: Get all dead-lettered claim IDs for diagnostic inspection. */
+  getDeadLettered(): readonly string[];
 }
 
 // ── Embedding Queue Factory ──
 
 export function createEmbeddingQueue(): EmbeddingQueue {
+  // R2-32: In-memory retry counter per claim_id.
+  // Tracks how many times each pending embedding has failed processing.
+  // When a claim exceeds MAX_EMBEDDING_RETRIES, it is removed from the
+  // pending table and added to the dead-letter set.
+  const retryCounts = new Map<string, number>();
+  const deadLetterSet = new Set<string>();
+
   return {
     enqueue(conn: DatabaseConnection, claimId: string, tenantId: string | null, content: string): Result<void> {
       try {
@@ -88,6 +103,8 @@ export function createEmbeddingQueue(): EmbeddingQueue {
     remove(conn: DatabaseConnection, claimId: string): Result<void> {
       try {
         conn.run(`DELETE FROM embedding_pending WHERE claim_id = ?`, [claimId]);
+        // R2-32: Clean up retry tracking when explicitly removed
+        retryCounts.delete(claimId);
         return ok(undefined);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -99,16 +116,17 @@ export function createEmbeddingQueue(): EmbeddingQueue {
       readonly batchSize: number;
       readonly dimensions: number;
       readonly modelId: string;
-    }): Promise<Result<{ processed: number; failed: number }>> {
+    }): Promise<Result<{ processed: number; failed: number; deadLettered: number }>> {
       // I-P11-52: Batch size limit
       const dequeueResult = this.dequeue(conn, config.batchSize);
-      if (!dequeueResult.ok) return dequeueResult;
+      if (!dequeueResult.ok) return dequeueResult as Result<{ processed: number; failed: number; deadLettered: number }>;
 
       const pending = dequeueResult.value;
-      if (pending.length === 0) return ok({ processed: 0, failed: 0 });
+      if (pending.length === 0) return ok({ processed: 0, failed: 0, deadLettered: 0 });
 
       let processed = 0;
       let failed = 0;
+      let deadLettered = 0;
 
       // I-P11-51: Provider failure isolation -- process each claim individually
       for (const item of pending) {
@@ -118,6 +136,7 @@ export function createEmbeddingQueue(): EmbeddingQueue {
           if (existingResult.ok && existingResult.value !== null) {
             // Already embedded -- remove from pending queue, count as processed
             conn.run(`DELETE FROM embedding_pending WHERE claim_id = ?`, [item.claimId]);
+            retryCounts.delete(item.claimId);
             processed++;
             continue;
           }
@@ -127,8 +146,18 @@ export function createEmbeddingQueue(): EmbeddingQueue {
 
           // I-P11-11: Dimension check
           if (vector.length !== config.dimensions) {
-            failed++;
-            // Leave in pending for retry with correct provider
+            // R2-32: Increment retry counter and check dead-letter threshold
+            const retries = (retryCounts.get(item.claimId) ?? 0) + 1;
+            retryCounts.set(item.claimId, retries);
+            if (retries >= MAX_EMBEDDING_RETRIES) {
+              // R2-32: Move to dead-letter state — remove from pending, record in dead-letter set
+              conn.run(`DELETE FROM embedding_pending WHERE claim_id = ?`, [item.claimId]);
+              retryCounts.delete(item.claimId);
+              deadLetterSet.add(item.claimId);
+              deadLettered++;
+            } else {
+              failed++;
+            }
             continue;
           }
 
@@ -140,18 +169,44 @@ export function createEmbeddingQueue(): EmbeddingQueue {
           if (storeResult.ok) {
             // Remove from pending queue
             conn.run(`DELETE FROM embedding_pending WHERE claim_id = ?`, [item.claimId]);
+            retryCounts.delete(item.claimId);
             processed++;
           } else {
-            failed++;
+            // R2-32: Increment retry counter and check dead-letter threshold
+            const retries = (retryCounts.get(item.claimId) ?? 0) + 1;
+            retryCounts.set(item.claimId, retries);
+            if (retries >= MAX_EMBEDDING_RETRIES) {
+              conn.run(`DELETE FROM embedding_pending WHERE claim_id = ?`, [item.claimId]);
+              retryCounts.delete(item.claimId);
+              deadLetterSet.add(item.claimId);
+              deadLettered++;
+            } else {
+              failed++;
+            }
           }
         } catch {
           // I-P11-51: Provider threw for this claim -- continue with next
-          // Claim remains in pending queue for retry
-          failed++;
+          // R2-32: Increment retry counter and check dead-letter threshold
+          const retries = (retryCounts.get(item.claimId) ?? 0) + 1;
+          retryCounts.set(item.claimId, retries);
+          if (retries >= MAX_EMBEDDING_RETRIES) {
+            // R2-32: Dead-letter after MAX_RETRIES provider failures
+            try {
+              conn.run(`DELETE FROM embedding_pending WHERE claim_id = ?`, [item.claimId]);
+            } catch {
+              // Best-effort cleanup — if delete fails, item stays in pending
+              // but won't be retried (retryCounts still tracks it)
+            }
+            retryCounts.delete(item.claimId);
+            deadLetterSet.add(item.claimId);
+            deadLettered++;
+          } else {
+            failed++;
+          }
         }
       }
 
-      return ok({ processed, failed });
+      return ok({ processed, failed, deadLettered });
     },
 
     count(conn: DatabaseConnection): Result<number> {
@@ -164,6 +219,15 @@ export function createEmbeddingQueue(): EmbeddingQueue {
         const msg = e instanceof Error ? e.message : String(e);
         return err('VECTOR_COUNT_FAILED', `Failed to count pending: ${msg}`, 'I-P11-52');
       }
+    },
+
+    // R2-32: Dead-letter diagnostics
+    deadLetterCount(): number {
+      return deadLetterSet.size;
+    },
+
+    getDeadLettered(): readonly string[] {
+      return Array.from(deadLetterSet);
     },
   };
 }

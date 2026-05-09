@@ -1,4 +1,14 @@
 /**
+ * Finding-63: Plugin hooks and adapter hooks are separate extension mechanisms.
+ * - Plugin hooks: Kernel-level extension points (src/plugins/)
+ * - Adapter hooks: Framework-specific integration points (src/adapters/{framework}/hooks.ts)
+ * These are intentionally separate -- plugin hooks extend Limen Core behavior,
+ * while adapter hooks translate framework-specific events to Limen operations.
+ * Integration between them occurs at the adapter level when a plugin hook
+ * triggers an event that the adapter translates.
+ */
+
+/**
  * Phase 2.6 Slice 2: Hook Registry — registration, ordering, and execution.
  *
  * Stores registered hooks, executes them in priority order, and isolates

@@ -3,7 +3,7 @@
   "version": "5.0.0-alpha.1",
   "description": "LangGraph checkpoint & store adapter for Limen — governed, tamper-evident graph state",
   "type": "module",
-  "license": "BUSL-1.1",
+  "license": "Apache-2.0",
   "author": {
     "name": "SolisHQ",
     "url": "https://solishq.ai"
@@ -17,12 +17,13 @@
     }
   },
   "peerDependencies": {
-    "limen-ai": "^5.0.0-alpha.1",
+    "limen-ai": "^4.0.0",
     "@langchain/langgraph-checkpoint": "^1.0.1"
   },
   "devDependencies": {},
   "scripts": {
     "test": "tsx --test tests/*.ts",
     "typecheck": "echo 'Peer deps required for typecheck — skipped in workspace'"
-  }
+  },
+  "_buildNote": "Finding: This package ships TypeScript source as entry point. Build step required for npm publish. Add tsup/unbuild config before publishing."
 }

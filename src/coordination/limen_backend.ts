@@ -125,6 +125,14 @@ export function createLimenBackend(
   limen: Limen,
   time: TimeProvider,
 ): CoordinationBackend {
+  // R2-15: In-memory lock guard to prevent TOCTOU race in lock acquisition.
+  // The recall→check→remember sequence is not atomic. This Set tracks domains
+  // with in-flight acquisition attempts. Since JS is single-threaded, checking
+  // and adding to this Set within the synchronous acquireLock path is atomic.
+  // The Limen recall/remember calls are synchronous (SQLite-backed), so no
+  // interleaving can occur between the Set check and the remember call.
+  const pendingLockAcquisitions = new Set<string>();
+
   return {
     // ── Session Management ──
 
@@ -260,57 +268,76 @@ export function createLimenBackend(
     // ── Domain Locking ──
 
     acquireLock(domain, holder, ttlMs?): Result<{ lockId: string }> {
-      const now = time.nowISO();
-      const nowMs = new Date(now).getTime();
-
-      // Check for existing active lock on this domain
-      // DC-COORD-SC-3: Check expiry before declaring contention
-      const existingResult = limen.recall(
-        lockSubject(domain),
-        LOCK_PREDICATE,
-      );
-      if (!existingResult.ok) {
-        return err('COORD_LOCK_QUERY_FAILED', existingResult.error.message);
+      // R2-15: Guard against TOCTOU race in distributed lock acquisition.
+      // Even though JS is single-threaded and Limen's recall/remember are
+      // synchronous (SQLite-backed), this guard provides defense-in-depth
+      // against any future async refactoring of the recall→check→remember path.
+      if (pendingLockAcquisitions.has(domain)) {
+        return err(
+          'COORD_LOCK_CONTENTION',
+          `Domain '${domain}' has a lock acquisition in progress`,
+        );
       }
+      pendingLockAcquisitions.add(domain);
 
-      for (const belief of existingResult.value) {
-        try {
-          const lockData = JSON.parse(belief.value) as {
-            holder: string;
-            expiresAt: string | null;
-          };
-          // If expired, clean up the stale lock
-          if (lockData.expiresAt && new Date(lockData.expiresAt).getTime() <= nowMs) {
-            limen.forget(belief.claimId, 'expired');
+      try {
+        const now = time.nowISO();
+        const nowMs = new Date(now).getTime();
+
+        // Check for existing active lock on this domain
+        // DC-COORD-SC-3: Check expiry before declaring contention
+        const existingResult = limen.recall(
+          lockSubject(domain),
+          LOCK_PREDICATE,
+        );
+        if (!existingResult.ok) {
+          return err('COORD_LOCK_QUERY_FAILED', existingResult.error.message);
+        }
+
+        for (const belief of existingResult.value) {
+          try {
+            const lockData = JSON.parse(belief.value) as {
+              holder: string;
+              expiresAt: string | null;
+            };
+            // If expired, clean up the stale lock
+            if (lockData.expiresAt && new Date(lockData.expiresAt).getTime() <= nowMs) {
+              limen.forget(belief.claimId, 'expired');
+              continue;
+            }
+            // DC-COORD-CC-1: Active non-expired lock found -- contention
+            return err(
+              'COORD_LOCK_CONTENTION',
+              `Domain '${domain}' is already locked by '${lockData.holder}'`,
+            );
+          } catch {
+            // Malformed lock data -- clean it up
+            limen.forget(belief.claimId, 'manual');
             continue;
           }
-          // DC-COORD-CC-1: Active non-expired lock found -- contention
-          return err(
-            'COORD_LOCK_CONTENTION',
-            `Domain '${domain}' is already locked by '${lockData.holder}'`,
-          );
-        } catch {
-          // Malformed lock data -- clean it up
-          limen.forget(belief.claimId, 'manual');
-          continue;
         }
-      }
 
-      // No active lock -- acquire
-      const expiresAt = ttlMs
-        ? new Date(nowMs + ttlMs).toISOString()
-        : null;
+        // R2-15: No active lock — acquire atomically via remember.
+        // The pendingLockAcquisitions guard ensures no concurrent caller
+        // can pass the check-phase while we're in the acquire-phase.
+        const expiresAt = ttlMs
+          ? new Date(nowMs + ttlMs).toISOString()
+          : null;
 
-      const lockPayload = JSON.stringify({ holder, expiresAt });
-      const result = limen.remember(
-        lockSubject(domain),
-        LOCK_PREDICATE,
-        lockPayload,
-      );
-      if (!result.ok) {
-        return err('COORD_LOCK_ACQUIRE_FAILED', result.error.message);
+        const lockPayload = JSON.stringify({ holder, expiresAt });
+        const result = limen.remember(
+          lockSubject(domain),
+          LOCK_PREDICATE,
+          lockPayload,
+        );
+        if (!result.ok) {
+          return err('COORD_LOCK_ACQUIRE_FAILED', result.error.message);
+        }
+        return ok({ lockId: result.value.claimId });
+      } finally {
+        // R2-15: Always release the in-flight guard, even on error paths
+        pendingLockAcquisitions.delete(domain);
       }
-      return ok({ lockId: result.value.claimId });
     },
 
     releaseLock(lockId): Result<void> {

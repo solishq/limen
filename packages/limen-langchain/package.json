@@ -23,5 +23,6 @@
   "devDependencies": {},
   "scripts": {
     "typecheck": "echo 'Peer deps required for typecheck — skipped in workspace'"
-  }
+  },
+  "_buildNote": "Finding: This package ships TypeScript source as entry point. Build step required for npm publish. Add tsup/unbuild config before publishing."
 }

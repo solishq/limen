@@ -7,7 +7,7 @@
  * (which re-exports SHARED_TYPES.md canonical definitions).
  */
 
-import type { ClassificationLevel } from '../../adapters/crewai/types.js';
+import type { ClassificationLevel } from '../../adapters/shared/types.js';
 
 /**
  * SHARED_TYPES.md S3 -- Numeric mapping for classification levels.

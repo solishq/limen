@@ -118,8 +118,9 @@ export function rotateKey(
         );
 
         if (!keyRow) {
-          // No key metadata — entry cannot be decrypted. Skip.
-          continue;
+          // Finding-45 + Finding-52: Missing key metadata is a hard error — silent skip causes data loss.
+          // Finding-52 (P3) confirmed this as a duplicate of Finding-45 (P2). Both resolved here.
+          throw new Error(`Vault entry ${entry.key_name} has no key metadata — cannot decrypt for rotation`);
         }
 
         // 2. Derive old key and decrypt

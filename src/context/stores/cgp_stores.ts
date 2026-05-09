@@ -375,10 +375,19 @@ function createRenderer(): CanonicalRepresentationRenderer {
 
 // ============================================================================
 // Cross-Subsystem Reader Stubs — NOT YET IMPLEMENTED
-// These throw NotImplementedError. The pipeline catches and degrades (DC-CGP-306).
+// R2-35: These 6 stubs throw NotImplementedError. The pipeline catches and degrades (DC-CGP-306).
 // XSUB contract tests verify these stubs exist and throw correctly.
+// Each stub is a cross-subsystem reader defined by contract but not yet wired.
+// Callers (the CGP pipeline) check for NotImplementedError and degrade gracefully.
+// Real implementations exist in their respective subsystems:
+//   - WmpInternalReader: src/working-memory/stores/wmp_stores.ts (createInternalReader)
+//   - EcbProvider: src/budget/harness/dba_harness.ts (wired in cgp_harness.ts)
+//   - Others: pending cross-subsystem wiring phase
 // ============================================================================
 
+// R2-35: Stub pending cross-subsystem wiring (WMP -> CGP).
+// Real implementation: src/working-memory/stores/wmp_stores.ts createInternalReader()
+// Wired in cgp_harness.ts when WMP connection is available.
 function createWmpInternalReader(): WmpInternalReader {
   return Object.freeze({
     readLiveEntries(_taskId: TaskId): Result<readonly WmpInternalEntry[]> {
@@ -387,6 +396,8 @@ function createWmpInternalReader(): WmpInternalReader {
   });
 }
 
+// R2-35: Stub pending cross-subsystem wiring (Artifact subsystem -> CGP).
+// The feature is defined by contract but not yet implemented.
 function createArtifactCandidateCollector(): ArtifactCandidateCollector {
   return Object.freeze({
     collectCandidates(
@@ -399,6 +410,8 @@ function createArtifactCandidateCollector(): ArtifactCandidateCollector {
   });
 }
 
+// R2-35: Stub pending cross-subsystem wiring (CCP -> CGP).
+// The feature is defined by contract but not yet implemented.
 function createClaimCandidateCollector(): ClaimCandidateCollector {
   return Object.freeze({
     collectCandidates(
@@ -411,6 +424,8 @@ function createClaimCandidateCollector(): ClaimCandidateCollector {
   });
 }
 
+// R2-35: Stub pending cross-subsystem wiring (Retrieval subsystem -> CGP).
+// The feature is defined by contract but not yet implemented.
 function createRetrievalOutputProvider(): RetrievalOutputProvider {
   return Object.freeze({
     getRetrievalResults(_invocationId: ContextInvocationId): Result<readonly RetrievedMemory[]> {
@@ -419,6 +434,8 @@ function createRetrievalOutputProvider(): RetrievalOutputProvider {
   });
 }
 
+// R2-35: Stub pending cross-subsystem wiring (Observation subsystem -> CGP).
+// The feature is defined by contract but not yet implemented.
 function createObservationCollector(): ObservationCollector {
   return Object.freeze({
     collectObservations(_taskId: TaskId): Result<readonly ObservationCandidate[]> {
@@ -427,6 +444,8 @@ function createObservationCollector(): ObservationCollector {
   });
 }
 
+// R2-35: Stub pending cross-subsystem wiring (DBA -> CGP).
+// Real implementation wired via cgp_harness.ts createRealEcbProvider().
 function createEcbProvider(): EcbProvider {
   return Object.freeze({
     computeECB(_params: {

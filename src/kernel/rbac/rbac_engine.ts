@@ -71,6 +71,19 @@ const DEFAULT_ROLES: ReadonlyArray<{
  * Create an RbacEngine implementation.
  * CF-006: Accepts optional conn to restore RBAC active state from DB on restart.
  * If custom roles exist (is_default=0), RBAC activates immediately.
+ *
+ * Finding-32: ARCHITECTURAL CONSTRAINT -- rbacActive is closure-local (in-memory only).
+ * - Once set to true (via createRole or CF-006 init check), it stays true for this
+ *   engine instance's lifetime.
+ * - In a single-process deployment (better-sqlite3), this is safe because there is
+ *   only one engine instance per process, and createRole() sets rbacActive=true.
+ * - In a multi-process deployment, a role created by process A would not activate
+ *   RBAC in process B until B restarts (CF-006 init check runs at construction).
+ * - The checkPermission interface (RbacEngine) does not accept a DatabaseConnection,
+ *   so a per-call DB check cannot be added without an interface change.
+ * - For multi-process: either pass conn at construction (CF-006) or extend the
+ *   RbacEngine interface to accept conn on checkPermission.
+ *
  * S ref: §34 (RBAC), I-13 (authorization completeness), §3.7 (dormant mode)
  */
 export function createRbacEngine(conn?: DatabaseConnection, forceActive?: boolean): RbacEngine {
@@ -100,10 +113,20 @@ export function createRbacEngine(conn?: DatabaseConnection, forceActive?: boolea
      * Check if context has required permission.
      * In dormant mode (single-user), always returns true.
      * S ref: §34 (permission check), I-13 (every operation enforces RBAC)
+     *
+     * R2-1: RBAC dormancy controls role-based permission checks only.
+     * Governance enforcement (policy evaluation, classification, consent) is
+     * handled by separate governance engines that are ALWAYS active regardless
+     * of RBAC state. RBAC dormancy means "all role-based permissions granted"
+     * in single-user mode, NOT "all governance bypassed."
+     *
+     * Callers: rbac_guard.ts requirePermission() — API-surface RBAC only.
+     * Governance paths: PolicyEngine, ClassificationEngine, ConsentStore —
+     * these do NOT call checkPermission and operate independently.
      */
     checkPermission(ctx: OperationContext, required: Permission): Result<boolean> {
       try {
-        // §3.7: In single-user mode, RBAC is dormant -- all operations allowed
+        // §3.7: In single-user mode, RBAC is dormant -- all role-based permissions granted
         if (!rbacActive) {
           return { ok: true, value: true };
         }

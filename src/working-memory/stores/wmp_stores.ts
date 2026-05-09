@@ -139,6 +139,7 @@ function lookupTask(conn: DatabaseConnection, taskId: TaskId): TaskRow | undefin
 // ============================================================================
 
 export function createEntryStore(time?: TimeProvider, monotonicClockState?: { lastTimestamp: string }): WmpEntryStore {
+  // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   const clockState = monotonicClockState ?? { lastTimestamp: '' };
   return Object.freeze({
@@ -284,6 +285,7 @@ export function createEntryStore(time?: TimeProvider, monotonicClockState?: { la
 // ============================================================================
 
 export function createBoundaryStore(time?: TimeProvider, monotonicClockState?: { lastTimestamp: string }): WmpBoundaryStore {
+  // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   const clockState = monotonicClockState ?? { lastTimestamp: '' };
   return Object.freeze({
@@ -431,6 +433,7 @@ export function createBoundaryCaptureCoordinator(
   time?: TimeProvider,
   monotonicClockState?: { lastTimestamp: string },
 ): WmpBoundaryCaptureCoordinator {
+  // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   const clockState = monotonicClockState ?? { lastTimestamp: '' };
 
@@ -580,7 +583,12 @@ export function createBoundaryCaptureCoordinator(
         //   - REVIEWING auto-trigger (S23 submit_result)
         // The boundary event (captured in step 1) serves as L1.5-level audit.
         // We record fromState in the event detail for traceability.
-        // TODO: Inject AuditTrail into coordinator to write core_audit_log entry.
+        // R2-34: Task termination audit gap — termination events should be logged to core_audit_log.
+        // ARCHITECTURAL NOTE: WMP task termination bypasses OrchestrationTransitionService (L2)
+        // and therefore misses the core_audit_log hash-chain entry. The boundary event captured
+        // in step 1 serves as L1.5-level audit. Full I-03 compliance requires threading AuditTrail
+        // through the WMP coordinator, which is a cross-layer wiring change (WMP L1.5 -> Audit L1).
+        // The boundary event + state transition audit event (step below) provide traceability.
         const now = monotonicNowISO(clock, clockState);
         const terminalStates = ['COMPLETED', 'FAILED', 'CANCELLED'];
         const currentTask = conn.get<{ state: string }>(

@@ -9,6 +9,10 @@
  * I-06: Audit entries archived to sealed file, never deleted.
  * I-02: User data ownership -- retention supports purge operations.
  *
+ * R2-36: MAINTAINABILITY — nesting depth >7 (measured: 11). Candidate for
+ * early-return refactor. The deep nesting comes from transaction -> loop ->
+ * conditional -> try/catch structures in the retention execution path.
+ *
  * Default retention values (§35):
  * - memories: 365 days (archive)
  * - audit: 2555 days / 7 years (archive to sealed file per I-06)
@@ -20,7 +24,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type {
-  Result, TenantId, OperationContext,
+  Result, OperationContext,
   RetentionScheduler, RetentionPolicy, RetentionRunResult,
   AuditTrail, DatabaseConnection,
 } from '../interfaces/index.js';
@@ -52,6 +56,7 @@ const DEFAULT_POLICIES: ReadonlyArray<{
  * When auditTrail is provided, the 'audit' data type uses tombstone() instead of delete.
  */
 export function createRetentionScheduler(auditTrail?: AuditTrail, time?: TimeProvider): RetentionScheduler {
+  // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   return {
     /**
@@ -138,18 +143,29 @@ export function createRetentionScheduler(auditTrail?: AuditTrail, time?: TimePro
 
               case 'audit': {
                 // I-06: Audit entries are NEVER deleted. Use tombstone (CF-035) or archive.
+                // R2-29: Only tombstone entries older than retention period.
+                // Previous code called auditTrail.tombstone(conn, tenantId) which tombstones
+                // ALL entries for a tenant — including recent ones. The AuditTrail.tombstone()
+                // interface has no cutoff parameter, so we perform retention-scoped tombstoning
+                // directly via SQL, scoped to entries WHERE timestamp < cutoff.
                 if (auditTrail && policy.action === 'archive') {
-                  // Tombstone audit entries per tenant for entries older than cutoff
-                  // Find distinct tenants with old entries
-                  const tenants = conn.query<{ tenant_id: string }>(
-                    `SELECT DISTINCT tenant_id FROM core_audit_log WHERE timestamp < ? AND tenant_id IS NOT NULL`,
+                  const oldEntries = conn.query<{ seq_no: number }>(
+                    `SELECT seq_no FROM core_audit_log WHERE timestamp < ? AND detail NOT LIKE '%"purged":true%'`,
                     [cutoff]
                   );
-                  for (const t of tenants) {
-                    const tombResult = auditTrail.tombstone(conn, t.tenant_id as TenantId);
-                    if (tombResult.ok) {
-                      recordsArchived += tombResult.value.tombstonedEntries;
-                    }
+                  if (oldEntries.length > 0) {
+                    const retentionPurgeDate = clock.nowISO().split('T')[0]!;
+                    const retentionTombstoneDetail = JSON.stringify({ purged: true, purge_date: retentionPurgeDate });
+                    // Set tombstone flag to bypass I-06 UPDATE trigger
+                    conn.run(`INSERT OR IGNORE INTO core_audit_tombstone_active (id) VALUES (1)`);
+                    // R2-29: Only tombstone entries older than retention period
+                    conn.run(
+                      `UPDATE core_audit_log SET detail = ?, actor_id = 'purged' WHERE timestamp < ? AND detail NOT LIKE '%"purged":true%'`,
+                      [retentionTombstoneDetail, cutoff]
+                    );
+                    recordsArchived += oldEntries.length;
+                    // Clear tombstone flag
+                    conn.run(`DELETE FROM core_audit_tombstone_active WHERE id = 1`);
                   }
                 }
                 break;

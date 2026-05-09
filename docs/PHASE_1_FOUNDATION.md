@@ -1,5 +1,12 @@
 # Phase 1 Foundation Traceability Matrix
 
+> **NOTE (Finding-16):** This document was originally written for the v5 Rust substrate
+> (`release/v5` branch, `v5/crates/` directory). The traceability matrix below references
+> Rust crate implementations. The TypeScript kernel implementation in `src/kernel/` provides
+> equivalent functionality but is traced separately in `CONTRACT-COMPLIANCE-v2.1.md`.
+> This document is retained as the Rust v5 design source; it is NOT the traceability
+> reference for the TypeScript implementation.
+
 **Version:** 5.0.0-alpha.1
 **Generated:** 2026-05-07
 **Scope:** All public types, functions, and modules in the foundation crates

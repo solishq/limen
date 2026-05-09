@@ -15,8 +15,8 @@
  */
 
 import { BaseGovernedAdapter } from '../shared/base-adapter.js';
-import { serdeError } from '../crewai/errors.js';
-import type { CrewAIAdapterError } from '../crewai/errors.js';
+import { serdeError } from '../shared/errors.js';
+import type { AdapterError } from '../shared/errors.js';
 import type {
   AdapterId,
   AgentId,
@@ -141,7 +141,7 @@ export class LimenSemanticKernelAdapter extends BaseGovernedAdapter<
   }
 
   /** @override Validate SK-specific config fields */
-  protected validateFrameworkConfig(config: SKAdapterConfig): CrewAIAdapterError | null {
+  protected validateFrameworkConfig(config: SKAdapterConfig): AdapterError | null {
     if (!config.kernelId || config.kernelId.length === 0) {
       return serdeError(this.adapterId, 'kernelId is required and must be non-empty');
     }

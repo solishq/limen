@@ -240,18 +240,14 @@ function rowToRun(row: Record<string, unknown>): Run {
 export function createAttemptStoreImpl(): AttemptStore {
   return {
     create(conn: DatabaseConnection, attempt: Attempt): Result<Attempt> {
-      // Ensure referenced run exists (FK constraint: gov_attempts.run_id → gov_runs.run_id)
+      // R2-24: Validate parent Run exists before creating Attempt.
+      // Previous code auto-created phantom parent runs which masked data integrity issues.
+      // FK constraint: gov_attempts.run_id → gov_runs.run_id
       const runExists = conn.get<Record<string, unknown>>(
         'SELECT run_id FROM gov_runs WHERE run_id = ?', [attempt.runId],
       );
       if (!runExists) {
-        try {
-          conn.run(
-            `INSERT INTO gov_runs (run_id, tenant_id, mission_id, state, started_at, schema_version, origin)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [attempt.runId, 'system', attempt.missionId, 'active', attempt.createdAt, attempt.schemaVersion, attempt.origin],
-          );
-        } catch { /* ignore if exists due to race */ }
+        return err('RUN_NOT_FOUND', `Parent run ${attempt.runId} does not exist — cannot create attempt without valid parent run`, 'BC-010');
       }
 
       try {
@@ -310,9 +306,17 @@ export function createAttemptStoreImpl(): AttemptStore {
 
       // P0-A Critical #6: No phantom creation. If entity doesn't exist, return error.
       // Previous code auto-created skeleton attempts + runs which masked data integrity issues.
-      const existing = conn.get<Record<string, unknown>>('SELECT attempt_id FROM gov_attempts WHERE attempt_id = ?', [attemptId]);
+      const existing = conn.get<Record<string, unknown>>('SELECT attempt_id, state FROM gov_attempts WHERE attempt_id = ?', [attemptId]);
       if (!existing) {
         return err('ATTEMPT_NOT_FOUND', `Attempt ${attemptId} not found — cannot update state of non-existent attempt`, 'BC-011');
+      }
+
+      // R2-22: Reject state updates for attempts in terminal states (succeeded, failed, abandoned).
+      // Terminal attempts are immutable — no resurrection allowed. Aligns with BC-070 terminal invariant.
+      const ATTEMPT_TERMINAL: Set<string> = new Set(['succeeded', 'failed', 'abandoned']);
+      const currentState = existing['state'] as string;
+      if (ATTEMPT_TERMINAL.has(currentState)) {
+        return err('ATTEMPT_TERMINAL', `Attempt ${attemptId} is in terminal state '${currentState}' — no transitions allowed`, 'BC-070');
       }
 
       conn.run('UPDATE gov_attempts SET state = ? WHERE attempt_id = ?', [state, attemptId]);
@@ -917,18 +921,13 @@ export function createHandoffStoreImpl(time?: TimeProvider): HandoffStore {
       const ddlState = handoffStateToDDL(state);
       const now = nowISO(t);
 
-      // Ensure handoff exists — create skeleton if needed (supports contract test pattern)
+      // R2-23: Reject update if handoff doesn't exist. No phantom creation.
+      // Previous code auto-created skeleton handoffs which masked data integrity issues.
       const existing = conn.get<Record<string, unknown>>(
         'SELECT handoff_id FROM gov_handoffs WHERE handoff_id = ?', [handoffId],
       );
       if (!existing) {
-        try {
-          conn.run(
-            `INSERT INTO gov_handoffs (handoff_id, tenant_id, mission_id, delegator_agent_id, delegate_agent_id, child_task_id, state, schema_version, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [handoffId, 'system', 'unbound', 'runtime', 'unbound', 'unbound', 'issued', '0.1.0', now, now],
-          );
-        } catch { /* ignore */ }
+        return err('HANDOFF_NOT_FOUND', `Handoff ${handoffId} does not exist — cannot update state of non-existent handoff`, 'BC-069');
       }
 
       conn.run(
@@ -968,6 +967,49 @@ const MISSION_TERMINAL: Set<string> = new Set(['completed', 'failed', 'revoked']
 const TASK_TERMINAL: Set<string> = new Set(['completed', 'failed', 'cancelled', 'skipped', 'revoked']);
 const HANDOFF_TERMINAL: Set<string> = new Set(['rejected', 'returned', 'revoked', 'expired']);
 const RUN_TERMINAL: Set<string> = new Set(['completed', 'failed', 'abandoned']);
+
+/**
+ * R2-4: Valid transition tables per lifecycle state machine.
+ * ST-060: Mission transitions. ST-061: Task transitions. ST-062: Handoff transitions.
+ * BC-063: TransitionEnforcer validates preconditions before allowing transitions.
+ * BC-070: Terminal states have empty transition sets (no reverse transitions).
+ * BC-071: 'completing' is intermediate between 'active' and 'completed'.
+ */
+const VALID_MISSION_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
+  'created': ['active', 'failed', 'revoked'],
+  'active': ['active', 'completing', 'failed', 'revoked'],  // active→active: substate change (BC-061)
+  'completing': ['completed', 'failed'],
+  'completed': [],  // terminal — BC-070
+  'failed': [],     // terminal — BC-070
+  'revoked': [],    // terminal — BC-070
+};
+
+const VALID_TASK_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
+  'pending': ['pending', 'ready', 'failed', 'skipped', 'revoked'],  // pending→pending: readiness sub-state change (BC-065)
+  'ready': ['executing', 'failed', 'skipped', 'revoked'],
+  'executing': ['completed', 'failed', 'revoked'],
+  'completed': [],  // terminal — BC-070
+  'failed': [],     // terminal — BC-070
+  'skipped': [],    // terminal — BC-070
+  'revoked': [],    // terminal — BC-070
+};
+
+const VALID_HANDOFF_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
+  'issued': ['accepted', 'rejected', 'revoked', 'expired'],
+  'accepted': ['active', 'revoked'],
+  'rejected': [],   // terminal — BC-070
+  'active': ['returned', 'revoked'],
+  'returned': [],   // terminal — BC-070
+  'revoked': [],    // terminal — BC-070
+  'expired': [],    // terminal — BC-070
+};
+
+const VALID_RUN_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
+  'active': ['completed', 'failed', 'abandoned'],
+  'completed': [],  // terminal — BC-070
+  'failed': [],     // terminal — BC-070
+  'abandoned': [],  // terminal — BC-070
+};
 
 /**
  * The TransitionEnforcer uses an in-memory state tracker.
@@ -1040,6 +1082,15 @@ export function createTransitionEnforcerImpl(
         );
       }
 
+      // R2-4: Validate transition is legal per lifecycle state machine (ST-060, BC-063)
+      const allowedMissionTransitions = VALID_MISSION_TRANSITIONS[currentState];
+      if (!allowedMissionTransitions || !allowedMissionTransitions.includes(toState)) {
+        return lifecycleError(
+          `Mission ${missionId} cannot transition from '${currentState}' to '${toState}' — not a legal transition per ST-060`,
+          'ST-060, BC-063',
+        );
+      }
+
       // BC-067: Check suspension
       const suspResult = suspensionStore.getActiveForTarget(conn, 'mission', missionId);
       if (suspResult.ok && suspResult.value !== null) {
@@ -1050,6 +1101,15 @@ export function createTransitionEnforcerImpl(
       }
 
       const now = nowISO(t);
+      // R2-6: Update in-memory state AFTER all validation succeeds.
+      // Note: the enforcer does not write to DB itself (caller is responsible),
+      // so we update in-memory last to reflect the committed transition.
+      //
+      // R2-7 (REVISED): Keep terminal states in memory rather than evicting.
+      // Eviction caused BC-070 bypass: after eviction, DB fallback reads stale
+      // pre-transition state from core_missions (which the enforcer does not update),
+      // allowing reverse transitions from terminal states. Terminal entries must remain
+      // in the in-memory map so the BC-070 guard can reject subsequent transitions.
       missionStates.set(missionId, toState);
       return ok({ fromState: currentState, toState, timestamp: now });
     },
@@ -1089,6 +1149,15 @@ export function createTransitionEnforcerImpl(
         );
       }
 
+      // R2-4: Validate transition is legal per lifecycle state machine (ST-061, BC-063)
+      const allowedTaskTransitions = VALID_TASK_TRANSITIONS[currentState];
+      if (!allowedTaskTransitions || !allowedTaskTransitions.includes(toState)) {
+        return lifecycleError(
+          `Task ${taskId} cannot transition from '${currentState}' to '${toState}' — not a legal transition per ST-061`,
+          'ST-061, BC-063',
+        );
+      }
+
       // BC-067: Check suspension
       const suspResult = suspensionStore.getActiveForTarget(conn, 'task', taskId);
       if (suspResult.ok && suspResult.value !== null) {
@@ -1099,6 +1168,7 @@ export function createTransitionEnforcerImpl(
       }
 
       const now = nowISO(t);
+      // R2-7 (REVISED): Keep terminal states in memory (same rationale as missionStates).
       taskStates.set(taskId, toState);
       return ok({ fromState: currentState, toState, timestamp: now });
     },
@@ -1135,15 +1205,27 @@ export function createTransitionEnforcerImpl(
         );
       }
 
-      const now = nowISO(t);
-      handoffStates.set(handoffId, toState);
+      // R2-4: Validate transition is legal per lifecycle state machine (ST-062, BC-063)
+      const allowedHandoffTransitions = VALID_HANDOFF_TRANSITIONS[currentState];
+      if (!allowedHandoffTransitions || !allowedHandoffTransitions.includes(toState)) {
+        return lifecycleError(
+          `Handoff ${handoffId} cannot transition from '${currentState}' to '${toState}' — not a legal transition per ST-062`,
+          'ST-062, BC-063',
+        );
+      }
 
-      // Also update gov_handoffs if it exists
+      const now = nowISO(t);
+
+      // R2-6: Write to DB BEFORE updating in-memory state.
+      // If conn.run throws, in-memory map remains at the old (correct) state.
       const ddlState = handoffStateToDDL(toState);
       conn.run(
         'UPDATE gov_handoffs SET state = ?, updated_at = ? WHERE handoff_id = ?',
         [ddlState, now, handoffId],
       );
+
+      // R2-7 (REVISED): Keep terminal states in memory (same rationale as missionStates).
+      handoffStates.set(handoffId, toState);
 
       return ok({ fromState: currentState, toState, timestamp: now });
     },
@@ -1177,12 +1259,31 @@ export function createTransitionEnforcerImpl(
         );
       }
 
+      // R2-4: Validate transition is legal per lifecycle state machine (ST-020)
+      const allowedRunTransitions = VALID_RUN_TRANSITIONS[currentState];
+      if (!allowedRunTransitions || !allowedRunTransitions.includes(toState)) {
+        return lifecycleError(
+          `Run ${runId} cannot transition from '${currentState}' to '${toState}' — not a legal transition per ST-020`,
+          'ST-020, BC-063',
+        );
+      }
+
       const now = nowISO(t);
-      runStates.set(runId, toState);
+
+      // R2-6: Write to DB BEFORE updating in-memory state.
       conn.run(
         'UPDATE gov_runs SET state = ?, completed_at = ? WHERE run_id = ?',
         [toState, now, runId],
       );
+
+      // R2-7: Evict terminal runs from runStates to prevent unbounded growth.
+      // All run terminal states (completed/failed/abandoned) are evicted.
+      // On next access, the DB fallback in enforceRunTransition will resolve state.
+      if (RUN_TERMINAL.has(toState)) {
+        runStates.delete(runId);
+      } else {
+        runStates.set(runId, toState);
+      }
 
       return ok({ fromState: currentState, toState, timestamp: now });
     },

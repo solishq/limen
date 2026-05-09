@@ -47,6 +47,14 @@ export function checkPredicateGuard(
   rules: readonly ProtectedPredicateRule[],
 ): Result<void> {
   // I-P10-11: Dormant RBAC bypasses all predicate protection
+  // R2-16: Predicate guards operate on RBAC role-based permissions, not governance.
+  // When RBAC is dormant (single-user mode), predicate write protection is lifted
+  // because there is no role-based access to enforce. This does NOT bypass governance:
+  // - Classification enforcement (ClassificationEngine) is ALWAYS active
+  // - Policy evaluation (PolicyEngine) is ALWAYS active
+  // - Consent gates (ConsentStore) are ALWAYS active
+  // Predicate guards are an RBAC feature (role X can write predicate Y), not a
+  // governance feature. Dormancy here is correct per §3.7.
   if (!rbacActive) {
     return { ok: true, value: undefined };
   }

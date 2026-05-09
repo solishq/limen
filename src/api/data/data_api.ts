@@ -355,7 +355,10 @@ export class DataApiImpl implements DataApi {
 
       // Delete WMP boundary events (has mission_id directly)
       // Note: wmp_boundary_events has immutability triggers (WMP-I6) that prevent DELETE.
-      // For purge operations, we drop and recreate the trigger within this transaction.
+      // Finding-27: Trigger DROP/RECREATE is safe here because this method is called
+      // within conn.transaction() (purgeByMission is called from line 200/441 inside
+      // a transaction). SQLite DDL is transactional -- ROLLBACK restores the trigger.
+      // CONSTRAINT: Single-process deployment only (better-sqlite3 is synchronous).
       conn.run('DROP TRIGGER IF EXISTS trg_wmp_boundary_events_immutable_delete');
       purged += conn.run('DELETE FROM wmp_boundary_events WHERE mission_id = ?', [mId]).changes;
       conn.run(`CREATE TRIGGER IF NOT EXISTS trg_wmp_boundary_events_immutable_delete
@@ -538,7 +541,9 @@ export class DataApiImpl implements DataApi {
       }
 
       // I-31: Temporarily drop immutability triggers on claim_relationships for GDPR purge.
-      // Safe: better-sqlite3 is synchronous/single-threaded — no concurrent exploit window.
+      // Finding-27: Trigger DROP/RECREATE is safe here because this block runs inside
+      // conn.transaction() (line 493). SQLite DDL is transactional -- ROLLBACK restores
+      // the trigger on error. CONSTRAINT: Single-process deployment only.
       conn.run('DROP TRIGGER IF EXISTS claim_relationships_no_delete');
       conn.run('DROP TRIGGER IF EXISTS claim_relationships_no_update');
 
@@ -569,7 +574,8 @@ export class DataApiImpl implements DataApi {
       totalPurged += conn.run('DELETE FROM gov_attempts WHERE mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
       totalPurged += conn.run('DELETE FROM gov_runs WHERE tenant_id = ?', [tenantId]).changes;
 
-      // Drop WMP boundary event immutability trigger for purge
+      // Finding-27: Trigger DROP/RECREATE within conn.transaction() (line 493).
+      // SQLite DDL is transactional -- ROLLBACK restores trigger on error.
       conn.run('DROP TRIGGER IF EXISTS trg_wmp_boundary_events_immutable_delete');
       totalPurged += conn.run('DELETE FROM wmp_boundary_events WHERE mission_id IN (SELECT id FROM core_missions WHERE tenant_id = ?)', [tenantId]).changes;
       conn.run(`CREATE TRIGGER IF NOT EXISTS trg_wmp_boundary_events_immutable_delete

@@ -13,7 +13,7 @@
  * - Events emitted per SHARED_TYPES.md S16
  */
 
-import type { Result, KernelError } from '../../adapters/crewai/types.js';
+import type { Result, KernelError } from '../../adapters/shared/types.js';
 import type {
   TokenReservation,
   SessionBudgetState,
@@ -21,6 +21,7 @@ import type {
   BudgetEvent,
   TokenBudgetManagerConfig,
 } from './types.js';
+import { MAX_TOKEN_BUDGET_CAP } from './types.js';
 import type { TimeProvider } from '../audit/enterprise-logger.js';
 
 function makeError(code: string, message: string): KernelError {
@@ -37,6 +38,15 @@ const DEFAULT_TIME_PROVIDER: TimeProvider = {
  * PHASE_3_DESIGN_SOURCE.md S6.2: Both per-operation and per-session ceilings
  * must be enforced; neither can be bypassed.
  * SHARED_TYPES.md S20.1: Token overflow detection via Number.MAX_SAFE_INTEGER.
+ *
+ * ARCHITECTURAL CONSTRAINT (Finding-31): Token budget state is in-memory only.
+ * - Sessions and reservations are Map objects with no persistence.
+ * - State is lost on process restart.
+ * - State is not shared across multiple Limen instances.
+ * - Suitable for single-process deployments only.
+ * - For multi-process: implement SQLite-backed persistence via core_token_budgets table.
+ * - cleanupStaleSessions() should be called periodically or on new session creation
+ *   to prevent unbounded memory growth from abandoned sessions.
  *
  * #governed = true -- this manager has no ungoverned mode.
  */
@@ -71,6 +81,12 @@ export class TokenBudgetManager {
   #validateNumeric(name: string, value: number): void {
     if (!Number.isFinite(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) {
       throw new Error(`Invalid config '${name}': must be a finite non-negative number <= Number.MAX_SAFE_INTEGER, got ${String(value)}`);
+    }
+    // R2-10: Token budget values must not exceed MAX_TOKEN_BUDGET_CAP.
+    // MAX_SAFE_INTEGER effectively disables budget enforcement, which defeats
+    // the purpose of this manager. Cap at 100M tokens for safety.
+    if ((name === 'defaultMaxTokensPerSession' || name === 'defaultMaxTokensPerOperation') && value > MAX_TOKEN_BUDGET_CAP) {
+      throw new Error(`Invalid config '${name}': must be <= ${MAX_TOKEN_BUDGET_CAP} (R2-10: prevent effectively unlimited budgets), got ${String(value)}`);
     }
   }
 
@@ -274,8 +290,9 @@ export class TokenBudgetManager {
     const newReserved = Math.max(0, session.reserved - reservation.estimatedTokens);
     const now = this.#timeProvider.now();
 
-    // Mark reservation consumed
-    this.#reservations.set(reservationId, { ...reservation, consumed: true });
+    // Finding-40: Delete consumed reservation from Map to prevent unbounded growth.
+    // The reservation data is no longer needed after consumption.
+    this.#reservations.delete(reservationId);
 
     // Check warning threshold (CREWAI_ADAPTER_CONTRACT.md S7.2 step 7)
     const usedPct = (newConsumed / session.totalBudget) * 100;
@@ -341,7 +358,8 @@ export class TokenBudgetManager {
     const newReserved = Math.max(0, session.reserved - reservation.estimatedTokens);
     const now = this.#timeProvider.now();
 
-    this.#reservations.set(reservationId, { ...reservation, released: true });
+    // Finding-40: Delete released reservation from Map to prevent unbounded growth.
+    this.#reservations.delete(reservationId);
     this.#sessions.set(sessionId, {
       ...session,
       reserved: newReserved,
@@ -430,6 +448,35 @@ export class TokenBudgetManager {
   }
 
   /**
+   * Finding-31: Clean up stale sessions to prevent unbounded memory growth.
+   * Removes sessions where lastActivityAt is older than maxIdleMs from now.
+   * Should be called periodically or on new session creation.
+   *
+   * @param maxIdleMs Maximum idle time in milliseconds before a session is considered stale.
+   * @returns Number of sessions cleaned up.
+   */
+  cleanupStaleSessions(maxIdleMs: number): number {
+    const now = new Date(this.#timeProvider.now()).getTime();
+    let cleaned = 0;
+
+    for (const [sessionId, session] of this.#sessions) {
+      const lastActivity = new Date(session.lastActivityAt).getTime();
+      if (now - lastActivity > maxIdleMs) {
+        this.#sessions.delete(sessionId);
+        // Clean up associated reservations
+        for (const [resId, res] of this.#reservations) {
+          if (res.sessionId === sessionId) {
+            this.#reservations.delete(resId);
+          }
+        }
+        cleaned++;
+      }
+    }
+
+    return cleaned;
+  }
+
+  /**
    * Subscribe to budget events.
    * F-14: Returns an unsubscribe function to prevent memory leaks.
    */
@@ -449,8 +496,13 @@ export class TokenBudgetManager {
   }
 
   #emitEvent(event: BudgetEvent): void {
+    // Finding-60: Isolate listener failures — one bad listener must not break others
     for (const listener of this.#eventListeners) {
-      listener(event);
+      try {
+        listener(event);
+      } catch {
+        // Finding-60: Swallow listener error to prevent cascade failure
+      }
     }
   }
 }

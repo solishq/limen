@@ -12,7 +12,7 @@
  * - Hard delete only for unrestricted on expiry
  */
 
-import type { ClassificationLevel, Result, KernelError, AgentId, SessionId } from '../../adapters/crewai/types.js';
+import type { ClassificationLevel, Result, KernelError, AgentId, SessionId } from '../../adapters/shared/types.js';
 import { DEFAULT_RETENTION, type EnterpriseRetentionPolicy } from '../classification/engine.js';
 import type { EnterpriseAuditEntry, TimeProvider } from './enterprise-logger.js';
 
@@ -134,10 +134,17 @@ export class RetentionPolicyEnforcer {
         action = 'archive';
       }
 
-      // Skip already tombstoned entries
-      if (entry.tombstoned) {
+      // Finding-59: Tombstoned entries past retention should still be deletable.
+      // They contain no PII (content is replaced) but still consume storage.
+      // Only skip tombstoned entries if they haven't exceeded retention.
+      if (entry.tombstoned && action === 'tombstone') {
+        // Already tombstoned — no need to re-tombstone, but allow archive/delete
+        action = 'none';
+      } else if (entry.tombstoned && action === 'none') {
+        // Not past retention yet — leave as-is
         action = 'none';
       }
+      // If entry.tombstoned && action === 'delete' or 'archive', allow it through
 
       results.push({
         entryId: entry.id,

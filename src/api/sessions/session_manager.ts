@@ -252,6 +252,7 @@ export class SessionManager {
    * Build OrchestrationDeps for L2 subsystem calls.
    */
   private buildOrchDeps(): OrchestrationDeps {
+    // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
     const clock = this.time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
     return {
       conn: this.getConnection(),

@@ -30,6 +30,16 @@ async function setup(): Promise<void> {
   conn = createTestDatabase();
   ctx = createTestOperationContext();
   gov = createGovernanceSystem();
+  // R2-24: Seed parent runs for Attempt tests — AttemptStore.create validates parent run exists
+  const now = testTimestamp();
+  const parentRunIds = ['run-bc080', 'run-bc080-fields'];
+  for (const id of parentRunIds) {
+    conn.run(
+      `INSERT INTO gov_runs (run_id, tenant_id, mission_id, state, started_at, schema_version, origin)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [id, 'test-tenant', 'mission-001', 'active', now, '0.1.0', 'runtime'],
+    );
+  }
 }
 
 describe('Phase 0A Contract Tests: Governance IDs (Deliverable 1)', () => {

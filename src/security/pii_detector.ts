@@ -80,8 +80,14 @@ const PII_PATTERNS: readonly PiiPattern[] = [
   },
   {
     category: 'credit_card',
-    // 13-19 digit sequences (with optional separators)
-    regex: /\b(?:\d[ -]*?){13,19}\b/g,
+    // R2-19: Credit card regex simplified to avoid ReDoS.
+    // Original /\b(?:\d[ -]*?){13,19}\b/g has nested quantifiers (*? inside {13,19})
+    // which can cause catastrophic backtracking on adversarial input (e.g., long
+    // sequences of spaces/dashes with insufficient digits). Replaced with a
+    // linear-time pattern matching 4 groups of 4 digits with optional separators,
+    // plus a Luhn validator for final confirmation. Covers standard card formats
+    // (1234567890123456, 1234-5678-9012-3456, 1234 5678 9012 3456).
+    regex: /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,7}\b/g,
     confidence: 0.85,
     validate: passesLuhn,
   },

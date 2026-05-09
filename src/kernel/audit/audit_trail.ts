@@ -46,7 +46,11 @@ function unwrapForChainQuery(conn: DatabaseConnection): DatabaseConnection {
  */
 export function computeEntryHash(sha256Fn: (data: string) => string, previousHash: string, input: AuditCreateInput, timestamp: string, seqNo: number): string {
   // Deterministic serialization: fixed field order, canonical JSON
-  const data = [
+  // Finding-46 fix: Validate no field contains the pipe delimiter.
+  // If a field contains '|', the hash serialization becomes ambiguous:
+  // e.g., actorId="a|b" + operation="c" hashes identically to
+  // actorId="a" + operation="b|c". Reject to prevent delimiter injection.
+  const fields = [
     previousHash,
     String(seqNo),
     timestamp,
@@ -55,6 +59,17 @@ export function computeEntryHash(sha256Fn: (data: string) => string, previousHas
     input.operation,
     input.resourceType,
     input.resourceId,
+  ];
+  for (const field of fields) {
+    if (field.includes('|')) {
+      throw new Error(
+        `Audit field contains pipe delimiter: field value "${field}" — potential delimiter injection (Finding-46)`
+      );
+    }
+  }
+
+  const data = [
+    ...fields,
     input.detail ? JSON.stringify(input.detail, Object.keys(input.detail).sort()) : '',
   ].join('|');
 
@@ -68,10 +83,28 @@ export function computeEntryHash(sha256Fn: (data: string) => string, previousHas
  *        §3.5 (hash chaining), FM-08 (tamper detection)
  */
 export function createAuditTrail(sha256Fn: (data: string) => string, time?: TimeProvider): AuditTrail {
+  // R2-9 + Finding-19: Hard Stop #7 — all temporal logic must use TimeProvider.
+  // Fallback creates a wall-clock adapter for DX convenience when no TimeProvider
+  // is injected. Production callers MUST inject TimeProvider for deterministic testing
+  // and governance compliance. The fallback is acceptable only for standalone usage.
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   return {
     /**
      * Append entry. MUST be called within same transaction as mutation (I-03).
+     *
+     * Finding-5 + Finding-35: The SELECT-then-INSERT for seq_no is a TOCTOU risk
+     * if called outside a transaction. The I-03 contract requires callers to wrap
+     * the mutation + audit append in the same transaction. Within that transaction,
+     * SQLite serializes access, making the seq_no read-then-increment atomic.
+     * The hash chain computation (read prev_hash -> compute SHA-256 -> insert)
+     * cannot be done in pure SQL, so the two-step approach is required.
+     *
+     * Finding-54 (P3): Multi-process race on seq_no. better-sqlite3 is single-process
+     * by design — concurrent processes opening the same database file would race on
+     * the SELECT-then-INSERT sequence even within a transaction. This is a documented
+     * architectural constraint: Limen is a single-writer system. Multi-process deployments
+     * require an external coordinator or separate database files per process.
+     *
      * S ref: I-03 (atomic audit), §3.5 (hash chaining, monotonic sequence)
      */
     append(conn: DatabaseConnection, input: AuditCreateInput): Result<AuditEntry> {
@@ -79,8 +112,10 @@ export function createAuditTrail(sha256Fn: (data: string) => string, time?: Time
         const id = randomUUID();
         const timestamp = clock.nowISO();
 
-        // Get previous hash (chain head or genesis)
-        // FM-10: Use raw connection — hash chain is GLOBAL, not per-tenant (§3.5)
+        // Finding-5: Atomic seq_no + previous_hash read.
+        // FM-10: Use raw connection -- hash chain is GLOBAL, not per-tenant (S ref: §3.5)
+        // Within the caller's I-03 transaction, this SELECT and the subsequent INSERT
+        // are serialized by SQLite's locking, preventing TOCTOU on seq_no.
         const rawConn = unwrapForChainQuery(conn);
         const lastEntry = rawConn.get<{ current_hash: string; seq_no: number }>(
           `SELECT current_hash, seq_no FROM core_audit_log ORDER BY seq_no DESC LIMIT 1`
@@ -89,7 +124,7 @@ export function createAuditTrail(sha256Fn: (data: string) => string, time?: Time
         const previousHash = lastEntry?.current_hash ?? GENESIS_HASH;
         const seqNo = (lastEntry?.seq_no ?? 0) + 1;
 
-        // Compute hash for this entry
+        // Compute hash for this entry (requires previous_hash, cannot be done in SQL)
         const currentHash = computeEntryHash(sha256Fn, previousHash, input, timestamp, seqNo);
 
         // Insert into audit log
@@ -212,8 +247,13 @@ export function createAuditTrail(sha256Fn: (data: string) => string, time?: Time
      */
     query(conn: DatabaseConnection, ctx: OperationContext, filter: AuditQueryFilter): Result<AuditEntry[]> {
       try {
+        // Finding-2 fix: RBAC is always enforced unless explicitly skipped by
+        // trusted internal callers via skipRbac flag. The previous check
+        // `ctx.permissions.size > 0` meant empty permissions = full access,
+        // which is a privilege escalation when RBAC is active but a context
+        // happens to have no permissions assigned.
         // I-13: Check view_audit permission
-        if (ctx.permissions.size > 0 && !ctx.permissions.has('view_audit')) {
+        if (!filter.skipRbac && !ctx.permissions.has('view_audit')) {
           return {
             ok: false,
             error: {
@@ -284,7 +324,12 @@ export function createAuditTrail(sha256Fn: (data: string) => string, time?: Time
           operation: row.operation,
           resourceType: row.resource_type,
           resourceId: row.resource_id,
-          detail: row.detail ? JSON.parse(row.detail) as Record<string, unknown> : null,
+          // Finding-58: Wrap JSON.parse in try/catch — corrupted detail must not fail entire query
+          detail: (() => {
+            if (!row.detail) return null;
+            try { return JSON.parse(row.detail) as Record<string, unknown>; }
+            catch { return null; }
+          })(),
           previousHash: row.previous_hash,
           currentHash: row.current_hash,
         }));

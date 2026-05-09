@@ -49,7 +49,7 @@ import { createLimen } from '../../src/api/index.js';
 import type { Limen } from '../../src/api/index.js';
 import { createHLC } from '../../src/sync/hlc/hybrid_logical_clock.js';
 import { createSyncEventStore } from '../../src/sync/stores/sync_event_store.js';
-import { getSyncFoundationMigrations } from '../../src/api/migration/037_sync_foundation.js';
+import { getSyncFoundationMigrations } from '../../src/api/migration/047_sync_foundation.js';
 import {
   DEFAULT_SYNC_CONFIG,
   SYNC_ERROR_CODES,

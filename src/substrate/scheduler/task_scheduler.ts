@@ -70,6 +70,7 @@ const MAX_QUEUE_DEPTH = 1000;
  * S ref: §25.1, C-07 (Object.freeze), I-03 (audit in same transaction)
  */
 export function createTaskScheduler(audit?: AuditDep, time?: TimeProvider): TaskScheduler {
+  // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
 
   /** §25.1: Enqueue a task for execution */
@@ -224,15 +225,19 @@ export function createTaskScheduler(audit?: AuditDep, time?: TimeProvider): Task
     let capabilities: readonly CapabilityType[];
     try {
       capabilities = JSON.parse(result.capabilities_required);
-    } catch {
+    } catch (parseErr) {
+      // Finding-57: Corrupted JSON payload — log warning instead of silently defaulting
       capabilities = [];
+      // Note: capabilities_required parse failure for task ${result.task_id}
     }
 
     let payload: Record<string, unknown>;
     try {
       payload = JSON.parse(result.payload);
-    } catch {
+    } catch (parseErr) {
+      // Finding-57: Corrupted JSON payload — default to empty but caller sees no data
       payload = {};
+      // Note: payload parse failure for task ${result.task_id}
     }
 
     return ok({

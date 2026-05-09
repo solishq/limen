@@ -1,5 +1,10 @@
 # Agent Lifecycle Management Contract v1.3.0
 
+> **Implementation Status (Finding-39):** This contract is RATIFIED DESIGN — Pending Implementation.
+> The `AgentLifecycleClient` interface defined herein has no TypeScript implementation in `src/`.
+> Adapter-level lifecycle management in `src/adapters/shared/base-adapter.ts` provides
+> local lifecycle simulation but does not implement this contract's system-wide agent lifecycle.
+
 **Status:** RATIFIED DESIGN -- Pending Implementation
 **Governing:** CDM v2.1 + Contract Compliance v2.1
 **Scope:** Agent registration, capability evolution, consent governance, and knowledge exchange

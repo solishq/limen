@@ -172,8 +172,21 @@ describe('F-P10-004: Erasure certificate hash integration', () => {
         const cert = erasureResult.value;
         assert.match(cert.certificateHash, /^[0-9a-f]{64}$/, 'Certificate hash should be SHA-256 hex');
 
-        // Recompute hash to verify determinism (I-P10-24)
-        const payload = JSON.stringify({
+        // Recompute hash to verify determinism (I-P10-24, R2-33: canonical JSON)
+        function canonicalStringify(obj: unknown): string {
+          if (obj === null || obj === undefined) return JSON.stringify(obj);
+          if (typeof obj !== 'object') return JSON.stringify(obj);
+          if (Array.isArray(obj)) {
+            return '[' + obj.map(item => canonicalStringify(item)).join(',') + ']';
+          }
+          const record = obj as Record<string, unknown>;
+          const sortedKeys = Object.keys(record).sort();
+          const entries = sortedKeys.map(
+            k => JSON.stringify(k) + ':' + canonicalStringify(record[k]),
+          );
+          return '{' + entries.join(',') + '}';
+        }
+        const payload = canonicalStringify({
           id: cert.id,
           dataSubjectId: cert.dataSubjectId,
           requestedAt: cert.requestedAt,

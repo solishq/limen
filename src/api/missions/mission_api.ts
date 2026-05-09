@@ -50,7 +50,7 @@ import type {
   ResultSubmitInput, ResultSubmitOutput,
   CheckpointResponseInput, CheckpointResponseOutput,
 } from '../interfaces/api.js';
-import { unwrapResult, LimenError } from '../errors/limen_error.js';
+import { unwrapResult } from '../errors/limen_error.js';
 import { requirePermission } from '../enforcement/rbac_guard.js';
 import { requireRateLimit } from '../enforcement/rate_guard.js';
 
@@ -170,7 +170,10 @@ export class MissionApiImpl implements MissionApi {
    * I-13: RBAC enforced. SD-14: RBAC before rate limit.
    * Uses the missions subsystem to query. Returns MissionView[].
    */
-  async list(_filter?: MissionFilter): Promise<readonly MissionView[]> {
+  // Finding-1 (P0): Implemented missions.list() — queries core_missions with optional filters.
+  // MissionStore interface only exposes get()/getChildren(), so list queries the DB directly
+  // following the same rowToMissionView pattern used by get().
+  async list(filter?: MissionFilter): Promise<readonly MissionView[]> {
     const conn = this.getConnection();
     const ctx = this.getContext();
 
@@ -179,16 +182,77 @@ export class MissionApiImpl implements MissionApi {
     // §36: Rate limit check (SD-14: after RBAC)
     requireRateLimit(this.rateLimiter, conn, ctx, 'api_calls');
 
-    // List is not yet implemented — the current MissionStore interface only provides get() and getChildren().
-    // Throwing NOT_IMPLEMENTED is honest; returning [] silently hides the absence of functionality.
-    throw new LimenError('NOT_IMPLEMENTED', 'missions.list() is not yet implemented. Use missions.get() with a known mission ID.', {
-      suggestion: 'Track mission IDs from missions.create() return values.',
-    });
+    const deps = this.buildOrchDeps();
+
+    // Build parameterized query with optional filters
+    const conditions: string[] = ['m.tenant_id = ?'];
+    const params: unknown[] = [ctx.tenantId];
+
+    if (filter?.state) {
+      conditions.push('m.state = ?');
+      params.push(filter.state);
+    }
+    if (filter?.agentName) {
+      conditions.push('m.agent_id = ?');
+      params.push(filter.agentName);
+    }
+    if (filter?.parentId) {
+      conditions.push('m.parent_id = ?');
+      params.push(filter.parentId);
+    }
+
+    const limit = Math.min(filter?.limit ?? 50, 200); // Cap at 200 per query
+    const offset = filter?.offset ?? 0;
+
+    const whereClause = conditions.join(' AND ');
+    const rows = conn.query<{
+      id: string; state: string; objective: string; parent_id: string | null;
+      agent_id: string; plan_version: number; constraints_json: string;
+      created_at: string; completed_at: string | null;
+    }>(
+      `SELECT m.id, m.state, m.objective, m.parent_id, m.agent_id, m.plan_version,
+              m.constraints_json, m.created_at, m.completed_at
+       FROM core_missions m
+       WHERE ${whereClause}
+       ORDER BY m.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+    );
+
+    // Map rows to MissionView, fetching budget info for each
+    const views: MissionView[] = [];
+    for (const row of rows) {
+      const constraints = JSON.parse(row.constraints_json) as { budget: number };
+      const budgetResult = this.orchestration.budget.getRemaining(deps, row.id as MissionId);
+      const remaining = budgetResult.ok ? budgetResult.value : 0;
+
+      views.push({
+        id: row.id as MissionId,
+        state: row.state as MissionState,
+        objective: row.objective,
+        parentId: row.parent_id as MissionId | null,
+        agentId: row.agent_id as AgentId,
+        planVersion: row.plan_version,
+        budget: {
+          allocated: constraints.budget,
+          consumed: constraints.budget - remaining,
+          remaining,
+        },
+        createdAt: row.created_at,
+        completedAt: row.completed_at,
+      });
+    }
+
+    return views;
   }
 
   // ─── Private: OrchestrationDeps Builder ──
 
   private buildOrchDeps(): OrchestrationDeps {
+    // Finding-19: Date.now() fallback exists for DX convenience in single-instance mode.
+    // For deterministic testing, always inject TimeProvider via createLimen() config.
+    // ARCHITECTURAL CONSTRAINT: these fallbacks must be wired once at factory level
+    // in a future refactor (see Finding-47 factory decomposition).
     const clock = this.time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
     return {
       conn: this.getConnection(),

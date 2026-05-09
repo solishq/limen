@@ -174,7 +174,8 @@ export function createCryptoEngine(): CryptoEngine {
 export function createVaultOperations(crypto: CryptoEngine, masterKey: Buffer): VaultOperations {
   // PRR-106: Cache derived keys to avoid blocking the event loop on repeat retrieve().
   // Key: hex(salt) + ':' + iterations. Value: derived key Buffer.
-  // Cache is bounded by number of unique vault entries (typically small).
+  // Finding-23: Bound derived key cache to prevent memory leak (LRU-style eviction).
+  const MAX_CACHE_SIZE = 256;
   const derivedKeyCache = new Map<string, Buffer>();
 
   function cachedDeriveKey(salt: Buffer, iterations: number): Result<Buffer> {
@@ -184,6 +185,11 @@ export function createVaultOperations(crypto: CryptoEngine, masterKey: Buffer): 
 
     const result = crypto.deriveKey(masterKey, salt, iterations);
     if (result.ok) {
+      // Finding-23: Evict oldest entry (first key in Map insertion order) when full
+      if (derivedKeyCache.size >= MAX_CACHE_SIZE) {
+        const firstKey = derivedKeyCache.keys().next().value;
+        if (firstKey !== undefined) derivedKeyCache.delete(firstKey);
+      }
       derivedKeyCache.set(cacheKey, result.value);
     }
     return result;
@@ -400,8 +406,18 @@ export interface StringEncryption {
 }
 
 export function createStringEncryption(crypto: CryptoEngine, masterKey: Buffer): StringEncryption {
-  // Use first KEY_LENGTH bytes of masterKey as the AES-256 key
-  const key = masterKey.subarray(0, KEY_LENGTH);
+  // Finding-24: Validate masterKey length before subarray
+  if (masterKey.length < KEY_LENGTH) {
+    return {
+      encrypt: () => ({ ok: false, error: { code: 'INVALID_KEY', message: `Master key must be at least ${KEY_LENGTH} bytes, got ${masterKey.length}`, spec: 'I-11' } }),
+      decrypt: () => ({ ok: false, error: { code: 'INVALID_KEY', message: `Master key must be at least ${KEY_LENGTH} bytes, got ${masterKey.length}`, spec: 'I-11' } }),
+    };
+  }
+  // R2-8: Use Buffer.from() to create independent copy, not a view.
+  // subarray() returns a view sharing the same underlying ArrayBuffer —
+  // zeroing masterKey during key rotation would corrupt this key.
+  // Buffer.from() copies the bytes into a new allocation.
+  const key = Buffer.from(masterKey.subarray(0, KEY_LENGTH));
 
   return {
     encrypt(plaintext: string): Result<string> {
@@ -419,9 +435,18 @@ export function createStringEncryption(crypto: CryptoEngine, masterKey: Buffer):
         return { ok: false, error: { code: 'DECRYPTION_FAILED', message: 'Invalid encrypted format: expected iv:authTag:ciphertext', spec: 'I-11' } };
       }
       const [ivB64, authTagB64, ciphertextB64] = parts as [string, string, string];
+      // Finding-44: Validate IV and auth tag lengths before decryption
+      const ivBuf = Buffer.from(ivB64, 'base64');
+      const authTagBuf = Buffer.from(authTagB64, 'base64');
+      if (ivBuf.length !== IV_LENGTH) {
+        return { ok: false, error: { code: 'DECRYPTION_FAILED', message: `Invalid IV length: expected ${IV_LENGTH}, got ${ivBuf.length}`, spec: 'I-11' } };
+      }
+      if (authTagBuf.length !== AUTH_TAG_LENGTH) {
+        return { ok: false, error: { code: 'DECRYPTION_FAILED', message: `Invalid auth tag length: expected ${AUTH_TAG_LENGTH}, got ${authTagBuf.length}`, spec: 'I-11' } };
+      }
       const payload = {
-        iv: Buffer.from(ivB64, 'base64'),
-        authTag: Buffer.from(authTagB64, 'base64'),
+        iv: ivBuf,
+        authTag: authTagBuf,
         ciphertext: Buffer.from(ciphertextB64, 'base64'),
         keyVersion: 1,
         algorithm: AES_256_GCM,
@@ -440,15 +465,44 @@ export function createStringEncryption(crypto: CryptoEngine, masterKey: Buffer):
  * Prevents timing side-channel attacks when comparing HMAC signatures.
  * Use this instead of === for any security-sensitive string comparison.
  *
- * @param a - First hex string
- * @param b - Second hex string
- * @returns true if equal (constant-time)
+ * Finding-11: SECURITY NOTE — The length comparison (`bufA.length !== bufB.length`)
+ * is non-constant-time. This is acceptable for fixed-length values such as
+ * HMAC-SHA256 digests (always 64 hex chars / 32 bytes). For variable-length
+ * secret comparison, use timingSafeCompare() instead which normalizes length
+ * by hashing both inputs with SHA-256 before comparison.
+ *
+ * @param a - First hex string (should be fixed-length, e.g., HMAC-SHA256 digest)
+ * @param b - Second hex string (should be fixed-length, e.g., HMAC-SHA256 digest)
+ * @returns true if equal (constant-time for equal-length inputs)
  */
 export function timingSafeHexEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a, 'hex');
   const bufB = Buffer.from(b, 'hex');
-  if (bufA.length !== bufB.length) return false;
+  if (bufA.length !== bufB.length) {
+    // Finding-11: Length comparison is non-constant-time.
+    // Acceptable for fixed-length values (HMAC-SHA256 = 64 hex chars = 32 bytes).
+    // For variable-length secret comparison, use timingSafeCompare() instead.
+    return false;
+  }
   return timingSafeEqual(bufA, bufB);
+}
+
+/**
+ * Finding-11: Constant-time comparison for variable-length secrets.
+ * Hashes both inputs with SHA-256 before comparison to normalize length,
+ * eliminating the timing side-channel on length that timingSafeHexEqual has.
+ *
+ * Use this for comparing secrets of potentially different or variable lengths.
+ * For fixed-length hex values (e.g., HMAC digests), timingSafeHexEqual is sufficient.
+ *
+ * @param a - First string (any encoding)
+ * @param b - Second string (any encoding)
+ * @returns true if equal (fully constant-time — no length leak)
+ */
+export function timingSafeCompare(a: string, b: string): boolean {
+  const hashA = createHash('sha256').update(a).digest();
+  const hashB = createHash('sha256').update(b).digest();
+  return timingSafeEqual(hashA, hashB);
 }
 
 /**

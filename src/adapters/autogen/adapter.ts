@@ -15,8 +15,8 @@
  */
 
 import { BaseGovernedAdapter } from '../shared/base-adapter.js';
-import { serdeError } from '../crewai/errors.js';
-import type { CrewAIAdapterError } from '../crewai/errors.js';
+import { serdeError } from '../shared/errors.js';
+import type { AdapterError } from '../shared/errors.js';
 import type {
   AdapterId,
   AgentId,
@@ -139,7 +139,7 @@ export class LimenAutoGenAdapter extends BaseGovernedAdapter<
   }
 
   /** @override Validate AutoGen-specific config fields */
-  protected validateFrameworkConfig(config: AutoGenAdapterConfig): CrewAIAdapterError | null {
+  protected validateFrameworkConfig(config: AutoGenAdapterConfig): AdapterError | null {
     if (!config.conversationId || config.conversationId.length === 0) {
       return serdeError(this.adapterId, 'conversationId is required and must be non-empty');
     }

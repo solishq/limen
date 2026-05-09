@@ -108,6 +108,7 @@ interface EncryptionDep {
  * CF-010: When encryption is provided, request/response bodies are encrypted before storage.
  */
 export function createLlmGateway(audit?: AuditDep, encryption?: EncryptionDep, time?: TimeProvider, transport?: TransportDep): LlmGateway {
+  // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
 
   /**

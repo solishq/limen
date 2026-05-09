@@ -5,6 +5,10 @@
  * Phase: 5B (Sprint 5B — OpenAI + Google Adapters)
  * Implements: ProviderAdapter for Google's Gemini REST API.
  *
+ * R2-36: MAINTAINABILITY — nesting depth >7 (measured: 10). Candidate for
+ * early-return refactor. Deep nesting in response parsing (streaming chunks
+ * -> candidates -> parts -> content extraction).
+ *
  * Auth: API key in query parameter ?key={key}
  * URL:
  *   Non-streaming: {baseUrl}/v1beta/models/{model}:generateContent?key={key}

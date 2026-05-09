@@ -1,3 +1,8 @@
+<!-- R2-45: This file is Contract Compliance v2.1, which references and is governed by
+     MASTER-INDEX v2.1 (MASTER-INDEX-v2.1-FINAL.md). The filename v2.1 matches the
+     referenced version. The parent project's governance may have CDM v2.2, but this
+     worktree operates under v2.1 as the latest ratified version for Limen. -->
+
 # Contract Compliance v2.1
 
 **Status:** Active doctrine

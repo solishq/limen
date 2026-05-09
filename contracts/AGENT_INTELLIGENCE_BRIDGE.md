@@ -868,7 +868,7 @@ pub trait AgentIntelligenceBridge: Send + Sync {
 | Property | Consolidation idempotency (fast-check) |
 | Property | §tate machine never enters invalid state under random operation sequences |
 | Property | Health score always in [0.0, 1.0] regardless of input distribution |
-| Mutation | All invariants independently killable — no surviving mutants on governance checks |
+| Mutation | All invariants independently killable — no surviving mutants on governance checks <!-- R2-47: Mutation testing results should reference specific Stryker reports. Without a linked report, this claim is aspirational. Verify via `npx stryker run` and record the mutation score. --> |
 
 ---
 

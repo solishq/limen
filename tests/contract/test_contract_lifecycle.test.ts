@@ -125,6 +125,8 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
 
   describe('BC-060/BC-071/ST-060: Mission active → completing (legal)', () => {
     it('should allow transition from active to completing (intermediate state)', () => {
+      // Setup: transition created → active first
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-060-02'), 'active');
       const result = gov.transitionEnforcer.enforceMissionTransition(
         conn, missionId('mission-060-02'), 'completing',
       );
@@ -136,6 +138,9 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
 
   describe('BC-060/ST-060: Mission completing → completed (legal)', () => {
     it('should allow transition from completing to completed', () => {
+      // Setup: transition created → active → completing first
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-060-03'), 'active');
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-060-03'), 'completing');
       const result = gov.transitionEnforcer.enforceMissionTransition(
         conn, missionId('mission-060-03'), 'completed',
       );
@@ -193,7 +198,9 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
 
   describe('BC-070: Mission completed → active (INVALID — terminal, no reverse)', () => {
     it('should reject reverse transition from terminal state completed', () => {
-      // Setup: transition to terminal state 'completed' first
+      // Setup: transition created → active → completing → completed
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-070-01'), 'active');
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-070-01'), 'completing');
       gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-070-01'), 'completed');
       const result = gov.transitionEnforcer.enforceMissionTransition(
         conn, missionId('mission-070-01'), 'active',
@@ -205,7 +212,7 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
 
   describe('BC-070: Mission failed → active (INVALID — terminal)', () => {
     it('should reject reverse transition from terminal state failed', () => {
-      // Setup: transition to terminal state 'failed' first
+      // Setup: transition created → failed (legal per ST-060)
       gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-070-02'), 'failed');
       const result = gov.transitionEnforcer.enforceMissionTransition(
         conn, missionId('mission-070-02'), 'active',
@@ -217,7 +224,7 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
 
   describe('BC-070: Mission revoked → active (INVALID — terminal)', () => {
     it('should reject reverse transition from terminal state revoked', () => {
-      // Setup: transition to terminal state 'revoked' first
+      // Setup: transition created → revoked (legal per ST-060)
       gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-070-03'), 'revoked');
       const result = gov.transitionEnforcer.enforceMissionTransition(
         conn, missionId('mission-070-03'), 'active',
@@ -290,6 +297,8 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
 
   describe('BC-064/ST-061: Task ready → executing (legal)', () => {
     it('should allow transition from ready to executing', () => {
+      // Setup: transition pending → ready first
+      gov.transitionEnforcer.enforceTaskTransition(conn, taskId('task-064-02'), 'ready');
       const result = gov.transitionEnforcer.enforceTaskTransition(
         conn, taskId('task-064-02'), 'executing',
       );
@@ -301,6 +310,9 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
 
   describe('BC-064/ST-061: Task executing → completed (legal)', () => {
     it('should allow transition from executing to completed', () => {
+      // Setup: transition pending → ready → executing first
+      gov.transitionEnforcer.enforceTaskTransition(conn, taskId('task-064-03'), 'ready');
+      gov.transitionEnforcer.enforceTaskTransition(conn, taskId('task-064-03'), 'executing');
       const result = gov.transitionEnforcer.enforceTaskTransition(
         conn, taskId('task-064-03'), 'completed',
       );
@@ -347,7 +359,9 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
 
   describe('BC-070: Task completed → executing (INVALID — terminal)', () => {
     it('should reject reverse transition from terminal state completed', () => {
-      // Setup: transition to terminal state 'completed' first
+      // Setup: transition pending → ready → executing → completed
+      gov.transitionEnforcer.enforceTaskTransition(conn, taskId('task-070-01'), 'ready');
+      gov.transitionEnforcer.enforceTaskTransition(conn, taskId('task-070-01'), 'executing');
       gov.transitionEnforcer.enforceTaskTransition(conn, taskId('task-070-01'), 'completed');
       const result = gov.transitionEnforcer.enforceTaskTransition(
         conn, taskId('task-070-01'), 'executing',
@@ -359,7 +373,7 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
 
   describe('BC-070: Task failed → ready (INVALID — terminal)', () => {
     it('should reject reverse transition from terminal state failed', () => {
-      // Setup: transition to terminal state 'failed' first
+      // Setup: transition pending → failed (legal per ST-061)
       gov.transitionEnforcer.enforceTaskTransition(conn, taskId('task-070-02'), 'failed');
       const result = gov.transitionEnforcer.enforceTaskTransition(
         conn, taskId('task-070-02'), 'ready',
@@ -432,6 +446,8 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
 
   describe('BC-066/ST-062: Handoff accepted → active (legal)', () => {
     it('should allow transition from accepted to active', () => {
+      // Setup: transition issued → accepted first
+      gov.transitionEnforcer.enforceHandoffTransition(conn, handoffId('handoff-066-03'), 'accepted');
       const result = gov.transitionEnforcer.enforceHandoffTransition(
         conn, handoffId('handoff-066-03'), 'active',
       );
@@ -443,6 +459,9 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
 
   describe('BC-066/ST-062: Handoff active → returned (legal)', () => {
     it('should allow transition from active to returned', () => {
+      // Setup: transition issued → accepted → active first
+      gov.transitionEnforcer.enforceHandoffTransition(conn, handoffId('handoff-066-04'), 'accepted');
+      gov.transitionEnforcer.enforceHandoffTransition(conn, handoffId('handoff-066-04'), 'active');
       const result = gov.transitionEnforcer.enforceHandoffTransition(
         conn, handoffId('handoff-066-04'), 'returned',
       );
@@ -467,7 +486,9 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
 
   describe('BC-070: Handoff returned → active (INVALID — terminal)', () => {
     it('should reject reverse transition from terminal state returned', () => {
-      // Setup: transition to terminal state 'returned' first
+      // Setup: transition issued → accepted → active → returned
+      gov.transitionEnforcer.enforceHandoffTransition(conn, handoffId('handoff-070-01'), 'accepted');
+      gov.transitionEnforcer.enforceHandoffTransition(conn, handoffId('handoff-070-01'), 'active');
       gov.transitionEnforcer.enforceHandoffTransition(conn, handoffId('handoff-070-01'), 'returned');
       const result = gov.transitionEnforcer.enforceHandoffTransition(
         conn, handoffId('handoff-070-01'), 'active',
@@ -484,6 +505,8 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
   describe('BC-067/ST-063: Suspended entity cannot transition', () => {
     it('should reject lifecycle transition for a suspended mission', () => {
       // Setup: create an active suspension record targeting this mission
+      // Setup: transition created → active first so completing is a legal target
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-067-suspended'), 'active');
       gov.suspensionStore.create(conn, {
         suspensionId: suspensionRecordId('susp-067-setup'),
         tenantId: 'test-tenant',
@@ -510,6 +533,9 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
 
   describe('BC-071: Completing is intermediate — must eventually reach completed or failed', () => {
     it('should allow completing → completed as the normal completion path', () => {
+      // Setup: transition created → active → completing
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-071-comp'), 'active');
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-071-comp'), 'completing');
       const result = gov.transitionEnforcer.enforceMissionTransition(
         conn, missionId('mission-071-comp'), 'completed',
       );
@@ -519,6 +545,9 @@ describe('Phase 0A Contract Tests: Lifecycle Transition Tables (Deliverable 6)',
     });
 
     it('should allow completing → failed as the failure path from intermediate', () => {
+      // Setup: transition created → active → completing
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-071-fail'), 'active');
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-071-fail'), 'completing');
       const result = gov.transitionEnforcer.enforceMissionTransition(
         conn, missionId('mission-071-fail'), 'failed',
       );

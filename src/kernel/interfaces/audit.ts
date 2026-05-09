@@ -64,6 +64,14 @@ export interface AuditQueryFilter {
   readonly toTimestamp?: string;
   readonly limit?: number;                    // default 100
   readonly offset?: number;                   // default 0
+  /**
+   * Finding-2 fix: Skip RBAC check for internal system callers.
+   * When true, the view_audit permission check is bypassed.
+   * MUST only be set by trusted internal code paths (e.g., compliance export
+   * in single-user/dormant-RBAC mode). External API callers MUST NOT set this.
+   * Default: false (RBAC enforced).
+   */
+  readonly skipRbac?: boolean;
 }
 
 // ─── Chain Verification ───

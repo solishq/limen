@@ -38,7 +38,7 @@ import {
   createIdempotencyStoreImpl,
   createResumeTokenStoreImpl,
   createPayloadCanonicalizerImpl,
-  setGovernanceTimeProvider,
+  // Finding-50: setGovernanceTimeProvider import removed — was a no-op call
 } from '../stores/governance_stores.js';
 import type { TimeProvider } from '../../kernel/interfaces/time.js';
 
@@ -99,9 +99,8 @@ export interface GovernanceSystem {
  * @returns Frozen GovernanceSystem — all stores backed by SQLite
  */
 export function createGovernanceSystem(time?: TimeProvider): GovernanceSystem {
-  // v2.1.0: setGovernanceTimeProvider is now a no-op.
-  // Retained call for backward compat (tests may import and call it).
-  if (time) setGovernanceTimeProvider(time);
+  // Finding-50: Removed no-op call to setGovernanceTimeProvider.
+  // Time is now threaded through factory functions directly.
 
   // Wire dependency graph: TransitionEnforcer depends on SuspensionStore,
   // TraceEmitter depends on RunSequencer

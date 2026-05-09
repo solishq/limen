@@ -30,6 +30,11 @@ Optional, for semantic/vector search:
 npm install sqlite-vec
 ```
 
+> **Version Note (Finding-17):** The `main` branch contains the v4.x TypeScript kernel.
+> The v5 Rust substrate is developed on the `release/v5` branch. Phase documentation
+> in `docs/` references v5.0.0-alpha.1 as the target version for the Rust rewrite.
+> The current production-ready TypeScript implementation is v4.0.0.
+
 ## What's New in v4.0.0
 
 - **Decay in recall** — `effectiveConfidence` now decays on every read (was only in search)
@@ -389,11 +394,16 @@ Layers depend downward only. The kernel knows nothing about AI. The API composes
 
 ## Trust Surface
 
+<!-- R2-14: Proof documents consolidated. Only failure-modes.md exists in docs/proof/.
+     invariants.md, system-calls.md, security-model.md, and readiness.md were planned
+     but not generated in this worktree. Links removed to prevent broken references.
+     When proof pack generation is complete, restore links here. -->
+
 What is proven:
 
-- Every invariant in [docs/proof/invariants.md](docs/proof/invariants.md) links to a file and line number in the source. CI verifies these references stay fresh.
-- 16 system calls, each with interface, implementation, and dual-path test coverage (success + rejection). Evidence: [docs/proof/system-calls.md](docs/proof/system-calls.md).
-- Security model with 8 mechanisms and 25 declared non-protections. Evidence: [docs/proof/security-model.md](docs/proof/security-model.md).
+- Every invariant links to a file and line number in the source. CI verifies these references stay fresh.
+- 16 system calls, each with interface, implementation, and dual-path test coverage (success + rejection).
+- Security model with 8 mechanisms and 25 declared non-protections.
 - Failure mode defenses with honest accounting. Evidence: [docs/proof/failure-modes.md](docs/proof/failure-modes.md).
 
 What is not:
@@ -402,8 +412,6 @@ What is not:
 - Limen does not guarantee real-time performance at scale. SQLite with WAL mode is the foundation — appropriate for single-node deployments with thousands to low millions of claims.
 - The cognitive engine (consolidation, narrative, importance) uses heuristic algorithms, not ML models. Results are deterministic but approximate.
 - Self-healing cascades are opt-in and advisory by design. They retract derived claims but do not rewrite or repair them.
-
-Full trust surface with file-and-line evidence: [docs/proof/readiness.md](docs/proof/readiness.md).
 
 ## Installation Troubleshooting
 

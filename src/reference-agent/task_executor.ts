@@ -59,6 +59,7 @@ export class TaskExecutor {
   ) {
     this.client = client;
     this.onExecution = onExecution;
+    // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
     this.clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   }
 

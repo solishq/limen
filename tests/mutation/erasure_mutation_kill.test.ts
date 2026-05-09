@@ -85,7 +85,10 @@ describe('MUT-CAT1: Certificate field completeness', () => {
       assert.equal(typeof cert.id, 'string');
       assert.ok(cert.id.length > 0, 'id must be non-empty');
 
-      assert.equal(cert.dataSubjectId, 'entity:user:mut1');
+      // R2-30: dataSubjectId in certificate is SHA-256 hashed (PII protection)
+      const expectedMut1Hash = createHash('sha256').update('entity:user:mut1').digest('hex');
+      assert.equal(cert.dataSubjectId, expectedMut1Hash,
+        'Certificate dataSubjectId must be SHA-256 hash of the raw ID (R2-30)');
 
       assert.equal(typeof cert.requestedAt, 'string');
       assert.ok(cert.requestedAt.length > 0, 'requestedAt must be non-empty');
@@ -959,8 +962,21 @@ describe('MUT-CAT5: SQL and string literal mutations', () => {
 
       const cert = result.value;
 
-      // Recompute hash from certificate fields
-      const payload = JSON.stringify({
+      // Recompute hash from certificate fields using canonical JSON (R2-33)
+      function canonicalStringify(obj: unknown): string {
+        if (obj === null || obj === undefined) return JSON.stringify(obj);
+        if (typeof obj !== 'object') return JSON.stringify(obj);
+        if (Array.isArray(obj)) {
+          return '[' + obj.map(item => canonicalStringify(item)).join(',') + ']';
+        }
+        const record = obj as Record<string, unknown>;
+        const sortedKeys = Object.keys(record).sort();
+        const entries = sortedKeys.map(
+          k => JSON.stringify(k) + ':' + canonicalStringify(record[k]),
+        );
+        return '{' + entries.join(',') + '}';
+      }
+      const payload = canonicalStringify({
         id: cert.id,
         dataSubjectId: cert.dataSubjectId,
         requestedAt: cert.requestedAt,
@@ -974,7 +990,7 @@ describe('MUT-CAT5: SQL and string literal mutations', () => {
       const expectedHash = createHash('sha256').update(payload).digest('hex');
 
       assert.equal(cert.certificateHash, expectedHash,
-        'Certificate hash must match recomputed SHA-256');
+        'Certificate hash must match recomputed SHA-256 with canonical JSON (R2-33)');
     });
   });
 
@@ -1012,16 +1028,17 @@ describe('MUT-CAT5: SQL and string literal mutations', () => {
       assert.equal(result.ok, true);
 
       // The audit entry may be tombstoned in single-tenant mode.
-      // Verify the certificate has the correct dataSubjectId.
+      // Verify the certificate has the correct dataSubjectId (R2-30: SHA-256 hashed).
       if (result.ok) {
-        assert.equal(result.value.dataSubjectId, 'entity:user:hashsub');
-
-        // Compute expected hash prefix
-        const expectedHash = createHash('sha256')
+        const expectedFullHash = createHash('sha256')
           .update('entity:user:hashsub')
-          .digest('hex')
-          .substring(0, 16);
-        assert.equal(expectedHash.length, 16, 'Hash prefix should be 16 chars');
+          .digest('hex');
+        assert.equal(result.value.dataSubjectId, expectedFullHash,
+          'Certificate dataSubjectId must be SHA-256 hash of the raw ID (R2-30)');
+
+        // Compute expected hash prefix for audit entry
+        const expectedPrefix = expectedFullHash.substring(0, 16);
+        assert.equal(expectedPrefix.length, 16, 'Hash prefix should be 16 chars');
       }
     });
   });
@@ -1097,7 +1114,10 @@ describe('MUT-CROSS: Cross-cutting mutation kills', () => {
       // Certificate integrity
       assert.equal(cert.chainVerification.valid, true);
       assert.equal(cert.certificateHash.length, 64);
-      assert.equal(cert.dataSubjectId, 'entity:user:cross1');
+      // R2-30: dataSubjectId in certificate is SHA-256 hashed
+      const expectedCross1Hash = createHash('sha256').update('entity:user:cross1').digest('hex');
+      assert.equal(cert.dataSubjectId, expectedCross1Hash,
+        'Certificate dataSubjectId must be SHA-256 hash of the raw ID (R2-30)');
 
       // Verify nothing remains
       const remaining = limen.recall('entity:user:cross1');
@@ -1619,8 +1639,10 @@ describe('MUT-CROSS: Cross-cutting mutation kills', () => {
 
       assert.equal(result.value.claimsTombstoned, 1,
         'Must tombstone exactly 1 claim via short form');
-      assert.equal(result.value.dataSubjectId, 'user:sqlp1',
-        'Certificate must preserve the original dataSubjectId');
+      // R2-30: dataSubjectId in certificate is SHA-256 hashed
+      const expectedSqlp1Hash = createHash('sha256').update('user:sqlp1').digest('hex');
+      assert.equal(result.value.dataSubjectId, expectedSqlp1Hash,
+        'Certificate dataSubjectId must be SHA-256 hash of the raw ID (R2-30)');
     });
   });
 

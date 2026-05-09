@@ -168,6 +168,7 @@ function checkResponseSize(contentLength: string | null): void {
  * @param options - Configuration options including time provider, health updater, circuit breaker
  */
 export function createTransportEngine(options?: TransportEngineOptions): TransportEngine {
+  // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
   const clock = options?.time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   const updateHealth = options?.updateHealth;
   const isCircuitOpen = options?.isCircuitOpen;

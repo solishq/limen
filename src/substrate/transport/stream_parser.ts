@@ -71,6 +71,7 @@ export async function* parseSSEStream(
 ): AsyncIterable<SSEEvent> {
   // Each concurrent stream gets its own TextDecoder to avoid shared internal state corruption.
   const decoder = new TextDecoder();
+  // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   const reader = body.getReader();
   let eventCount = 0;
@@ -262,6 +263,7 @@ export async function* parseNDJSONStream(
 ): AsyncIterable<Record<string, unknown>> {
   // Each concurrent stream gets its own TextDecoder to avoid shared internal state corruption.
   const decoder = new TextDecoder();
+  // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   const reader = body.getReader();
   let lastDataTime = clock.nowMs();

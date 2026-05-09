@@ -47,6 +47,13 @@ async function setup(): Promise<void> {
   conn = createTestDatabase();
   ctx = createTestOperationContext();
   gov = createGovernanceSystem();
+  // R2-23: Seed handoffs — handoffStore.updateState now rejects phantom entities
+  const now = testTimestamp();
+  conn.run(
+    `INSERT INTO gov_handoffs (handoff_id, tenant_id, mission_id, delegator_agent_id, delegate_agent_id, state, schema_version, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ['handoff-069-accept', 'test-tenant', 'mission-supervisor-001', 'agent-a', 'agent-b', 'issued', '0.1.0', now, now],
+  );
 }
 
 // ─── Fixtures ───

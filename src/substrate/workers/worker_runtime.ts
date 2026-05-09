@@ -64,6 +64,7 @@ function ok<T>(value: T): { ok: true; value: T } {
  * ASSUMPTION WR-2: Graceful shutdown = stop accepting, wait for running, then terminate.
  */
 export function createWorkerRuntime(audit?: AuditDep, time?: TimeProvider): WorkerRuntime {
+  // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
 
   /**

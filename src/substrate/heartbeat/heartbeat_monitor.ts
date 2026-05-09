@@ -61,6 +61,7 @@ function ok<T>(value: T): { ok: true; value: T } {
  * by the scheduler. It scans all RUNNING tasks and checks for missed heartbeats.
  */
 export function createHeartbeatMonitor(audit?: AuditDep, time?: TimeProvider): HeartbeatMonitor {
+  // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
 
   /** §25.5: Receive heartbeat from a running task */

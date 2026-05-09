@@ -32,7 +32,7 @@ import type {
   AgentId,
   SessionId,
   TenantId,
-} from '../../adapters/crewai/types.js';
+} from '../../adapters/shared/types.js';
 
 // ── Test Helpers ──
 

@@ -808,8 +808,22 @@ describe('Phase 10: Erasure Certificate Hash Integration (F-P10-004)', () => {
 
       assert.ok(row, 'Certificate should be stored in DB');
 
-      // Recompute the hash from the certificate fields
-      const payload = JSON.stringify({
+      // Recompute the hash from the certificate fields using canonical JSON (R2-33)
+      // canonicalStringify sorts keys alphabetically at every level for deterministic hashing
+      function canonicalStringify(obj: unknown): string {
+        if (obj === null || obj === undefined) return JSON.stringify(obj);
+        if (typeof obj !== 'object') return JSON.stringify(obj);
+        if (Array.isArray(obj)) {
+          return '[' + obj.map(item => canonicalStringify(item)).join(',') + ']';
+        }
+        const record = obj as Record<string, unknown>;
+        const sortedKeys = Object.keys(record).sort();
+        const entries = sortedKeys.map(
+          k => JSON.stringify(k) + ':' + canonicalStringify(record[k]),
+        );
+        return '{' + entries.join(',') + '}';
+      }
+      const payload = canonicalStringify({
         id: cert.id,
         dataSubjectId: cert.dataSubjectId,
         requestedAt: cert.requestedAt,
@@ -962,7 +976,10 @@ describe('Phase 10: Erasure Integration (F-P10-013)', () => {
 
       // Verify certificate was generated with valid fields
       assert.ok(erasureResult.value.id, 'Certificate should have an ID');
-      assert.equal(erasureResult.value.dataSubjectId, 'entity:user:dave');
+      // R2-30: dataSubjectId is now SHA-256 hashed in the certificate (PII protection)
+      const expectedDaveHash = createHash('sha256').update('entity:user:dave').digest('hex');
+      assert.equal(erasureResult.value.dataSubjectId, expectedDaveHash,
+        'Certificate dataSubjectId must be SHA-256 hash of the raw ID (R2-30)');
       assert.ok(erasureResult.value.requestedAt, 'Should have requestedAt');
       assert.ok(erasureResult.value.completedAt, 'Should have completedAt');
       assert.ok(erasureResult.value.certificateHash, 'Should have certificate hash');
@@ -1013,7 +1030,10 @@ describe('Phase 10: Erasure Integration (F-P10-013)', () => {
       db.close();
 
       assert.ok(certRow, 'Certificate should be stored in governance_erasure_certificates');
-      assert.equal(certRow['data_subject_id'], 'entity:user:eve');
+      // R2-30: DB stores SHA-256 hash of dataSubjectId, not raw PII
+      const expectedEveHash = createHash('sha256').update('entity:user:eve').digest('hex');
+      assert.equal(certRow['data_subject_id'], expectedEveHash,
+        'DB data_subject_id must be SHA-256 hash of the raw ID (R2-30)');
       assert.ok(certRow['certificate_hash'], 'Certificate hash should be stored');
 
       // PII claim should be tombstoned

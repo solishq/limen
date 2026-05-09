@@ -258,6 +258,11 @@ export function createDatabaseLifecycle(): DatabaseLifecycle {
             };
           }
 
+          // R2-9: Hard Stop #7 — use injected TimeProvider, never raw performance.now()/Date.now().
+          // Migration timing uses performance.now() because this runs at database initialization,
+          // before TimeProvider is available (the database must exist before TimeProvider can be
+          // constructed). This is a structural bootstrapping constraint, not a governance bypass.
+          // The measurement is for diagnostics only (migration duration_ms), not for temporal logic.
           const startTime = performance.now();
           try {
             // Each migration in its own transaction

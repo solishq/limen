@@ -108,7 +108,9 @@ describe('Phase 0A Contract Tests: Structured Error Model (Deliverable 7)', () =
     });
 
     it('3. LIFECYCLE violations include spec reference to transition table', () => {
-      // Setup: transition to terminal state first
+      // Setup: transition created → active → completing → completed (terminal)
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-err-003'), 'active' as MissionLifecycleState);
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-err-003'), 'completing' as MissionLifecycleState);
       gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-err-003'), 'completed' as MissionLifecycleState);
       const result = gov.transitionEnforcer.enforceMissionTransition(
         conn, missionId('mission-err-003'), 'active' as MissionLifecycleState,
@@ -237,7 +239,9 @@ describe('Phase 0A Contract Tests: Structured Error Model (Deliverable 7)', () =
     it('9. violation message field is present as string at store layer', () => {
       // Redaction occurs at API boundary (S39 IP-4), not at store layer.
       // At store layer, violations must have a message field with descriptive content.
-      // Setup: transition to terminal state first
+      // Setup: transition created → active → completing → completed (terminal)
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-redaction-test'), 'active' as MissionLifecycleState);
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-redaction-test'), 'completing' as MissionLifecycleState);
       gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-redaction-test'), 'completed' as MissionLifecycleState);
       const result = gov.transitionEnforcer.enforceMissionTransition(
         conn, missionId('mission-redaction-test'), 'active' as MissionLifecycleState,
@@ -299,7 +303,9 @@ describe('Phase 0A Contract Tests: Structured Error Model (Deliverable 7)', () =
     });
 
     it('12. TransitionEnforcer returns LIFECYCLE_INVALID_TRANSITION for illegal transitions', () => {
-      // Setup: transition to terminal state first
+      // Setup: transition created → active → completing → completed (terminal)
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-completed-001'), 'active' as MissionLifecycleState);
+      gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-completed-001'), 'completing' as MissionLifecycleState);
       gov.transitionEnforcer.enforceMissionTransition(conn, missionId('mission-completed-001'), 'completed' as MissionLifecycleState);
       // completed → active is always illegal (BC-070: no reverse from terminal)
       const result = gov.transitionEnforcer.enforceMissionTransition(

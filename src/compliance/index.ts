@@ -23,6 +23,11 @@ export type {
 
 // Token Budget
 export { TokenBudgetManager } from './token-budget/manager.js';
+export {
+  DEFAULT_TOKEN_BUDGET,
+  DEFAULT_TOKEN_BUDGET_PER_OPERATION,
+  MAX_TOKEN_BUDGET_CAP,
+} from './token-budget/types.js';
 export type {
   TokenReservation,
   SessionBudgetState,

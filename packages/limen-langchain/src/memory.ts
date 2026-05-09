@@ -57,6 +57,16 @@ interface LimenLike {
  */
 export function createLimenMemory(config: LimenMemoryConfig): LimenMemoryInterface {
   const limen = config.limen as LimenLike;
+
+  // R2-38: Validate LimenLike interface at construction time.
+  // Fail fast if the provided object doesn't satisfy the structural contract.
+  if (typeof limen.remember !== 'function' || typeof limen.recall !== 'function') {
+    throw new Error('Invalid LimenLike: missing required methods (remember, recall)');
+  }
+  if (typeof limen.forget !== 'function' || typeof limen.search !== 'function') {
+    throw new Error('Invalid LimenLike: missing required methods (forget, search)');
+  }
+
   const prefix = config.subjectPrefix ?? DEFAULTS.subjectPrefix;
   const maxMemories = config.maxMemories ?? DEFAULTS.maxMemories;
   const minConfidence = config.minConfidence ?? DEFAULTS.minConfidence;
@@ -64,6 +74,12 @@ export function createLimenMemory(config: LimenMemoryConfig): LimenMemoryInterfa
   const humanPrefix = config.humanPrefix ?? DEFAULTS.humanPrefix;
   const aiPrefix = config.aiPrefix ?? DEFAULTS.aiPrefix;
 
+  // R2-39: Prefix turn counter with instance ID to prevent cross-instance collisions.
+  // Without this, two LimenMemory instances sharing the same Limen backend would
+  // overwrite each other's turn subjects (e.g., both writing to `langchain:memory:conversation:1`).
+  const instanceId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10);
   let turnCounter = 0;
 
   return {
@@ -97,10 +113,11 @@ export function createLimenMemory(config: LimenMemoryConfig): LimenMemoryInterfa
       const humanMessage = String(inputValues.input ?? inputValues.question ?? '');
       const aiMessage = String(outputValues.output ?? outputValues.response ?? outputValues.text ?? '');
 
+      // R2-39: Include instanceId in subject to prevent cross-instance collisions
       if (humanMessage) {
         turnCounter++;
         limen.remember(
-          `${prefix}:conversation:${turnCounter}`,
+          `${prefix}:${instanceId}:conversation:${turnCounter}`,
           'langchain.message',
           `${humanPrefix}: ${humanMessage}`,
         );
@@ -109,7 +126,7 @@ export function createLimenMemory(config: LimenMemoryConfig): LimenMemoryInterfa
       if (aiMessage) {
         turnCounter++;
         limen.remember(
-          `${prefix}:conversation:${turnCounter}`,
+          `${prefix}:${instanceId}:conversation:${turnCounter}`,
           'langchain.message',
           `${aiPrefix}: ${aiMessage}`,
         );
@@ -117,15 +134,28 @@ export function createLimenMemory(config: LimenMemoryConfig): LimenMemoryInterfa
     },
 
     async clear(): Promise<void> {
-      // Recall all memories with our prefix and retract them
-      const result = limen.recall(undefined, 'langchain.message', {
-        limit: 100000,
-      });
+      // R2-37: Batch clear instead of N sequential forget calls.
+      // Use paginated recall with a bounded batch size to prevent unbounded
+      // sequential forget() calls. Each batch retrieves up to CLEAR_BATCH_SIZE
+      // entries, forgets them, then fetches the next batch until none remain.
+      const CLEAR_BATCH_SIZE = 500;
+      let cleared = 0;
 
-      if (!result.ok || !result.value) return;
+      // eslint-disable-next-line no-constant-condition -- intentional drain loop
+      while (true) {
+        const result = limen.recall(undefined, 'langchain.message', {
+          limit: CLEAR_BATCH_SIZE,
+        });
 
-      for (const belief of result.value) {
-        limen.forget(belief.claimId);
+        if (!result.ok || !result.value || result.value.length === 0) break;
+
+        for (const belief of result.value) {
+          limen.forget(belief.claimId);
+          cleared++;
+        }
+
+        // If we got fewer than batch size, we've drained all entries
+        if (result.value.length < CLEAR_BATCH_SIZE) break;
       }
 
       turnCounter = 0;

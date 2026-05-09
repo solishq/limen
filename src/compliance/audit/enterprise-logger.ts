@@ -23,7 +23,7 @@ import type {
   GovernanceDecision,
   Result,
   KernelError,
-} from '../../adapters/crewai/types.js';
+} from '../../adapters/shared/types.js';
 
 function makeError(code: string, message: string): KernelError {
   return { code, message, spec: 'SHARED_TYPES.md S10.3' };
@@ -73,6 +73,15 @@ export interface EnterpriseAuditEntry extends AuditLogEntry {
   readonly tombstoned: boolean;
   readonly tombstonedAt: string | null;
   readonly archiveStatus: 'active' | 'archived' | 'tombstoned';
+  /**
+   * Finding-9 fix: Original content hash preserved at tombstone time.
+   * When an entry is tombstoned, its details/action/governanceDecision are
+   * redacted but the original currentHash is kept for chain linkage.
+   * This field stores that original hash so verifyChain() can confirm the
+   * tombstoned entry still references the correct pre-tombstone hash.
+   * null for non-tombstoned entries.
+   */
+  readonly originalContentHash: string | null;
 }
 
 /**
@@ -92,10 +101,15 @@ export interface ChainVerificationResult {
  * Each entry's currentHash = SHA-256(canonical JSON of entry EXCLUDING currentHash).
  * previousHash links to the prior entry's currentHash.
  *
- * #governed = true -- no ungoverned mode.
+ * GOVERNANCE: This component is always governed (readonly #governed = true).
+ * Finding-37: Removed dead governance bypass check — #governed is readonly true.
  */
 export class EnterpriseAuditLogger {
-  readonly #governed = true;
+  // Finding-10/36: Bound in-memory entries to prevent unbounded memory growth.
+  // When capacity is reached, oldest entries are evicted FIFO.
+  static readonly MAX_ENTRIES = 10_000;
+
+  // Finding-37: governance is always active (no ungoverned mode)
   readonly #entries: EnterpriseAuditEntry[] = [];
   readonly #eventListeners: Array<(event: string, data: unknown) => void> = [];
   readonly #timeProvider: TimeProvider;
@@ -127,8 +141,11 @@ export class EnterpriseAuditLogger {
     readonly details: Readonly<Record<string, unknown>>;
     readonly classification: ClassificationLevel;
   }): Result<EventId> {
-    if (!this.#governed) {
-      return { ok: false, error: makeError('GOVERNANCE_REQUIRED', 'Audit logger requires governance') };
+    // Finding-37: Dead governance check removed — #governed is readonly true.
+
+    // Finding-10/36: FIFO eviction when capacity reached
+    if (this.#entries.length >= EnterpriseAuditLogger.MAX_ENTRIES) {
+      this.#entries.shift();
     }
 
     const previousHash = this.#entries.length > 0
@@ -163,6 +180,7 @@ export class EnterpriseAuditLogger {
       tombstoned: false,
       tombstonedAt: null,
       archiveStatus: 'active',
+      originalContentHash: null, // Finding-9: only set during tombstone
     };
 
     this.#entries.push(fullEntry);
@@ -225,11 +243,45 @@ export class EnterpriseAuditLogger {
         };
       }
 
-      // F-02: Skip content hash verification for tombstoned entries.
-      // Tombstoned entries intentionally changed details/action/governanceDecision
-      // but preserved the original currentHash for chain integrity.
-      // The previousHash linkage (checked above) still validates chain structure.
+      // Finding-9 fix: For tombstoned entries, verify that currentHash matches
+      // the preserved originalContentHash. This ensures a tombstoned entry's
+      // hash was not tampered with after tombstoning. The content itself cannot
+      // be re-verified (details were redacted), but the stored original hash
+      // proves the chain link is authentic.
       if (entry.tombstoned) {
+        if (entry.originalContentHash === null) {
+          // Finding-9: Tombstoned entry missing originalContentHash — integrity
+          // cannot be verified. This indicates corruption or a pre-fix tombstone.
+          this.#emitEvent('audit:integrity_violation', {
+            index: i,
+            reason: 'Tombstoned entry missing originalContentHash (Finding-9)',
+          });
+          return {
+            ok: true,
+            value: {
+              valid: false,
+              entriesChecked: i - start + 1,
+              firstInvalidIndex: i,
+              firstInvalidReason: `Entry ${String(i)}: tombstoned entry missing originalContentHash — cannot verify integrity`,
+            },
+          };
+        }
+        if (entry.currentHash !== entry.originalContentHash) {
+          // Finding-9: currentHash was modified after tombstoning — tamper detected
+          this.#emitEvent('audit:integrity_violation', {
+            index: i,
+            reason: 'Tombstoned entry currentHash does not match originalContentHash (Finding-9)',
+          });
+          return {
+            ok: true,
+            value: {
+              valid: false,
+              entriesChecked: i - start + 1,
+              firstInvalidIndex: i,
+              firstInvalidReason: `Entry ${String(i)}: tombstoned entry currentHash does not match originalContentHash (tamper detected)`,
+            },
+          };
+        }
         continue;
       }
 
@@ -279,13 +331,19 @@ export class EnterpriseAuditLogger {
   }
 
   /**
-   * Get all entries (deep-frozen copies).
-   * F-03: Returns structuredClone'd, Object.freeze'd entries so callers
-   * cannot mutate internal state.
+   * Get entries with optional pagination.
+   * Finding-10: Added pagination to avoid deep-cloning all entries.
+   * Returns a frozen shallow slice — entries themselves are readonly interfaces.
+   *
+   * @param offset - Start index (default 0)
+   * @param limit - Maximum entries to return (default all)
+   * @returns Frozen array of audit entries
    */
-  getEntries(): readonly EnterpriseAuditEntry[] {
-    const cloned = this.#entries.map(e => structuredClone(e));
-    return Object.freeze(cloned.map(e => Object.freeze(e)));
+  getEntries(offset?: number, limit?: number): readonly EnterpriseAuditEntry[] {
+    const start = offset ?? 0;
+    const end = limit !== undefined ? Math.min(start + limit, this.#entries.length) : this.#entries.length;
+    const slice = this.#entries.slice(start, end);
+    return Object.freeze(slice.map(e => Object.freeze(structuredClone(e))));
   }
 
   /**
@@ -322,6 +380,10 @@ export class EnterpriseAuditLogger {
       tombstoned: true,
       tombstonedAt: this.#timeProvider.now(),
       archiveStatus: 'tombstoned',
+      // Finding-9 fix: Preserve original content hash for verification.
+      // verifyChain() uses this to confirm the tombstoned entry's currentHash
+      // still matches the pre-tombstone computation.
+      originalContentHash: entry.currentHash,
     };
     this.#entries[index] = tombstoned;
     return { ok: true, value: tombstoned };
@@ -364,8 +426,13 @@ export class EnterpriseAuditLogger {
   }
 
   #emitEvent(event: string, data: unknown): void {
+    // Finding-60: Isolate listener failures — one bad listener must not break others
     for (const listener of this.#eventListeners) {
-      listener(event, data);
+      try {
+        listener(event, data);
+      } catch {
+        // Finding-60: Swallow listener error to prevent cascade failure
+      }
     }
   }
 }

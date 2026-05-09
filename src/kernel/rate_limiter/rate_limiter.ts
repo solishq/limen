@@ -43,6 +43,7 @@ export interface RateLimiterConfig {
  * S ref: §36 (token-bucket rate limiting)
  */
 export function createRateLimiter(time?: TimeProvider, config?: RateLimiterConfig): RateLimiter {
+  // Finding-19: Fallback for DX convenience; inject TimeProvider via config for deterministic testing
   const clock = time ?? { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
   // Apply config overrides to defaults
   const apiMax = config?.apiCallsPerMinute ?? DEFAULT_LIMITS.api_calls.maxTokens;
@@ -60,66 +61,75 @@ export function createRateLimiter(time?: TimeProvider, config?: RateLimiterConfi
      */
     checkAndConsume(conn: DatabaseConnection, ctx: OperationContext, bucketType: BucketType): Result<boolean> {
       try {
-        const tenantId = ctx.tenantId;
-        const agentId = ctx.agentId;
+        // Finding-4: Wrap entire check-and-consume in transaction to prevent TOCTOU.
+        // The SELECT-then-UPDATE sequence must be atomic: without a transaction,
+        // concurrent callers could read the same token count and both consume,
+        // allowing more operations than the bucket permits.
+        // better-sqlite3 transactions are synchronous and provide serialized access.
+        const allowed = conn.transaction(() => {
+          const tenantId = ctx.tenantId;
+          const agentId = ctx.agentId;
 
-        // Get or create bucket
-        let bucket = conn.get<{
-          id: string; current_tokens: number; max_tokens: number;
-          refill_rate: number; last_refill_at: string;
-        }>(
-          `SELECT id, current_tokens, max_tokens, refill_rate, last_refill_at
-           FROM meter_rate_limits
-           WHERE bucket_type = ?
-           AND (tenant_id = ? OR (tenant_id IS NULL AND ? IS NULL))
-           AND (agent_id = ? OR (agent_id IS NULL AND ? IS NULL))`,
-          [bucketType, tenantId, tenantId, agentId, agentId]
-        );
-
-        if (!bucket) {
-          // Create bucket with effective limits (default + config overrides)
-          const defaults = effectiveLimits[bucketType];
-          const id = randomUUID();
-          conn.run(
-            `INSERT INTO meter_rate_limits (id, tenant_id, agent_id, bucket_type, max_tokens, refill_rate, current_tokens, last_refill_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
-            [id, tenantId, agentId, bucketType, defaults.maxTokens, defaults.refillRate, defaults.maxTokens]
+          // Get or create bucket
+          let bucket = conn.get<{
+            id: string; current_tokens: number; max_tokens: number;
+            refill_rate: number; last_refill_at: string;
+          }>(
+            `SELECT id, current_tokens, max_tokens, refill_rate, last_refill_at
+             FROM meter_rate_limits
+             WHERE bucket_type = ?
+             AND (tenant_id = ? OR (tenant_id IS NULL AND ? IS NULL))
+             AND (agent_id = ? OR (agent_id IS NULL AND ? IS NULL))`,
+            [bucketType, tenantId, tenantId, agentId, agentId]
           );
-          bucket = {
-            id,
-            current_tokens: defaults.maxTokens,
-            max_tokens: defaults.maxTokens,
-            refill_rate: defaults.refillRate,
-            last_refill_at: clock.nowISO(),
-          };
-        }
 
-        // Calculate token refill since last check
-        const now = clock.nowMs();
-        const lastRefill = new Date(bucket.last_refill_at).getTime();
-        const elapsedSeconds = (now - lastRefill) / 1000;
-        const refilled = elapsedSeconds * bucket.refill_rate;
-        const newTokens = Math.min(bucket.max_tokens, bucket.current_tokens + refilled);
+          if (!bucket) {
+            // Create bucket with effective limits (default + config overrides)
+            const defaults = effectiveLimits[bucketType];
+            const id = randomUUID();
+            conn.run(
+              `INSERT INTO meter_rate_limits (id, tenant_id, agent_id, bucket_type, max_tokens, refill_rate, current_tokens, last_refill_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
+              [id, tenantId, agentId, bucketType, defaults.maxTokens, defaults.refillRate, defaults.maxTokens]
+            );
+            bucket = {
+              id,
+              current_tokens: defaults.maxTokens,
+              max_tokens: defaults.maxTokens,
+              refill_rate: defaults.refillRate,
+              last_refill_at: clock.nowISO(),
+            };
+          }
 
-        if (newTokens < 1) {
-          // Rate limited -- not enough tokens
-          // Update refill time even when denied to avoid stale timestamp
+          // Calculate token refill since last check
+          const now = clock.nowMs();
+          const lastRefill = new Date(bucket.last_refill_at).getTime();
+          const elapsedSeconds = (now - lastRefill) / 1000;
+          const refilled = elapsedSeconds * bucket.refill_rate;
+          const newTokens = Math.min(bucket.max_tokens, bucket.current_tokens + refilled);
+
+          if (newTokens < 1) {
+            // Rate limited -- not enough tokens
+            // Update refill time even when denied to avoid stale timestamp
+            conn.run(
+              `UPDATE meter_rate_limits SET current_tokens = ?, last_refill_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+               WHERE id = ?`,
+              [newTokens, bucket.id]
+            );
+            return false;
+          }
+
+          // Consume one token
           conn.run(
             `UPDATE meter_rate_limits SET current_tokens = ?, last_refill_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
              WHERE id = ?`,
-            [newTokens, bucket.id]
+            [newTokens - 1, bucket.id]
           );
-          return { ok: true, value: false };
-        }
 
-        // Consume one token
-        conn.run(
-          `UPDATE meter_rate_limits SET current_tokens = ?, last_refill_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-           WHERE id = ?`,
-          [newTokens - 1, bucket.id]
-        );
+          return true;
+        });
 
-        return { ok: true, value: true };
+        return { ok: true, value: allowed };
       } catch (err) {
         return {
           ok: false,

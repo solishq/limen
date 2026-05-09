@@ -12,7 +12,7 @@
  * - Result<T> pattern for all operations
  */
 
-import type { Result, KernelError } from '../../adapters/crewai/types.js';
+import type { Result, KernelError } from '../../adapters/shared/types.js';
 import type {
   RollbackPlan,
   RollbackStep,
@@ -163,7 +163,8 @@ export class RollbackManager {
       return { ok: false, error: makeError('PLAN_MISMATCH', 'Plan does not match the current planned rollback') };
     }
 
-    const startMs = Date.now();
+    // Finding-48: Use TimeProvider instead of Date.now() for deterministic testing
+    const startMs = new Date(this.#timeProvider.now()).getTime();
     const startedAtStr = this.#timeProvider.now();
     this.#emitEvent('rollback:started', { planId: plan.planId });
 
@@ -180,7 +181,8 @@ export class RollbackManager {
       const stepStart = this.#timeProvider.now();
 
       // Check 15-minute timeline
-      const elapsed = Date.now() - startMs;
+      // Finding-48: Use TimeProvider instead of Date.now()
+      const elapsed = new Date(this.#timeProvider.now()).getTime() - startMs;
       if (elapsed > RECOVERY_TIMELINE_MS) {
         const timeoutError = `Step '${step.name}' skipped: 15-minute recovery timeline exceeded`;
         errors.push(timeoutError);
@@ -225,7 +227,8 @@ export class RollbackManager {
     }
 
     const completedAtStr = this.#timeProvider.now();
-    const durationMs = Date.now() - startMs;
+    // Finding-48: Use TimeProvider instead of Date.now()
+    const durationMs = new Date(this.#timeProvider.now()).getTime() - startMs;
     const stepsCompleted = executedSteps.filter(s => s.status === 'completed').length;
     const stepsFailed = executedSteps.filter(s => s.status === 'failed').length;
 
@@ -262,6 +265,11 @@ export class RollbackManager {
       return { ok: false, error: makeError('NO_ROLLBACK', 'No rollback has been executed') };
     }
 
+    // Finding-41: Verification checks step execution counts, not actual system state.
+    // ARCHITECTURAL NOTE: True state verification requires injecting state query functions
+    // at construction time. Current verification confirms the rollback procedure ran
+    // to completion but does not independently verify the resulting state.
+    // For production, inject state probes via the constructor.
     const checks: RollbackCheck[] = [
       {
         name: 'adapters_disabled',
@@ -335,8 +343,13 @@ export class RollbackManager {
   }
 
   #emitEvent(event: RollbackEventType, data: unknown): void {
+    // Finding-60: Isolate listener failures — one bad listener must not break others
     for (const listener of this.#eventListeners) {
-      listener(event, data);
+      try {
+        listener(event, data);
+      } catch {
+        // Finding-60: Swallow listener error to prevent cascade failure
+      }
     }
   }
 }

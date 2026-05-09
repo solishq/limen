@@ -15,8 +15,8 @@
  */
 
 import { BaseGovernedAdapter } from '../shared/base-adapter.js';
-import { serdeError } from '../crewai/errors.js';
-import type { CrewAIAdapterError } from '../crewai/errors.js';
+import { serdeError } from '../shared/errors.js';
+import type { AdapterError } from '../shared/errors.js';
 import type {
   AdapterId,
   AgentId,
@@ -143,7 +143,7 @@ export class LimenLlamaIndexAdapter extends BaseGovernedAdapter<
   }
 
   /** @override Validate LlamaIndex-specific config fields */
-  protected validateFrameworkConfig(config: LlamaIndexAdapterConfig): CrewAIAdapterError | null {
+  protected validateFrameworkConfig(config: LlamaIndexAdapterConfig): AdapterError | null {
     if (!config.indexId || config.indexId.length === 0) {
       return serdeError(this.adapterId, 'indexId is required and must be non-empty');
     }

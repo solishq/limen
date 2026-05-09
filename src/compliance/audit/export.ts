@@ -11,7 +11,7 @@
  * - All exports use Result<T> pattern
  */
 
-import type { ClassificationLevel, Result, KernelError } from '../../adapters/crewai/types.js';
+import type { ClassificationLevel, Result, KernelError } from '../../adapters/shared/types.js';
 import type { EnterpriseAuditEntry, ChainVerificationResult, TimeProvider } from './enterprise-logger.js';
 import { EnterpriseAuditLogger } from './enterprise-logger.js';
 
@@ -270,7 +270,10 @@ export class AuditExporter {
       unknown: unknown > 0 ? unknown : 0,
     };
 
-    // Chain integrity check
+    // Finding-42: Chain verification is intentionally global — hash chain integrity
+    // is a whole-chain property. Verifying a subset would require sub-chain hash anchors.
+    // If chain outside export range is corrupted, the export correctly reports this
+    // as the chain's integrity is indivisible.
     const chainResult = this.#logger.verifyChain();
     const chainIntegrity: ChainVerificationResult = chainResult.ok
       ? chainResult.value

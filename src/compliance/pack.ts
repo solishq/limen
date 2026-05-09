@@ -14,7 +14,7 @@
  * - generateComplianceReport() delegates to AuditExporter
  */
 
-import type { Result, KernelError } from '../adapters/crewai/types.js';
+import type { Result, KernelError } from '../adapters/shared/types.js';
 import { ClassificationEngine } from './classification/engine.js';
 import { TokenBudgetManager } from './token-budget/manager.js';
 import type { TokenBudgetManagerConfig } from './token-budget/types.js';
@@ -98,9 +98,8 @@ export class EnterpriseCompliancePack {
       return { ok: true, value: undefined };
     }
 
-    if (!this.#governed) {
-      return { ok: false, error: makeError('GOVERNANCE_REQUIRED', 'Compliance pack requires governance') };
-    }
+    // GOVERNANCE: This component is always governed (readonly #governed = true).
+    // Finding-37: Removed dead governance bypass check — #governed is readonly true.
 
     this.#initialized = true;
     return { ok: true, value: undefined };
@@ -198,6 +197,7 @@ export class EnterpriseCompliancePack {
 
     // F-07: Token budget manager -- actually verify by creating a temp session
     let tokenBudgetOk = false;
+    let tokenBudgetDetail = 'Token budget manager check failed';
     const tempSessionId = `__compliance_check_${Date.now()}`;
     try {
       const initResult = this.#tokenBudgetManager.initSession(tempSessionId, 1000, 1000);
@@ -206,13 +206,15 @@ export class EnterpriseCompliancePack {
         tokenBudgetOk = reserveResult.ok && reserveResult.value.allowed;
         this.#tokenBudgetManager.removeSession(tempSessionId);
       }
-    } catch {
+    } catch (e) {
       tokenBudgetOk = false;
+      // Finding-56: Capture error for diagnostics instead of silently swallowing
+      tokenBudgetDetail = `Token budget manager error: ${e instanceof Error ? e.message : String(e)}`;
     }
     checks.push({
       component: 'TokenBudgetManager',
       status: tokenBudgetOk ? 'pass' : 'fail',
-      detail: tokenBudgetOk ? 'Token budget manager operational' : 'Token budget manager check failed',
+      detail: tokenBudgetOk ? 'Token budget manager operational' : tokenBudgetDetail,
     });
 
     // 3. Audit logger chain integrity
@@ -230,30 +232,36 @@ export class EnterpriseCompliancePack {
 
     // F-07: Retention enforcer -- actually verify by calling getPolicy
     let retentionOk = false;
+    let retentionDetail = 'Retention policy enforcer check failed';
     try {
       const policy = this.#retentionEnforcer.getPolicy('unrestricted');
       retentionOk = policy !== null && policy.retentionDays > 0;
-    } catch {
+    } catch (e) {
       retentionOk = false;
+      // Finding-56: Capture error for diagnostics instead of silently swallowing
+      retentionDetail = `Retention enforcer error: ${e instanceof Error ? e.message : String(e)}`;
     }
     checks.push({
       component: 'RetentionPolicyEnforcer',
       status: retentionOk ? 'pass' : 'fail',
-      detail: retentionOk ? 'Retention policy enforcer operational' : 'Retention policy enforcer check failed',
+      detail: retentionOk ? 'Retention policy enforcer operational' : retentionDetail,
     });
 
     // F-07: Rollback manager -- verify by calling getLastResult (should not throw)
     let rollbackOk = false;
+    let rollbackDetail = 'Rollback manager check failed';
     try {
       this.#rollbackManager.getLastResult();
       rollbackOk = true;
-    } catch {
+    } catch (e) {
       rollbackOk = false;
+      // Finding-56: Capture error for diagnostics instead of silently swallowing
+      rollbackDetail = `Rollback manager error: ${e instanceof Error ? e.message : String(e)}`;
     }
     checks.push({
       component: 'RollbackManager',
       status: rollbackOk ? 'pass' : 'fail',
-      detail: rollbackOk ? 'Rollback manager operational' : 'Rollback manager check failed',
+      detail: rollbackOk ? 'Rollback manager operational' : rollbackDetail,
     });
 
     // 6. Governance enforcement

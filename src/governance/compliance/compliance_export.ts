@@ -105,10 +105,13 @@ export function generateComplianceExport(
   }
 
   // 1. Query audit entries in period (I-P10-30)
+  // Finding-2: skipRbac=true — compliance export is a trusted internal system
+  // operation that must access audit entries regardless of caller's RBAC state.
   const queryResult = deps.audit.query(conn, ctx, {
     fromTimestamp: options.from,
     toTimestamp: options.to,
     limit: 100_000, // Large limit to get all entries
+    skipRbac: true,
   });
 
   if (!queryResult.ok) {

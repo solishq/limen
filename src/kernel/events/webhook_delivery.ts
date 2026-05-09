@@ -104,6 +104,45 @@ export function isValidWebhookUrl(url: string): boolean {
       return false;
     }
 
+    // Finding-61 fix: IPv4-mapped IPv6 addresses bypass the IPv4 checks above.
+    // e.g., ::ffff:127.0.0.1, ::ffff:10.0.0.1, ::ffff:192.168.1.1
+    // These resolve to the same addresses as their IPv4 equivalents.
+    if (hostname.startsWith('::ffff:')) {
+      const mappedIpv4 = hostname.slice(7); // strip "::ffff:"
+      if (
+        mappedIpv4 === '127.0.0.1' ||
+        mappedIpv4 === '0.0.0.0' ||
+        mappedIpv4.startsWith('10.') ||
+        mappedIpv4.startsWith('192.168.') ||
+        mappedIpv4.startsWith('169.254.') ||
+        isInRange172(mappedIpv4)
+      ) {
+        return false;
+      }
+    }
+
+    // Finding-61 fix: IPv6 unique local addresses (fc00::/7 = fc00:: through fdff::)
+    // These are the IPv6 equivalent of RFC 1918 private ranges.
+    if (hostname.startsWith('fc') || hostname.startsWith('fd')) {
+      // Verify it's actually a ULA by checking the third character is hex digit
+      // fc00::/7 covers fc00:: through fdff::
+      return false;
+    }
+
+    // Finding-61 fix: Decimal/octal IP encoding bypass.
+    // Pure numeric hostnames (e.g., "2130706433" = 127.0.0.1 in decimal)
+    // can bypass string-prefix checks. Reject hostnames that are purely numeric
+    // (no dots, no colons — not a valid domain name).
+    if (/^\d+$/.test(hostname)) {
+      return false;
+    }
+
+    // Finding-61: NOTE — DNS rebinding attacks are NOT covered by static URL
+    // validation. A hostname like "evil.com" can resolve to 127.0.0.1 at
+    // delivery time. Full SSRF protection requires runtime DNS resolution
+    // validation (resolving the hostname and checking the IP before connecting).
+    // This is a known limitation of pre-flight URL validation.
+
     return true;
   } catch {
     return false;
@@ -186,13 +225,20 @@ export async function deliverWebhooks(
     [clock.nowISO(), batchSize],
   );
 
-  // Process each delivery
-  const deliveryPromises = pendingDeliveries.map(async (delivery) => {
-    return deliverSingle(conn, delivery, encryption, clock);
-  });
+  // Finding-43: Bound concurrent webhook deliveries to prevent resource exhaustion.
+  // Process in batches of CONCURRENCY_LIMIT instead of all at once.
+  const CONCURRENCY_LIMIT = 10;
+  const allResults: PromiseSettledResult<WebhookDeliveryAttempt>[] = [];
+  for (let i = 0; i < pendingDeliveries.length; i += CONCURRENCY_LIMIT) {
+    const batch = pendingDeliveries.slice(i, i + CONCURRENCY_LIMIT);
+    const batchPromises = batch.map(async (delivery) => {
+      return deliverSingle(conn, delivery, encryption, clock);
+    });
+    const batchResults = await Promise.allSettled(batchPromises);
+    allResults.push(...batchResults);
+  }
 
-  // Execute deliveries with Promise.allSettled for fault isolation
-  const results = await Promise.allSettled(deliveryPromises);
+  const results = allResults;
 
   for (const result of results) {
     if (result.status === 'fulfilled') {

@@ -117,6 +117,11 @@ export interface TransitionResult {
  *
  * Every state change in the system MUST go through the TransitionEnforcer.
  * Direct SQL updates to lifecycle state columns are non-conforming.
+ *
+ * Finding-34: TransitionEnforcer is defined as an interface but has no implementation.
+ * BC-062 states this should be the SOLE mechanism for lifecycle state changes.
+ * IMPLEMENTATION PENDING: Mission/task/handoff lifecycle transitions currently
+ * bypass this interface. Implementation required before multi-agent deployment.
  */
 export interface TransitionEnforcer {
   /**

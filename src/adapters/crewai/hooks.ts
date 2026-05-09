@@ -7,6 +7,7 @@
  * Claims covered: 1.9, 2.8, 3.8
  */
 
+import { randomUUID } from 'node:crypto';
 import type {
   CrewAIToolCallHookContext,
   CrewAIToolCall,
@@ -22,6 +23,7 @@ import type {
   TaskId,
   EventId,
   StructuredContent,
+  AgentMemoryOptions,
 } from './types.js';
 
 /**
@@ -124,7 +126,7 @@ export function translateToolToOperations(
       const content = typeof args.content === 'string'
         ? args.content
         : args.content as StructuredContent;
-      return [{ type: 'remember', content, options: args.options as undefined }];
+      return [{ type: 'remember', content, options: args.options as AgentMemoryOptions | undefined }];
     }
 
     case 'limen_recall':
@@ -137,7 +139,7 @@ export function translateToolToOperations(
           subject: args.subject as string | undefined,
           predicate: args.predicate as string | undefined,
         },
-        options: args.options as undefined,
+        options: args.options as AgentMemoryOptions | undefined,
       }];
     }
 
@@ -187,6 +189,24 @@ export function translateToolToOperations(
       }];
     }
 
+    case 'limen_discard_branch':
+    case 'discard_branch': {
+      return [{
+        type: 'discard_branch',
+        branchId: args.branchId as string & { readonly __brand: 'AgentBranchId' },
+        reason: (args.reason as string) || 'Agent requested discard',
+      }];
+    }
+
+    case 'limen_check_permission':
+    case 'check_permission': {
+      return [{
+        type: 'check_permission',
+        permission: args.permission as string,
+        resource: (args.resource as string) || null,
+      }];
+    }
+
     default:
       return null; // Unknown tool -- caller returns UNKNOWN_TOOL
   }
@@ -201,6 +221,8 @@ export const KNOWN_TOOLS: readonly string[] = [
   'limen_branch', 'create_branch',
   'limen_merge', 'merge_branches',
   'limen_get_belief', 'get_belief',
+  'limen_discard_branch', 'discard_branch',
+  'limen_check_permission', 'check_permission',
 ];
 
 /**
@@ -227,7 +249,7 @@ export function mapNativeEvent(
   if (!eventType) return null;
 
   return {
-    eventId: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` as EventId,
+    eventId: randomUUID() as EventId,
     event: eventType,
     timestamp: new Date().toISOString(),
     adapterId,

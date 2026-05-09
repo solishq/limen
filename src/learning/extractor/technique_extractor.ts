@@ -338,7 +338,11 @@ export function createTechniqueExtractor(
    *
    * D1: Uses local TF-IDF cosine via computeSimilarity() (FO-004: upgrade to embeddings).
    * Compares against ALL active techniques for the specified agent.
-   * Scaling assumption: acceptable for <1000 active techniques per agent.
+   *
+   * R2-42: Explicit scaling limit. The O(N) comparison against all active techniques
+   * is acceptable for <1000 techniques per agent. Beyond 1000, this should be replaced
+   * with an indexed similarity search (embeddings + ANN). This is a Phase 1 constraint.
+   * Phase 2 should implement pagination or vectorized duplicate detection.
    */
   async function checkDuplicate(
     conn: DatabaseConnection,

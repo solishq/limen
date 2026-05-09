@@ -177,6 +177,24 @@ export function createVectorStore(
       try {
         const queryBuffer = Buffer.from(new Float32Array(queryVector).buffer);
 
+        // R2-3: Pre-build tenant claim_id allowlist from embedding_metadata to prevent
+        // cross-tenant data leakage. vec0 virtual tables only support
+        // WHERE embedding MATCH ? AND k = ? — no arbitrary WHERE clauses allowed.
+        // Without this pre-filter, Phase 1 KNN returns up to `fetchSize` nearest
+        // neighbors across ALL tenants, loading cross-tenant embeddings into process
+        // memory before post-filtering. The allowlist ensures only tenant-owned
+        // claim_ids are accepted from KNN results.
+        const tenantMetaCheck = tenantId !== null
+          ? 'WHERE tenant_id = ?'
+          : 'WHERE tenant_id IS NULL';
+        const tenantMetaParams = tenantId !== null ? [tenantId] : [];
+        const tenantClaimIds = new Set(
+          conn.query<{ claim_id: string }>(
+            `SELECT claim_id FROM embedding_metadata ${tenantMetaCheck}`,
+            tenantMetaParams,
+          ).map(r => r.claim_id),
+        );
+
         // vec0 KNN queries have restricted syntax: WHERE embedding MATCH ? AND k = ?
         // Cannot JOIN in the same query. Two-phase approach:
         //   1. KNN against vec0 to get candidate claim_ids + distances
@@ -197,30 +215,59 @@ export function createVectorStore(
         );
 
         // Phase 2: Post-filter against claim_assertions
+        // R2-3: First gate is the tenant allowlist — reject cross-tenant claim_ids
+        // immediately so they never reach business logic or claim_assertions queries.
+        if (knnRows.length === 0) {
+          return ok([]);
+        }
+
+        // R2-31: Batch metadata fetch instead of N+1 individual queries.
+        // Collect all tenant-allowed candidate IDs, then filter with a single
+        // WHERE id IN (?) query instead of one query per KNN result row.
+        const candidateMap = new Map<string, number>();
+        for (const row of knnRows) {
+          const claimId = row['claim_id'] as string;
+          const distance = row['distance'] as number;
+          // R2-3: Tenant allowlist gate — skip cross-tenant embeddings immediately
+          if (!tenantClaimIds.has(claimId)) continue;
+          candidateMap.set(claimId, distance);
+        }
+
+        if (candidateMap.size === 0) {
+          return ok([]);
+        }
+
+        // R2-31: Single batch query to filter valid claims (active, not purged, tenant-matched)
+        const candidateIds = Array.from(candidateMap.keys());
+        const placeholders = candidateIds.map(() => '?').join(', ');
+        const tenantCheck = tenantId !== null
+          ? 'AND tenant_id = ?'
+          : 'AND tenant_id IS NULL';
+        const tenantParams = tenantId !== null ? [tenantId] : [];
+
+        const validClaims = conn.query<Record<string, unknown>>(
+          `SELECT id FROM claim_assertions
+           WHERE id IN (${placeholders})
+             AND status = 'active'
+             AND purged_at IS NULL
+             ${tenantCheck}`,
+          [...candidateIds, ...tenantParams],
+        );
+
+        // Build set of valid claim IDs for O(1) lookup
+        const validIds = new Set<string>();
+        for (const vc of validClaims) {
+          validIds.add(vc['id'] as string);
+        }
+
+        // I-P11-22: Preserve KNN distance ordering (closest first)
+        // knnRows are already ordered by distance from vec0
         const results: Array<{ claimId: string; distance: number }> = [];
         for (const row of knnRows) {
           if (results.length >= k) break;
-
           const claimId = row['claim_id'] as string;
-          const distance = row['distance'] as number;
-
-          // Check claim status + tenant
-          const tenantCheck = tenantId !== null
-            ? 'AND tenant_id = ?'
-            : 'AND tenant_id IS NULL';
-          const tenantParams = tenantId !== null ? [tenantId] : [];
-
-          const claim = conn.get<Record<string, unknown>>(
-            `SELECT id FROM claim_assertions
-             WHERE id = ?
-               AND status = 'active'
-               AND purged_at IS NULL
-               ${tenantCheck}`,
-            [claimId, ...tenantParams],
-          );
-
-          if (claim) {
-            results.push({ claimId, distance });
+          if (validIds.has(claimId)) {
+            results.push({ claimId, distance: candidateMap.get(claimId)! });
           }
         }
 

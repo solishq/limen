@@ -311,6 +311,11 @@ function createInvocationReconciliationImpl(): InvocationReconciliationService {
   }>();
 
   return Object.freeze({
+    // R2-7: Evict terminal missions from missionStates to prevent unbounded growth
+    releaseMission(missionId: string): void {
+      missionStates.delete(missionId);
+    },
+
     reconcile(input: PostInvocationReconciliationInput): PostInvocationReconciliationResult {
       const missionId = input.missionId as string;
 
@@ -491,7 +496,14 @@ function createInvocationAdmissibilityImpl(
     checkAdmissibility(input: PreInvocationCheckInput): PreInvocationCheckResult {
       const missionId = input.missionId as string;
 
-      // Get or create admission state for this mission
+      // R2-20: Atomic reservation check-and-create.
+      // The get→check→set sequence is atomic because:
+      //   1. JS is single-threaded — no concurrent mutation between Map.get and Map.set
+      //   2. All code in this path is synchronous — no await points where another
+      //      caller could interleave
+      //   3. The admissionReservations Map is per-DBA-instance (C-06), not shared
+      // If this code is ever refactored to be async, the entire check+reserve
+      // block must be wrapped in a mutex or moved to a SQLite transaction.
       let admission = admissionReservations.get(missionId);
       if (!admission) {
         admission = { tokenConsumed: 0, deliberationConsumed: 0 };
@@ -571,13 +583,22 @@ export function createDBAImpl(): BudgetGovernanceAmendment {
   // Each createLimen() → createDBAImpl() gets its own map.
   const admissionReservations = new Map<string, AdmissionState>();
 
+  const reconciliation = createInvocationReconciliationImpl();
+
   return Object.freeze({
     ecb: createECBComputationImpl(),
     policyGovernor: createContextPolicyGovernorImpl(),
     admissibility: createInvocationAdmissibilityImpl(admissionReservations),
-    reconciliation: createInvocationReconciliationImpl(),
+    reconciliation,
     overhead: createSystemOverheadImpl(),
     window: createSubstrateWindowImpl(),
     estimator: createDeliberationEstimatorImpl(),
+    // R2-7: Release all in-memory state for a terminal mission to prevent
+    // unbounded growth of admissionReservations and missionStates Maps.
+    // Callers invoke this when a mission reaches completed/failed/revoked.
+    releaseMission(missionId: string): void {
+      admissionReservations.delete(missionId);
+      reconciliation.releaseMission(missionId);
+    },
   });
 }

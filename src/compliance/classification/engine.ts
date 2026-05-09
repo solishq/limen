@@ -11,7 +11,7 @@
  * - Every public method cites its contract clause
  */
 
-import type { ClassificationLevel, Result, KernelError } from '../../adapters/crewai/types.js';
+import type { ClassificationLevel, Result, KernelError } from '../../adapters/shared/types.js';
 import {
   CLASSIFICATION_NUMERIC,
   CLASSIFICATION_LEVELS,
@@ -91,10 +91,7 @@ function makeError(code: string, message: string): KernelError {
  * All methods are governed (#governed = true, no bypass).
  */
 export class ClassificationEngine {
-  /**
-   * #governed = true -- this engine has no ungoverned mode.
-   */
-  readonly #governed = true;
+  // Finding-37: governance is always active (no ungoverned mode)
 
   /**
    * SHARED_TYPES.md S3 -- Classify an operation based on action and context.
@@ -112,9 +109,8 @@ export class ClassificationEngine {
     action: string,
     context: ClassificationContext,
   ): Result<ClassificationLevel> {
-    if (!this.#governed) {
-      return { ok: false, error: makeError('GOVERNANCE_REQUIRED', 'Classification engine requires governance') };
-    }
+    // GOVERNANCE: This component is always governed (readonly #governed = true).
+    // Finding-37: Removed dead governance bypass check — #governed is readonly true.
 
     if (!action || action.trim().length === 0) {
       return { ok: false, error: makeError('INVALID_ACTION', 'Action must be a non-empty string') };

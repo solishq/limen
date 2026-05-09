@@ -46,7 +46,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.0",
     "limen-ai": "^4.0.0",
-    "zod": "^4.0.0"
+    "zod": "~4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -8,6 +8,10 @@
  *   RelateClaimsHandler, QueryClaimsHandler, GroundingValidator,
  *   ClaimLifecycleProjection.
  *
+ * R2-36: MAINTAINABILITY — nesting depth >7 (measured: 11). Candidate for
+ * early-return refactor. Deep nesting is structural: transaction -> conditional
+ * chains -> relationship cascade logic in retractClaim and relateClaims.
+ *
  * Pattern: Follows src/governance/stores/governance_stores.ts exactly.
  *
  * Truth model obligations:

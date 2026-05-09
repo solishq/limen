@@ -53,8 +53,8 @@ import { getSecurityHardeningMigrations } from '../../src/api/migration/033_secu
 import { getGovernanceSuiteMigrations } from '../../src/api/migration/034_governance_suite.js';
 import { getVectorSearchMigrations } from '../../src/api/migration/035_vector_search.js';
 import { getCognitiveEngineMigrations } from '../../src/api/migration/036_cognitive_engine.js';
-import { getFts5RetractionGuardMigrations } from '../../src/api/migration/037_fts5_retraction_guard.js';
-import { getSyncFoundationMigrations } from '../../src/api/migration/037_sync_foundation.js';
+import { getFts5RetractionGuardMigrations } from '../../src/api/migration/046_fts5_retraction_guard.js';
+import { getSyncFoundationMigrations } from '../../src/api/migration/047_sync_foundation.js';
 import { createAuditTrail } from '../../src/kernel/audit/audit_trail.js';
 import { createTenantScopedConnection } from '../../src/kernel/tenant/tenant_scope.js';
 import type {

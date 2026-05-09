@@ -121,6 +121,13 @@ function normalizeForScan(text: string): string {
 /**
  * Scan text for prompt injection patterns.
  *
+ * R2-18: Scanner processes each field as a single contiguous string after
+ * normalization. Multi-code-block payloads where an injection spans across
+ * separate code blocks (e.g., "ignore" in block 1, "previous instructions"
+ * in block 2) will be detected because the content is scanned as one string,
+ * not split on code-block boundaries. The code_block_instruction pattern
+ * uses [\s\S]*? which crosses block boundaries within the field text.
+ *
  * @param text - Claim content field to scan
  * @returns InjectionScanResult with detected patterns and severity
  */
