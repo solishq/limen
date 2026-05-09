@@ -125,6 +125,29 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'cognitive.compile': { permission: 'query_claims' },
   'cognitive.prepareForTask': { permission: 'query_claims' },
 
+  // ── Lifecycle namespace (Phase 5 Subsystem 2) ──
+  'lifecycle.registerAgent': { permission: 'create_agent' },
+  'lifecycle.getAgent': { permission: 'view_telemetry' },
+  'lifecycle.listAgents': { permission: 'view_telemetry' },
+  'lifecycle.updateAgent': { permission: 'modify_agent' },
+  'lifecycle.decommissionAgent': { permission: 'delete_agent' },
+  'lifecycle.requestCapabilityUpgrade': { permission: 'modify_agent' },
+  'lifecycle.revokeCapability': { permission: 'modify_agent' },
+  'lifecycle.getCapabilities': { permission: 'view_telemetry' },
+  'lifecycle.getCapabilityHistory': { permission: 'view_telemetry' },
+  'lifecycle.promoteAgent': { permission: 'modify_agent' },
+  'lifecycle.demoteAgent': { permission: 'modify_agent' },
+  'lifecycle.getTrustLevel': { permission: 'view_telemetry' },
+  'lifecycle.registerConsent': { permission: 'manage_consent' },
+  'lifecycle.revokeConsent': { permission: 'manage_consent' },
+  'lifecycle.checkConsent': { permission: 'view_consent' },
+  'lifecycle.listConsents': { permission: 'view_consent' },
+  'lifecycle.exportKnowledge': { permission: 'query_claims' },
+  'lifecycle.importKnowledge': { permission: 'assert_claim' },
+  'lifecycle.transferKnowledge': { permission: 'assert_claim' },
+  'lifecycle.on': null,  // event subscription, no permission needed
+  'lifecycle.off': null, // event unsubscription, no permission needed
+
   // ── Agents namespace ──
   'agents.register': { permission: 'create_agent' },
   'agents.get': { permission: 'view_telemetry' },

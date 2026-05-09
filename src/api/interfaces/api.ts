@@ -54,6 +54,9 @@ import type {
 // Phase 5: Cognitive API types
 import type { CognitiveNamespace } from '../cognitive/cognitive_api.js';
 
+// Phase 5 Subsystem 2: Agent Lifecycle Client type
+import type { AgentLifecycleClient } from '../../lifecycle/lifecycle_types.js';
+
 // Phase 8: Plugin and Exchange types
 import type {
   LimenPlugin, LimenEventName, LimenEventHandler,
@@ -599,6 +602,16 @@ export interface Limen {
    * No-op in multi-tenant mode (agentId is per-session).
    */
   setDefaultAgent(agentId: AgentId): void;
+
+  // -- Phase 5 Subsystem 2: Agent Lifecycle Management --
+
+  /**
+   * Phase 5 §5.1: Full agent lifecycle management.
+   * Registration, capability management, trust promotion, consent governance,
+   * knowledge exchange, and decommission cascade.
+   * 22 interface methods per AGENT_LIFECYCLE_MANAGEMENT contract.
+   */
+  readonly lifecycle: AgentLifecycleClient;
 
   // -- Phase 5: Cognitive Intelligence Namespace --
 

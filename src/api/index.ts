@@ -180,6 +180,12 @@ import { getFts5RetractionGuardMigrations } from './migration/046_fts5_retractio
 // Finding-25: Renamed from 037_ to 047_ to match internal version number
 import { getSyncFoundationMigrations } from './migration/047_sync_foundation.js';
 
+// Phase 5: Agent Lifecycle Management migration (v48)
+import { getAgentLifecycleMigrations } from './migration/048_agent_lifecycle.js';
+
+// Phase 5: Agent Lifecycle Client
+import { createAgentLifecycleClient } from '../lifecycle/agent_lifecycle_client.js';
+
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
 
@@ -551,6 +557,7 @@ function buildOrchestrationAdapter(
       ...getCognitiveEngineMigrations(),                         // v45: Phase 12 cognitive engine
       ...getFts5RetractionGuardMigrations(),                      // v46: Phase 5 fix — FTS5 retraction guard
       ...getSyncFoundationMigrations(),                            // v47: Phase 13A sync foundation
+      ...getAgentLifecycleMigrations(),                              // v48: Phase 5 agent lifecycle
     ]);
     if (!phase4Governance.ok) {
       conn.close();
@@ -822,6 +829,7 @@ export async function createLimen(
         ...getCognitiveEngineMigrations(),
         ...getFts5RetractionGuardMigrations(),
         ...getSyncFoundationMigrations(),
+        ...getAgentLifecycleMigrations(),
       ]);
       if (recoveryMigResult.ok) {
         // P0-A: Pass transition service to recovery for governance-enforced transitions.
@@ -1184,6 +1192,15 @@ export async function createLimen(
   const agentsApi = new AgentApiImpl(
     rbac, rateLimiter, getConnection, getContext, kernel.time,
   );
+
+  // Phase 5 Subsystem 2: Agent Lifecycle Client (LM-2.01 through LM-2.22)
+  const lifecycleClient = createAgentLifecycleClient({
+    getConnection,
+    audit: kernel.audit,
+    kernelEvents: kernel.events,
+    time: kernel.time,
+    getContext,
+  });
 
   const rolesApi = new RolesApiImpl(
     rbac, rateLimiter, getConnection, getContext,
@@ -1613,6 +1630,9 @@ export async function createLimen(
 
     // S12, DL-2: Agent management
     agents: agentsApi,
+
+    // Phase 5 Subsystem 2: Agent Lifecycle Management (LM-2.01 through LM-2.22)
+    lifecycle: lifecycleClient,
 
     // S14-S24: Mission management
     missions: missionsApi,

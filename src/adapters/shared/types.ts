@@ -24,6 +24,16 @@ export type TaskId = string & { readonly __brand: 'TaskId' };
 export type EventId = string & { readonly __brand: 'EventId' };
 export type PolicyId = string & { readonly __brand: 'PolicyId' };
 export type RelationshipId = string & { readonly __brand: 'RelationshipId' };
+export type ConsentId = string & { readonly __brand: 'ConsentId' };
+export type UserId = string & { readonly __brand: 'UserId' };
+
+// ── SHARED_TYPES.md S19 -- Consent Types ──
+
+/** SHARED_TYPES.md S19 -- Consent purposes (5 values) */
+export type ConsentPurpose = 'memory_storage' | 'technique_extraction' | 'knowledge_transfer' | 'analytics' | 'improvement';
+
+/** SHARED_TYPES.md S19 -- Consentable operations (6 values) */
+export type ConsentableOperation = 'store_personal_data' | 'extract_techniques' | 'transfer_knowledge' | 'collect_analytics' | 'train_models' | 'share_with_third_party';
 
 // ── SHARED_TYPES.md S5 ── Trust and Clearance ──
 
