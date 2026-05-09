@@ -1,3 +1,5 @@
+<!-- @governance SolisForge Protocol v1.4 -- Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
 # Limen v5 -- COMPUTER_USE_GOVERNANCE.md Requirement Extraction
 
 **Source:** `contracts/COMPUTER_USE_GOVERNANCE.md` v2.2.0

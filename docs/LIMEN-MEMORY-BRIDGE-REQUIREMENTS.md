@@ -1,3 +1,5 @@
+<!-- @governance SolisForge Protocol v1.4 -- Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
 # Limen v5 -- AGENT_MEMORY_BRIDGE.md Requirement Extraction
 
 **Source:** `contracts/AGENT_MEMORY_BRIDGE.md` v1.3.1
