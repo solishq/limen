@@ -1,3 +1,5 @@
+# @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+# @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 """Tests for Phase 2.2 Benchmark Scoring Functions.
 
 Covers all 5 scoring functions with edge cases, boundary conditions,

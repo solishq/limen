@@ -1,25 +1,25 @@
 warning: unreachable expression
- --> tests/compile_fail/construct_transaction_context.rs:9:25
+ --> tests/compile_fail/construct_transaction_context.rs:11:25
   |
-8 |         request_boundary: todo!(),
+10 |         request_boundary: todo!(),
   |                           ------- any code following this expression is unreachable
-9 |         actor_identity: todo!(),
+11 |         actor_identity: todo!(),
   |                         ^^^^^^^ unreachable expression
   |
   = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
 
 error[E0451]: fields `request_boundary`, `actor_identity`, `tenant_scope`, `trace_identity` and `_seal` of struct `TransactionRuntimeContext` are private
-  --> tests/compile_fail/construct_transaction_context.rs:8:9
+  --> tests/compile_fail/construct_transaction_context.rs:10:9
    |
- 7 |     let _ctx = limen_foundation_contract::envelope::TransactionRuntimeContext {
+ 9 |     let _ctx = limen_foundation_contract::envelope::TransactionRuntimeContext {
    |                -------------------------------------------------------------- in this type
- 8 |         request_boundary: todo!(),
+ 10 |         request_boundary: todo!(),
    |         ^^^^^^^^^^^^^^^^ private field
- 9 |         actor_identity: todo!(),
+ 11 |         actor_identity: todo!(),
    |         ^^^^^^^^^^^^^^ private field
-10 |         tenant_scope: todo!(),
+12 |         tenant_scope: todo!(),
    |         ^^^^^^^^^^^^ private field
-11 |         trace_identity: todo!(),
+13 |         trace_identity: todo!(),
    |         ^^^^^^^^^^^^^^ private field
-12 |         _seal: PhantomData,
+14 |         _seal: PhantomData,
    |         ^^^^^ private field

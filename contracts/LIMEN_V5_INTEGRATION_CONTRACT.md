@@ -156,7 +156,7 @@ The Limen v5 defense set under SolisForge v1.4:
 
 ## 10. Verification Checklist
 
-- [x] Every file contains SolisForge v1.4 governance declaration (715/715 — scanner COMPLIANT)
+- [x] Every file contains SolisForge v1.4 governance declaration (scanner COMPLIANT — count tracked by scanner at runtime)
 - [x] Zero authoritative references to Premier Engineering Standard v2.2 (grep verified)
 - [x] All three validation tools installed and functional (scanner + detector + trigger verified)
 - [x] Full test suite passes (4258 pass, 0 fail — 4 pre-existing failures in adapter tests, not from convergence)

@@ -1,3 +1,5 @@
+# @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+# @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 """Phase 2.2 Benchmark Harness — Mock Limen Infrastructure.
 
 Provides deterministic mock implementations of Limen's core subsystems

@@ -1,3 +1,5 @@
+# @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+# @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 """Phase 2.2 Benchmark Runner — Main Execution Harness.
 
 Loads mission_graph.yaml and synthetic_inputs.jsonl, executes the 30-day

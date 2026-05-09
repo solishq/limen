@@ -1,3 +1,5 @@
+# @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+# @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 """Phase 2.2 Benchmark Analysis — Post-Run Analysis Script.
 
 Reads JSONL logs from run directories, calculates all 7 metrics using

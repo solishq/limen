@@ -76,7 +76,7 @@ while IFS= read -r f; do
     check_file "$f"
 done < <(find src tests contracts docs packages scripts \
     examples explorer benchmarks self-host promises .github v5 reports \
-    -type f \( -name "*.ts" -o -name "*.js" -o -name "*.mjs" -o -name "*.md" -o -name "*.sh" -o -name "*.rs" -o -name "*.yml" -o -name "*.yaml" -o -name "*.toml" \) \
+    -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.mjs" -o -name "*.md" -o -name "*.sh" -o -name "*.rs" -o -name "*.yml" -o -name "*.yaml" -o -name "*.toml" -o -name "*.py" -o -name "*.css" -o -name "*.html" -o -name "Dockerfile" \) \
     2>/dev/null | sort)
 
 # Scan top-level files

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+# @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 """Generate synthetic_inputs.jsonl: 750 items.
 
 Distribution:

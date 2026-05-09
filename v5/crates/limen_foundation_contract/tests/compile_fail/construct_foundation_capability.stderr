@@ -1,21 +1,21 @@
 warning: unreachable expression
-  --> tests/compile_fail/construct_foundation_capability.rs:11:16
+  --> tests/compile_fail/construct_foundation_capability.rs:13:16
    |
-10 |         reader: todo!(),
+12 |         reader: todo!(),
    |                 ------- any code following this expression is unreachable
-11 |         scope: TenantScope("test".into()),
+13 |         scope: TenantScope("test".into()),
    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^ unreachable expression
    |
    = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
 
 error[E0451]: fields `reader`, `scope` and `_seal` of struct `FoundationReadCapability` are private
-  --> tests/compile_fail/construct_foundation_capability.rs:10:9
+  --> tests/compile_fail/construct_foundation_capability.rs:12:9
    |
- 9 |     let _cap = limen_foundation_contract::capabilities::FoundationReadCapability {
+ 11 |     let _cap = limen_foundation_contract::capabilities::FoundationReadCapability {
    |                ----------------------------------------------------------------- in this type
-10 |         reader: todo!(),
+12 |         reader: todo!(),
    |         ^^^^^^ private field
-11 |         scope: TenantScope("test".into()),
+13 |         scope: TenantScope("test".into()),
    |         ^^^^^ private field
-12 |         _seal: PhantomData,
+14 |         _seal: PhantomData,
    |         ^^^^^ private field

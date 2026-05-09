@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
+# @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 """Generate mission_graph.yaml: 30 days, 75 steps/day = 2250 steps.
 
 Failure injection schedule from design doc:
