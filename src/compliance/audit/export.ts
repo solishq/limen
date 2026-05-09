@@ -120,13 +120,22 @@ const DEFAULT_TIME_PROVIDER: TimeProvider = {
   now: () => new Date().toISOString(),
 };
 
+/**
+ * ST-19.10: Optional consent gate for export operations.
+ * Returns null if consent not required, or a Result indicating consent status.
+ * When the result is { ok: false }, the export is blocked.
+ */
+export type ExportConsentCheck = (operation: 'export_data') => Result<void> | null;
+
 export class AuditExporter {
   readonly #logger: EnterpriseAuditLogger;
   readonly #timeProvider: TimeProvider;
+  readonly #consentCheck: ExportConsentCheck | null;
 
-  constructor(logger: EnterpriseAuditLogger, timeProvider?: TimeProvider) {
+  constructor(logger: EnterpriseAuditLogger, timeProvider?: TimeProvider, consentCheck?: ExportConsentCheck) {
     this.#logger = logger;
     this.#timeProvider = timeProvider ?? DEFAULT_TIME_PROVIDER;
+    this.#consentCheck = consentCheck ?? null;
   }
 
   /**
@@ -226,6 +235,15 @@ export class AuditExporter {
     framework: ComplianceFramework,
     dateRange: DateRange,
   ): Result<ComplianceExport> {
+    // ST-19.10: Consent gate before export data assembly.
+    // If a consent check is configured and it denies the operation, abort export.
+    if (this.#consentCheck) {
+      const consentResult = this.#consentCheck('export_data');
+      if (consentResult !== null && !consentResult.ok) {
+        return consentResult;
+      }
+    }
+
     if (dateRange.from > dateRange.to) {
       return { ok: false, error: makeError('INVALID_DATE_RANGE', 'from date must be before to date') };
     }

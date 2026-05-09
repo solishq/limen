@@ -703,6 +703,13 @@ describe('MUT-CAT4: Counter arithmetic', () => {
 
   it('MUT-CAT4-02: exact claim count for multiple PII claims', async () => {
     await withLimen(async (limen) => {
+      // ST-19: Register consent before personal data writes (personal.* triggers consent gate)
+      limen.consent.register({
+        dataSubjectId: 'user:cnt3',
+        basis: 'explicit_consent',
+        scope: 'claim_assertion',
+      });
+
       // Create exactly 3 PII claims (all must contain PII-triggering content)
       limen.remember('entity:user:cnt3', 'contact.email', 'a@test.com');
       limen.remember('entity:user:cnt3', 'contact.phone', '+1555111222');

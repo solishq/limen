@@ -140,6 +140,10 @@ import { createConsentRegistry } from '../security/consent_registry.js';
 import { freezeSecurityPolicy } from '../security/security_types.js';
 import type { ConsentApi, GovernanceApi, SecurityApi } from './interfaces/api.js';
 
+// ST-19: Consent Gate — wired into remember() and exportAudit() call paths
+import { checkConsentGate } from '../security/consent_gate.js';
+import type { ConsentGateDeps, ConsentCheckContent } from '../security/consent_gate.js';
+
 // Phase 10: Governance Suite migration (v43) + engines
 import { getGovernanceSuiteMigrations } from './migration/034_governance_suite.js';
 import { executeErasure } from '../governance/compliance/erasure_engine.js';
@@ -1465,6 +1469,15 @@ export async function createLimen(
   // v3.0.0 EG-01: Bind lazy consent registry for ClaimSystem's getConsentRegistry getter.
   lazyConsentRegistry = consentRegistry;
 
+  // ST-19: Consent Gate Dependencies — assembled once, used by remember() and exportAudit().
+  // consentRegistry is the Phase 9 ConsentRegistry instance.
+  // time is the kernel TimeProvider.
+  // Consent scope defaults to 'claim_assertion' (overridden per call site as needed).
+  const consentGateDeps: ConsentGateDeps = {
+    consentRegistry,
+    time: kernel.time,
+  };
+
   // Phase 8: Create Plugin Registry (I-P8-01: before freeze)
   // PluginApi provider returns null until enableApi() is called (I-P8-03).
   let pluginApiRef: import('../plugins/plugin_types.js').PluginApi | null = null;
@@ -1711,6 +1724,29 @@ export async function createLimen(
       exportAudit(options: ComplianceExportOptions) {
         const conn = getConnection();
         const ctx = getContext();
+
+        // ST-19.10: Consent gate before data export.
+        // Export operations may contain personal data — consent gate checks
+        // whether the operation requires consent and blocks if denied.
+        const exportConsentContent: ConsentCheckContent = {
+          predicate: 'export.audit_data',
+          classification: 'restricted',
+        };
+        const exportConsentResult = checkConsentGate(
+          conn, ctx, exportConsentContent,
+          { ...consentGateDeps, consentScope: 'data_processing' },
+        );
+        if (exportConsentResult !== null && !exportConsentResult.granted) {
+          return {
+            ok: false as const,
+            error: {
+              code: 'CONSENT_REQUIRED',
+              message: `Consent required for export_data operation on data subject '${exportConsentResult.dataSubjectId}'`,
+              spec: 'ST-19.10',
+            },
+          };
+        }
+
         return generateComplianceExport(
           { audit: kernel.audit, time: kernel.time },
           conn, ctx, options,
@@ -1826,6 +1862,27 @@ export async function createLimen(
       options?: import('./interfaces/api.js').RememberOptions,
     ) {
       if (!convenienceLayer) throw new LimenError('ENGINE_UNHEALTHY', 'Convenience API not initialized');
+
+      // ST-19.10: Consent gate runs BEFORE persistence.
+      // Extract subject/predicate from overloaded arguments for consent detection.
+      const consentContent: ConsentCheckContent = typeof predicateOrOptions === 'string'
+        ? { subject: subjectOrText, predicate: predicateOrOptions }
+        : { predicate: 'observation.note' }; // 1-param form: auto-generated predicate
+      const consentResult = checkConsentGate(
+        getConnection(), getContext(), consentContent, consentGateDeps,
+      );
+      // ST-19.11: If consent required and denied, return CONSENT_REQUIRED error (fail-closed).
+      if (consentResult !== null && !consentResult.granted) {
+        return {
+          ok: false as const,
+          error: {
+            code: 'CONSENT_REQUIRED',
+            message: `Consent required for operation '${consentResult.operation}' on data subject '${consentResult.dataSubjectId}'`,
+            spec: 'ST-19.10',
+          },
+        };
+      }
+
       const result = convenienceLayer.remember(subjectOrText, predicateOrOptions, value, options);
 
       // Phase 11: Enqueue embedding for newly asserted claim (I-P11-12: same transaction scope)

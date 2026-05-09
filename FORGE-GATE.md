@@ -86,7 +86,7 @@
 - [x] Implementation Spec produced (`docs/LIMEN-IMPLEMENTATION-SPEC.md` — 1,086 lines, 5 subsystems, 835 reqs)
 - [x] Code exists (287 source files, 4,258 tests pass)
 - [x] Coverage report shows 59% implemented, 17% not implemented
-- [ ] Gap implementation: Consent Integration (ST-19) — IN PROGRESS (types done, gate not wired)
+- [x] Gap implementation: Consent Integration (ST-19) — DONE (types + gate + wiring + tests passing)
 - [ ] Gap implementation: Lifecycle Management (LM) — NOT STARTED
 - [ ] Gap implementation: Output Governance (OG) — NOT STARTED
 - [ ] Gap implementation: Coordination Governance (CO) — NOT STARTED

@@ -1368,6 +1368,13 @@ describe('Phase 11: Breaker Fix — F-P11-002 GDPR Erasure Embedding Deletion', 
   // M-5 and M-7 survived: entire embedding deletion removed with zero test failures.
   it('F-P11-002: GDPR erasure deletes embeddings from vec0 and pending', async () => {
     await withVectorLimen(async (limen, dataDir) => {
+      // ST-19: Register consent before personal data write (user.* triggers consent gate)
+      limen.consent.register({
+        dataSubjectId: 'user:alice',
+        basis: 'explicit_consent',
+        scope: 'claim_assertion',
+      });
+
       // Create a claim with PII content (email triggers pii_detected=1)
       const r = limen.remember('entity:user:alice', 'user.email', 'alice@example.com');
       assert.ok(r.ok, 'PII claim stored');
