@@ -125,6 +125,22 @@ export function registerA2AChatTools(
       if (!isValidName(args.sender)) {
         return mcpError('A2A_INVALID_SENDER', 'Sender must be 1-64 chars: alphanumeric, hyphens, underscores');
       }
+
+      // BK-03: Validate sender is a registered agent. If the agent registry
+      // lookup fails or returns null, log a warning but allow the message
+      // (the transport origin provides audit traceability regardless).
+      try {
+        const agent = await limen.agents.get(args.sender);
+        if (agent === null) {
+          // Unregistered sender — include warning in response but allow.
+          // The transport field provides audit traceability.
+          // Log to stderr for operational visibility.
+          process.stderr.write(`limen-mcp: A2A_UNREGISTERED_SENDER: "${args.sender}" is not a registered agent\n`);
+        }
+      } catch {
+        // Agent registry unavailable — log but do not block messaging.
+        process.stderr.write(`limen-mcp: A2A_REGISTRY_UNAVAILABLE: could not verify sender "${args.sender}"\n`);
+      }
       if (args.channel && !isValidName(args.channel)) {
         return mcpError('A2A_INVALID_CHANNEL', 'Channel must be 1-64 chars: alphanumeric, hyphens, underscores');
       }

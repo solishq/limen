@@ -11,6 +11,12 @@
  *   F-9:  Subject URN basic format validation.
  *   F-10: Value length enforcement (max 500 chars).
  *   F-15: Accepts SessionAdapter for governance protection on limen_connect.
+ *   BK-01: Consent gate for PII predicates (personal.*, user.*, identity.*).
+ *   BK-04: Null byte / control character rejection at MCP boundary.
+ *   BK-05: Governance protection on connect — wired isProtected() check.
+ *   BK-07: Predicate format validation (domain.property regex).
+ *   BK-08: Adapter claim tracking via trackClaim() after successful remember.
+ *   BK-09: XSS content detection flag in response metadata.
  *
  * Previously in tools/knowledge.ts (deleted abc4731). Recreated from
  * the Limen API interface — first principles, not copy.
@@ -20,6 +26,42 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen } from 'limen-ai';
 import type { SessionAdapter } from '../adapter.js';
 import { z } from 'zod';
+
+// ── BK-01: PII predicate prefixes that require consent ──
+const PII_PREDICATE_PREFIXES: readonly string[] = [
+  'personal.',
+  'user.',
+  'identity.',
+];
+
+/** BK-01: Check if a predicate indicates personal data requiring consent. */
+function isPiiPredicate(predicate: string): boolean {
+  return PII_PREDICATE_PREFIXES.some(prefix => predicate.startsWith(prefix));
+}
+
+/**
+ * BK-04: Regex matching control characters U+0000–U+001F except \n (0x0A),
+ * \r (0x0D), and \t (0x09). These are stripped/rejected at the MCP boundary
+ * to prevent null byte injection and related attacks.
+ */
+const CONTROL_CHAR_REGEX = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
+
+/** BK-04: Reject strings containing dangerous control characters. */
+function containsControlChars(value: string): boolean {
+  return CONTROL_CHAR_REGEX.test(value);
+}
+
+/**
+ * BK-07: Predicate format validation — must be domain.property format
+ * (at least two segments separated by a dot).
+ */
+const PREDICATE_FORMAT_REGEX = /^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_.*-]+$/;
+
+/**
+ * BK-09: Detect HTML/script content that could be XSS if rendered.
+ * Does NOT strip — that would change semantic meaning. Returns true if detected.
+ */
+const HTML_SCRIPT_REGEX = /<\s*(?:script|iframe|object|embed|form|img|svg|link|style|meta|base)\b|<\/\s*script\s*>|javascript\s*:/i;
 
 /** MCP error response helper. */
 function mcpError(code: string, message: string) {
@@ -49,7 +91,7 @@ function safeCall<T>(fn: () => T): T | { ok: false; error: { code: string; messa
 export function registerLearningTools(
   server: McpServer,
   limen: Limen,
-  _adapter?: SessionAdapter,  // F-15: wired for future governance gate on supersession
+  adapter: SessionAdapter,  // BK-05/BK-08: required for governance + claim tracking
 ): void {
 
   // ── limen_remember ──
@@ -70,6 +112,36 @@ export function registerLearningTools(
         return mcpError('INVALID_SUBJECT', `Subject must be a URN with at least 3 colon-separated segments (e.g. "entity:type:id"). Got: "${args.subject}"`);
       }
 
+      // BK-07: Predicate format validation — must be domain.property
+      if (!PREDICATE_FORMAT_REGEX.test(args.predicate)) {
+        return mcpError('INVALID_PREDICATE', `Predicate must be in domain.property format (e.g. "decision.rationale"). Got: "${args.predicate}"`);
+      }
+
+      // BK-04: Reject control characters in value and subject
+      if (containsControlChars(args.value)) {
+        return mcpError('INVALID_VALUE', 'Value contains prohibited control characters (U+0000–U+001F). Remove null bytes and control chars before storing.');
+      }
+      if (containsControlChars(args.subject)) {
+        return mcpError('INVALID_SUBJECT', 'Subject contains prohibited control characters.');
+      }
+
+      // BK-01: Consent gate for PII predicates
+      if (isPiiPredicate(args.predicate)) {
+        // Extract data subject from the subject URN (entity:type:id → type:id)
+        const parts = args.subject.split(':');
+        const dataSubjectId = parts.length >= 3 ? parts.slice(1).join(':') : args.subject;
+
+        const consentResult = safeCall(() => limen.consent.check(dataSubjectId, 'claim_assertion'));
+        if (!consentResult.ok) {
+          return mcpError('CONSENT_CHECK_FAILED', `Failed to check consent: ${consentResult.error.message}`);
+        }
+        // consent.check returns { ok: true, value: consent_record | null }
+        // If value is null, no active consent exists
+        if (consentResult.value === null) {
+          return mcpError('CONSENT_REQUIRED', `Consent required for PII predicate "${args.predicate}" on data subject "${dataSubjectId}". Register consent first via limen_consent_register.`);
+        }
+      }
+
       // F-1: Wrap in try-catch — limen.remember() throws ENGINE_UNHEALTHY if convenience layer not initialized
       const result = safeCall(() => limen.remember(args.subject, args.predicate, args.value, {
         confidence: args.confidence,
@@ -80,8 +152,19 @@ export function registerLearningTools(
         return mcpError(result.error.code, result.error.message);
       }
 
+      // BK-08: Track claim in adapter for governance checks on connect/supersedes
+      if (result.value && result.value.claimId) {
+        adapter.trackClaim(result.value.claimId, args.subject);
+      }
+
+      // BK-09: Detect HTML/script content and flag in response metadata
+      const containsHtml = HTML_SCRIPT_REGEX.test(args.value);
+
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result.value) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          ...result.value,
+          ...(containsHtml ? { warning: 'CONTAINS_HTML_SCRIPT: value contains HTML/script content. Downstream consumers must sanitize before rendering.' } : {}),
+        }) }],
       };
     },
   );
@@ -175,11 +258,21 @@ export function registerLearningTools(
         .describe('Relationship type'),
     },
     async (args) => {
-      // F-15: Governance protection stub. Full implementation requires querying
-      // the target claim's subject and checking against adapter.isProtected().
-      // Deferred to a dedicated governance gate — the adapter is wired but
-      // supersession protection needs the claim query round-trip.
-      // For now, all connect operations go through the engine's own validation.
+      // BK-05: Governance protection — block supersession of protected claims.
+      // When relationship type is 'supersedes', check if the TARGET claim (claimId2)
+      // has a protected subject. Protected subjects cannot be superseded.
+      if (args.type === 'supersedes') {
+        const targetSubject = adapter.getTrackedSubject(args.claimId2);
+        if (targetSubject !== undefined && adapter.isProtected(targetSubject)) {
+          return mcpError(
+            'GOVERNANCE_PROTECTED',
+            `Cannot supersede claim "${args.claimId2}" — its subject "${targetSubject}" is governance-protected.`,
+          );
+        }
+        // R-001: If targetSubject is undefined, the claim was not created in this
+        // session. We cannot check governance in v1 — the engine's own validation
+        // is the fallback. This is a documented known limitation.
+      }
 
       // F-1: Wrap in try-catch
       const result = safeCall(() => limen.connect(args.claimId1, args.claimId2, args.type));

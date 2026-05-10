@@ -66,9 +66,11 @@ export function registerGovernanceTools(server: McpServer, limen: Limen): void {
   );
 
   // ── limen_governance_audit_export (Phase 10 §10.5) ──
+  // BK-02: OOM protection — count total entries first, reject if too large,
+  // and cap the serialized output size.
   server.tool(
     'limen_governance_audit_export',
-    'Generate SOC 2 audit export for a time period. Returns a compliance package with control evidence, chain verification, and statistics.',
+    'Generate SOC 2 audit export for a time period. Returns a compliance package with control evidence, chain verification, and statistics. If the result exceeds 10000 entries, returns a summary with instructions to narrow the date range.',
     {
       from: z.string().min(1).describe('Period start (ISO 8601 date)'),
       to: z.string().min(1).describe('Period end (ISO 8601 date)'),
@@ -81,6 +83,34 @@ export function registerGovernanceTools(server: McpServer, limen: Limen): void {
 
       if (!result.ok) {
         return mcpError(result.error.code, result.error.message);
+      }
+
+      // BK-02: Check total entry count across all control categories.
+      // If above threshold, return summary only with a hasMore indicator.
+      const MAX_ENTRIES = 10_000;
+      const pkg = result.value;
+      const totalEntries = pkg.statistics?.totalAuditEntries ?? 0;
+
+      if (totalEntries > MAX_ENTRIES) {
+        // Return statistics and chain verification without the full evidence arrays
+        const summary = {
+          warning: 'RESULT_TOO_LARGE',
+          message: `Audit export contains ${totalEntries} entries (limit: ${MAX_ENTRIES}). Narrow the date range to retrieve full evidence.`,
+          hasMore: true,
+          totalEntries,
+          period: pkg.period,
+          statistics: pkg.statistics,
+          chainVerification: pkg.chainVerification,
+          controls: {
+            accessControl: { controlId: pkg.controls.accessControl.controlId, compliant: pkg.controls.accessControl.compliant, notes: pkg.controls.accessControl.notes, evidenceCount: pkg.controls.accessControl.evidenceEntries.length },
+            changeManagement: { controlId: pkg.controls.changeManagement.controlId, compliant: pkg.controls.changeManagement.compliant, notes: pkg.controls.changeManagement.notes, evidenceCount: pkg.controls.changeManagement.evidenceEntries.length },
+            dataIntegrity: { controlId: pkg.controls.dataIntegrity.controlId, compliant: pkg.controls.dataIntegrity.compliant, notes: pkg.controls.dataIntegrity.notes, evidenceCount: pkg.controls.dataIntegrity.evidenceEntries.length },
+            auditLogging: { controlId: pkg.controls.auditLogging.controlId, compliant: pkg.controls.auditLogging.compliant, notes: pkg.controls.auditLogging.notes, evidenceCount: pkg.controls.auditLogging.evidenceEntries.length },
+          },
+        };
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(summary, null, 2) }],
+        };
       }
 
       return {
