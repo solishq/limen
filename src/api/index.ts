@@ -188,6 +188,12 @@ import { getLifecycleRemediationMigrations } from './migration/049_lifecycle_rem
 // Phase 5: Agent Lifecycle Client
 import { createAgentLifecycleClient } from '../lifecycle/agent_lifecycle_client.js';
 
+// Phase 5 Subsystem 3: Output Governance migration (v50)
+import { getOutputGovernanceMigrations } from './migration/050_output_governance.js';
+
+// Phase 5 Subsystem 3: Output Governance Client
+import { createAgentOutputClient } from '../output/output_governance.js';
+
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
 
@@ -561,6 +567,7 @@ function buildOrchestrationAdapter(
       ...getSyncFoundationMigrations(),                            // v47: Phase 13A sync foundation
       ...getAgentLifecycleMigrations(),                              // v48: Phase 5 agent lifecycle
       ...getLifecycleRemediationMigrations(),                        // v49: BK-12, BK-16, BK-17 remediation
+      ...getOutputGovernanceMigrations(),                              // v50: Phase 5 output governance
     ]);
     if (!phase4Governance.ok) {
       conn.close();
@@ -1287,6 +1294,30 @@ export async function createLimen(
     });
     log({ level: 'info', category: 'init', message: 'Telemetry API initialized' });
   }
+
+  // Phase 5 Subsystem 3: Output Governance Client
+  // Full output governance with hooks, plugins, inference, and telemetry.
+  let outputGovernanceClient: ReturnType<typeof createAgentOutputClient> | null = null;
+  if (convenienceMissionId && defaultAgentId) {
+    outputGovernanceClient = createAgentOutputClient({
+      claims: claimsApi,
+      getConnection,
+      getContext,
+      audit: kernel.audit,
+      time: kernel.time,
+      events: kernel.events,
+      missionId: convenienceMissionId,
+      taskId: null,
+      agentId: defaultAgentId,
+      sessionId: '' as unknown as import('../kernel/interfaces/index.js').SessionId,
+      maxAutoConfidence,
+      inferenceProvider: null,
+      getAgentCapabilities: () => [],
+    });
+    log({ level: 'info', category: 'init', message: 'Output Governance Client initialized' });
+  }
+  // Retain reference for future Limen.outputGovernance wiring
+  void outputGovernanceClient;
 
   // Phase 7 FR-002: A2A Governance API
   // Uses the same convenience mission context. If convenience init failed, governance API also unavailable.
