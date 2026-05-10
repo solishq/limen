@@ -19,6 +19,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen } from 'limen-ai';
 import { z } from 'zod';
+import { containsControlChars } from './validation.js';
 
 export function registerSearchTools(server: McpServer, limen: Limen): void {
 
@@ -33,6 +34,12 @@ export function registerSearchTools(server: McpServer, limen: Limen): void {
       includeSuperseded: z.boolean().optional().describe('Include superseded claims (default: false)'),
     },
     async (args) => {
+      if (containsControlChars(args.query)) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'INVALID_INPUT', message: 'query contains prohibited control characters.' }) }],
+          isError: true,
+        };
+      }
       const limit = Math.max(1, Math.min(args.limit ?? 20, 200));
       const result = limen.search(args.query, {
         minConfidence: args.minConfidence,
@@ -64,6 +71,18 @@ export function registerSearchTools(server: McpServer, limen: Limen): void {
       limit: z.number().optional().describe('Maximum results per subject (default: 20, max: 100)'),
     },
     async (args) => {
+      if (containsControlChars(args.subjects)) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'INVALID_INPUT', message: 'subjects contains prohibited control characters.' }) }],
+          isError: true,
+        };
+      }
+      if (args.predicate && containsControlChars(args.predicate)) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'INVALID_INPUT', message: 'predicate contains prohibited control characters.' }) }],
+          isError: true,
+        };
+      }
       let subjects: string[];
       try {
         subjects = JSON.parse(args.subjects) as string[];

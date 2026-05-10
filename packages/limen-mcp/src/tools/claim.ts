@@ -97,12 +97,59 @@ export function registerClaimTools(server: McpServer, limen: Limen, adapter: Ses
         }
       }
 
-      // NEW-01: Control character rejection on subject and objectValue
+      // R4-01 + NEW-01: Control character rejection on all user-supplied string fields
       if (containsControlChars(args.subject)) {
         return mcpError('INVALID_SUBJECT', 'Subject contains prohibited control characters.');
       }
+      if (containsControlChars(args.predicate)) {
+        return mcpError('INVALID_PREDICATE', 'Predicate contains prohibited control characters.');
+      }
       if (containsControlChars(args.objectValue)) {
         return mcpError('INVALID_VALUE', 'objectValue contains prohibited control characters (U+0000–U+001F). Remove null bytes and control chars before storing.');
+      }
+      if (containsControlChars(args.missionId)) {
+        return mcpError('INVALID_INPUT', 'missionId contains prohibited control characters.');
+      }
+      if (args.taskId && containsControlChars(args.taskId)) {
+        return mcpError('INVALID_INPUT', 'taskId contains prohibited control characters.');
+      }
+      if (containsControlChars(args.validAt)) {
+        return mcpError('INVALID_INPUT', 'validAt contains prohibited control characters.');
+      }
+
+      // R4-01: Predicate format validation — must be domain.property (same as limen_remember)
+      const PREDICATE_FORMAT_REGEX = /^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_.*-]+$/;
+      if (!PREDICATE_FORMAT_REGEX.test(args.predicate)) {
+        return mcpError('INVALID_PREDICATE', `Predicate must be in domain.property format (e.g. "decision.rationale"). Got: "${args.predicate}"`);
+      }
+
+      // R4-01: Control character rejection on runtimeWitness parsed string values
+      if (runtimeWitness) {
+        if (containsControlChars(runtimeWitness.witnessType)) {
+          return mcpError('INVALID_INPUT', 'runtimeWitness.witnessType contains prohibited control characters.');
+        }
+        if (containsControlChars(runtimeWitness.witnessTimestamp)) {
+          return mcpError('INVALID_INPUT', 'runtimeWitness.witnessTimestamp contains prohibited control characters.');
+        }
+        // Check string values within witnessedValues
+        for (const [key, val] of Object.entries(runtimeWitness.witnessedValues)) {
+          if (containsControlChars(key)) {
+            return mcpError('INVALID_INPUT', `runtimeWitness.witnessedValues key "${key}" contains prohibited control characters.`);
+          }
+          if (typeof val === 'string' && containsControlChars(val)) {
+            return mcpError('INVALID_INPUT', `runtimeWitness.witnessedValues["${key}"] contains prohibited control characters.`);
+          }
+        }
+      }
+
+      // R4-01: Control character rejection on evidenceRefs parsed string values
+      for (const ref of evidenceRefs) {
+        if (containsControlChars(ref.id)) {
+          return mcpError('INVALID_INPUT', 'evidenceRefs entry id contains prohibited control characters.');
+        }
+        if (containsControlChars(ref.type)) {
+          return mcpError('INVALID_INPUT', 'evidenceRefs entry type contains prohibited control characters.');
+        }
       }
 
       // NEW-01: Consent gate for PII predicates (same as limen_remember)
@@ -160,6 +207,12 @@ export function registerClaimTools(server: McpServer, limen: Limen, adapter: Ses
       includeRelationships: z.boolean().optional().describe('Include relationships array per claim'),
     },
     async (args) => {
+      if (args.subject && containsControlChars(args.subject)) {
+        return mcpError('INVALID_INPUT', 'subject contains prohibited control characters.');
+      }
+      if (args.predicate && containsControlChars(args.predicate)) {
+        return mcpError('INVALID_INPUT', 'predicate contains prohibited control characters.');
+      }
       const result = limen.claims.queryClaims({
         subject: args.subject ?? null,
         predicate: args.predicate ?? null,
@@ -197,6 +250,12 @@ export function registerClaimTools(server: McpServer, limen: Limen, adapter: Ses
       limit: z.number().optional().describe('Maximum results (default: 50, max: 1000)'),
     },
     async (args) => {
+      if (args.subject && containsControlChars(args.subject)) {
+        return mcpError('INVALID_INPUT', 'subject contains prohibited control characters.');
+      }
+      if (args.predicate && containsControlChars(args.predicate)) {
+        return mcpError('INVALID_INPUT', 'predicate contains prohibited control characters.');
+      }
       const result = limen.recall(
         args.subject,
         args.predicate,

@@ -15,6 +15,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen } from 'limen-ai';
 import { z } from 'zod';
+import { containsControlChars } from './validation.js';
 
 /** MCP error response helper. */
 function mcpError(code: string, message: string) {
@@ -105,6 +106,16 @@ export function registerCognitiveTools(server: McpServer, limen: Limen): void {
       predicates: z.array(z.string()).optional().describe('Optional predicate patterns to filter (e.g., "decision.*")'),
     },
     async (args) => {
+      if (containsControlChars(args.since)) {
+        return mcpError('INVALID_INPUT', 'since contains prohibited control characters.');
+      }
+      if (args.predicates) {
+        for (const p of args.predicates) {
+          if (containsControlChars(p)) {
+            return mcpError('INVALID_INPUT', 'predicates entry contains prohibited control characters.');
+          }
+        }
+      }
       const result = safeCall(() => limen.cognitive.delta({
         since: args.since,
         predicates: args.predicates,
@@ -171,6 +182,9 @@ export function registerCognitiveTools(server: McpServer, limen: Limen): void {
       }).optional().describe('Custom importance weights (sum should equal 1.0)'),
     },
     async (args) => {
+      if (containsControlChars(args.claimId)) {
+        return mcpError('INVALID_INPUT', 'claimId contains prohibited control characters.');
+      }
       const weights = args.weights ? {
         accessFrequency: args.weights.accessFrequency ?? 0.25,
         recency: args.weights.recency ?? 0.20,
@@ -199,6 +213,9 @@ export function registerCognitiveTools(server: McpServer, limen: Limen): void {
       missionId: z.string().optional().describe('Mission ID to scope narrative (omit for global)'),
     },
     async (args) => {
+      if (args.missionId && containsControlChars(args.missionId)) {
+        return mcpError('INVALID_INPUT', 'missionId contains prohibited control characters.');
+      }
       const result = safeCall(() => limen.cognitive.narrative(args.missionId ?? null));
 
       if (!result.ok) {
@@ -226,6 +243,18 @@ export function registerCognitiveTools(server: McpServer, limen: Limen): void {
       includeBudget: z.boolean().optional().describe('Include budget.* predicates (default: false)'),
     },
     async (args) => {
+      if (containsControlChars(args.agentRole)) {
+        return mcpError('INVALID_INPUT', 'agentRole contains prohibited control characters.');
+      }
+      if (containsControlChars(args.project)) {
+        return mcpError('INVALID_INPUT', 'project contains prohibited control characters.');
+      }
+      if (containsControlChars(args.taskDescription)) {
+        return mcpError('INVALID_INPUT', 'taskDescription contains prohibited control characters.');
+      }
+      if (args.taskId && containsControlChars(args.taskId)) {
+        return mcpError('INVALID_INPUT', 'taskId contains prohibited control characters.');
+      }
       const result = safeCall(() => limen.cognitive.prepareForTask({
         agentRole: args.agentRole,
         project: args.project,
@@ -256,6 +285,9 @@ export function registerCognitiveTools(server: McpServer, limen: Limen): void {
       claimId: z.string().min(1).describe('The claim ID to verify'),
     },
     async (args) => {
+      if (containsControlChars(args.claimId)) {
+        return mcpError('INVALID_INPUT', 'claimId contains prohibited control characters.');
+      }
       try {
         const result = await limen.cognitive.verify(args.claimId);
 
@@ -281,6 +313,9 @@ export function registerCognitiveTools(server: McpServer, limen: Limen): void {
       claimId: z.string().min(1).describe('The claim ID to find connections for'),
     },
     async (args) => {
+      if (containsControlChars(args.claimId)) {
+        return mcpError('INVALID_INPUT', 'claimId contains prohibited control characters.');
+      }
       try {
         const result = await limen.cognitive.suggestConnections(args.claimId);
 

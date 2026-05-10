@@ -12,6 +12,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen } from 'limen-ai';
 import { z } from 'zod';
+import { containsControlChars } from './validation.js';
 
 export function registerContextTools(server: McpServer, limen: Limen): void {
 
@@ -26,6 +27,18 @@ export function registerContextTools(server: McpServer, limen: Limen): void {
       format: z.enum(['text', 'json']).optional().describe('Output format: "text" (default) for system prompt injection, "json" for structured data'),
     },
     async (args) => {
+      if (args.subject && containsControlChars(args.subject)) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'INVALID_INPUT', message: 'subject contains prohibited control characters.' }) }],
+          isError: true,
+        };
+      }
+      if (args.predicate && containsControlChars(args.predicate)) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'INVALID_INPUT', message: 'predicate contains prohibited control characters.' }) }],
+          isError: true,
+        };
+      }
       const limit = Math.max(1, Math.min(args.limit ?? 20, 100));
 
       const result = limen.recall(

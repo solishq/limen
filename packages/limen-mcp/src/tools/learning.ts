@@ -96,12 +96,18 @@ export function registerLearningTools(
         return mcpError('INVALID_PREDICATE', `Predicate must be in domain.property format (e.g. "decision.rationale"). Got: "${args.predicate}"`);
       }
 
-      // BK-04: Reject control characters in value and subject
+      // BK-04 + R4-02: Reject control characters in all user-supplied string fields
       if (containsControlChars(args.value)) {
         return mcpError('INVALID_VALUE', 'Value contains prohibited control characters (U+0000–U+001F). Remove null bytes and control chars before storing.');
       }
       if (containsControlChars(args.subject)) {
         return mcpError('INVALID_SUBJECT', 'Subject contains prohibited control characters.');
+      }
+      if (containsControlChars(args.predicate)) {
+        return mcpError('INVALID_PREDICATE', 'Predicate contains prohibited control characters.');
+      }
+      if (args.reasoning && containsControlChars(args.reasoning)) {
+        return mcpError('INVALID_INPUT', 'Reasoning contains prohibited control characters.');
       }
 
       // BK-01: Consent gate for PII predicates
@@ -216,6 +222,9 @@ export function registerLearningTools(
         .describe('Retraction reason (default: "manual")'),
     },
     async (args) => {
+      if (containsControlChars(args.claimId)) {
+        return mcpError('INVALID_INPUT', 'claimId contains prohibited control characters.');
+      }
       // F-1: Wrap in try-catch. F-R2-08: Cast to Limen's forget param type (not `as never`).
       // Zod enum validates at runtime; this cast aligns with the engine's second parameter type.
       const result = safeCall(() => limen.forget(args.claimId, args.reason as Parameters<typeof limen.forget>[1]));
@@ -241,6 +250,12 @@ export function registerLearningTools(
         .describe('Relationship type'),
     },
     async (args) => {
+      if (containsControlChars(args.claimId1)) {
+        return mcpError('INVALID_INPUT', 'claimId1 contains prohibited control characters.');
+      }
+      if (containsControlChars(args.claimId2)) {
+        return mcpError('INVALID_INPUT', 'claimId2 contains prohibited control characters.');
+      }
       // BK-05: Governance protection — block supersession of protected claims.
       // When relationship type is 'supersedes', check if the TARGET claim (claimId2)
       // has a protected subject. Protected subjects cannot be superseded.

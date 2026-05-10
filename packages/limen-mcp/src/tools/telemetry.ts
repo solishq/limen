@@ -93,6 +93,15 @@ export function registerTelemetryTools(server: McpServer, limen: Limen): void {
       since: z.string().optional().describe('ISO 8601 timestamp: only return claims created after this time'),
     },
     async (args) => {
+      if (args.type && containsControlChars(args.type)) {
+        return mcpError('INVALID_INPUT', 'type contains control characters');
+      }
+      if (args.subject && containsControlChars(args.subject)) {
+        return mcpError('INVALID_INPUT', 'subject contains control characters');
+      }
+      if (args.since && containsControlChars(args.since)) {
+        return mcpError('INVALID_INPUT', 'since contains control characters');
+      }
       const result = safeCall(() =>
         limen.telemetry.query(args.type, {
           subject: args.subject,

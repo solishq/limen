@@ -78,6 +78,12 @@ export function registerWmTools(server: McpServer, limen: Limen): void {
       key: z.string().nullable().optional().describe('Entry key to read (null or omitted to list all entries)'),
     },
     async (args) => {
+      if (containsControlChars(args.taskId)) {
+        return mcpError('INVALID_INPUT', 'taskId contains control characters');
+      }
+      if (args.key && containsControlChars(args.key)) {
+        return mcpError('INVALID_INPUT', 'key contains control characters');
+      }
       const result = limen.workingMemory.read({
         taskId: args.taskId as TaskId,
         key: args.key ?? null,
@@ -105,6 +111,12 @@ export function registerWmTools(server: McpServer, limen: Limen): void {
       key: z.string().nullable().optional().describe('Entry key to discard (null or omitted to discard all entries)'),
     },
     async (args) => {
+      if (containsControlChars(args.taskId)) {
+        return mcpError('INVALID_INPUT', 'taskId contains control characters');
+      }
+      if (args.key && containsControlChars(args.key)) {
+        return mcpError('INVALID_INPUT', 'key contains control characters');
+      }
       const result = limen.workingMemory.discard({
         taskId: args.taskId as TaskId,
         key: args.key ?? null,

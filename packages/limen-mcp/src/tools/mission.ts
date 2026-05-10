@@ -86,6 +86,9 @@ export function registerMissionTools(server: McpServer, limen: Limen): void {
       limit: z.number().optional().describe('Maximum number of results (default: 50)'),
     },
     async (args) => {
+      if (args.state && containsControlChars(args.state)) {
+        return mcpError('INVALID_INPUT', 'state contains control characters');
+      }
       const filter: {
         state?: 'CREATED' | 'PLANNING' | 'EXECUTING' | 'REVIEWING' | 'COMPLETED' | 'PAUSED' | 'FAILED' | 'CANCELLED' | 'DEGRADED' | 'BLOCKED';
         limit?: number;

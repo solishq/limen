@@ -139,6 +139,9 @@ export function registerA2AGovernanceTools(server: McpServer, limen: Limen): voi
       status: z.string().optional().describe('Filter by rule status: active, suspended, retired'),
     },
     async (args) => {
+      if (args.status && containsControlChars(args.status)) {
+        return mcpError('INVALID_INPUT', 'status contains control characters');
+      }
       const result = safeCall(() =>
         limen.a2aGovernance.listProactiveRules(args.status),
       );

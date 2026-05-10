@@ -12,6 +12,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen } from 'limen-ai';
 import { z } from 'zod';
+import { containsControlChars } from './validation.js';
 
 /** MCP error response helper. */
 function mcpError(code: string, message: string) {
@@ -47,6 +48,9 @@ export function registerReplayTools(server: McpServer, limen: Limen): void {
       missionId: z.string().min(1).describe('Mission ID to verify replay determinism for'),
     },
     async (args) => {
+      if (containsControlChars(args.missionId)) {
+        return mcpError('INVALID_INPUT', 'missionId contains prohibited control characters.');
+      }
       const result = safeCall(() => limen.replay.verify(args.missionId));
 
       if (!result.ok) {

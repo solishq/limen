@@ -95,6 +95,12 @@ export function registerOutputTools(server: McpServer, limen: Limen): void {
       limit: z.number().optional().describe('Maximum results (default: 50)'),
     },
     async (args) => {
+      if (args.type && containsControlChars(args.type)) {
+        return mcpError('INVALID_INPUT', 'type contains control characters');
+      }
+      if (args.subject && containsControlChars(args.subject)) {
+        return mcpError('INVALID_INPUT', 'subject contains control characters');
+      }
       const result = safeCall(() =>
         limen.output.query(args.type, {
           subject: args.subject,
