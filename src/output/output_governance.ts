@@ -669,8 +669,8 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     ctx: OperationContext,
     filter: CostFilter,
   ): Promise<Result<CostRecord[]>> {
-    // BRK-003: Governance check
-    const govResult = evaluateGovernance(ctx, 'query_claims', 'low');
+    // R3-001: Governance check — telemetry queries use view_telemetry/untrusted per Appendix A
+    const govResult = evaluateGovernance(ctx, 'view_telemetry', 'untrusted');
     if (!govResult.ok) return govResult as Result<CostRecord[]>;
 
     // R2-002: Query via SC-13 with telemetry.cost filter
@@ -723,8 +723,8 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     ctx: OperationContext,
     filter: VitalFilter,
   ): Promise<Result<VitalRecord[]>> {
-    // BRK-003: Governance check
-    const govResult = evaluateGovernance(ctx, 'query_claims', 'low');
+    // R3-001: Governance check — telemetry queries use view_telemetry/untrusted per Appendix A
+    const govResult = evaluateGovernance(ctx, 'view_telemetry', 'untrusted');
     if (!govResult.ok) return govResult as Result<VitalRecord[]>;
 
     // R2-002: Query via SC-13 with telemetry.vital filter
@@ -775,8 +775,8 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
   async function getBudgetConsumption(
     ctx: OperationContext,
   ): Promise<Result<BudgetConsumption>> {
-    // BRK-003: Governance check
-    const govResult = evaluateGovernance(ctx, 'query_claims', 'low');
+    // R3-001: Governance check — telemetry queries use view_telemetry/untrusted per Appendix A
+    const govResult = evaluateGovernance(ctx, 'view_telemetry', 'untrusted');
     if (!govResult.ok) return govResult as Result<BudgetConsumption>;
     // OG-11.8: Aggregate over telemetry.cost claims
     const queryResult = claims.queryClaims({
@@ -835,9 +835,12 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
   // ========================================================================
 
   async function inferMethod<T>(
-    _ctx: OperationContext,
+    ctx: OperationContext,
     options: InferenceOptions<T>,
   ): Promise<Result<InferenceResult<T>>> {
+    // R3-002: infer() must pass through governance — was bypassing with _ctx discard
+    const govResult = evaluateGovernance(ctx, 'infer', 'low');
+    if (!govResult.ok) return govResult as Result<InferenceResult<T>>;
     return inferenceEngine.infer(options, options.missionId ?? missionId);
   }
 
@@ -850,8 +853,8 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     plugin: AgentPlugin,
     config?: PluginConfig,
   ): Promise<Result<string>> {
-    // BRK-003: installPlugin requires manage_agents permission (Appendix A)
-    const govResult = evaluateGovernance(ctx, 'manage_agents', 'verified');
+    // R3-003: installPlugin requires governance_admin per Appendix A (not manage_agents)
+    const govResult = evaluateGovernance(ctx, 'governance_admin', 'verified');
     if (!govResult.ok) return govResult as Result<string>;
     return pluginManager.install(plugin, config);
   }
@@ -860,8 +863,8 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     ctx: OperationContext,
     pluginId: string,
   ): Promise<Result<void>> {
-    // BRK-003: uninstallPlugin requires manage_agents permission
-    const govResult = evaluateGovernance(ctx, 'manage_agents', 'verified');
+    // R3-003: uninstallPlugin requires governance_admin per Appendix A (not manage_agents)
+    const govResult = evaluateGovernance(ctx, 'governance_admin', 'verified');
     if (!govResult.ok) return govResult;
     return pluginManager.uninstall(pluginId);
   }
@@ -869,8 +872,8 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
   async function listPlugins(
     ctx: OperationContext,
   ): Promise<Result<PluginRegistration[]>> {
-    // BRK-003: listPlugins requires query_claims permission
-    const govResult = evaluateGovernance(ctx, 'query_claims', 'low');
+    // R3-001: listPlugins uses view_telemetry/untrusted per Appendix A
+    const govResult = evaluateGovernance(ctx, 'view_telemetry', 'untrusted');
     if (!govResult.ok) return govResult as Result<PluginRegistration[]>;
     return pluginManager.list();
   }
@@ -883,8 +886,8 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     ctx: OperationContext,
     hook: AgentHook,
   ): Promise<Result<string>> {
-    // BRK-003: registerHook requires manage_agents permission
-    const govResult = evaluateGovernance(ctx, 'manage_agents', 'verified');
+    // R3-001: registerHook uses assert_claim/low per Appendix A
+    const govResult = evaluateGovernance(ctx, 'assert_claim', 'low');
     if (!govResult.ok) return govResult as Result<string>;
     return hookExecutor.register(hook);
   }
@@ -893,8 +896,8 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     ctx: OperationContext,
     hookId: string,
   ): Promise<Result<void>> {
-    // BRK-003: unregisterHook requires manage_agents permission
-    const govResult = evaluateGovernance(ctx, 'manage_agents', 'verified');
+    // R3-001: unregisterHook uses assert_claim/low per Appendix A
+    const govResult = evaluateGovernance(ctx, 'assert_claim', 'low');
     if (!govResult.ok) return govResult;
     return hookExecutor.unregister(hookId);
   }
@@ -902,8 +905,8 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
   async function listHooks(
     ctx: OperationContext,
   ): Promise<Result<HookRegistration[]>> {
-    // BRK-003: listHooks requires query_claims permission
-    const govResult = evaluateGovernance(ctx, 'query_claims', 'low');
+    // R3-001: listHooks uses view_telemetry/untrusted per Appendix A
+    const govResult = evaluateGovernance(ctx, 'view_telemetry', 'untrusted');
     if (!govResult.ok) return govResult as Result<HookRegistration[]>;
     return hookExecutor.list();
   }

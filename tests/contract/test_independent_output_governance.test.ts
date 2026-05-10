@@ -97,7 +97,7 @@ function createTestOutputClient(opts?: {
       // BRK-003: Fine-grained permissions required by output governance checks
       'assert_claim', 'retract_claim', 'query_claims', 'relate_claims',
       'write_wm', 'read_wm', 'manage_consent', 'view_consent',
-      'manage_cognitive', 'manage_agents',
+      'manage_cognitive', 'manage_agents', 'governance_admin',
       'classify_claims', 'manage_classification_rules',
       'manage_protected_predicates', 'request_erasure', 'export_compliance',
     ],

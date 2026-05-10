@@ -58,7 +58,8 @@ export type Permission =
   | 'write_wm' | 'read_wm'
   | 'manage_consent' | 'view_consent'
   | 'manage_cognitive'
-  | 'manage_agents';
+  | 'manage_agents'
+  | 'governance_admin';
 
 /**
  * Operation context for identity threading and RBAC enforcement.
