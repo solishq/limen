@@ -328,10 +328,17 @@ export function mergeFork(
         }
       } else if (!parentMap.has(entry.key)) {
         // New key in fork, no conflict — always merge to parent
+        // BRK-CO-R2-001: Match working_memory_entries schema — no tenant_id column,
+        // requires size_bytes (NOT NULL) and mutation_position (NOT NULL)
+        const nextMutPos = conn.get<{ mp: number | null }>(
+          `SELECT MAX(mutation_position) as mp FROM working_memory_entries WHERE task_id = ?`,
+          [parentWmNs],
+        );
+        const mutationPosition = (nextMutPos?.mp ?? -1) + 1;
         conn.run(
-          `INSERT OR REPLACE INTO working_memory_entries (task_id, key, value, tenant_id, updated_at)
-           VALUES (?, ?, ?, ?, ?)`,
-          [parentWmNs, entry.key, entry.value, ctx.tenantId, now],
+          `INSERT OR REPLACE INTO working_memory_entries (task_id, key, value, size_bytes, mutation_position, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [parentWmNs, entry.key, entry.value, entry.size_bytes, mutationPosition, now],
         );
       }
       // If same value in both, no action needed
@@ -388,8 +395,8 @@ export function discardFork(
 
   conn.transaction(() => {
     conn.run(
-      `UPDATE coordination_session_forks SET state = 'discarded', discarded_at = ? WHERE id = ?`,
-      [now, forkId],
+      `UPDATE coordination_session_forks SET state = 'discarded', discarded_at = ? WHERE id = ? AND tenant_id = ?`,
+      [now, forkId, ctx.tenantId],
     );
 
     audit.append(conn, {

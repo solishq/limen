@@ -37,7 +37,7 @@ function ok<T>(value: T): Result<T> {
 }
 
 function errResult<T>(error: AgentCoordinationError): Result<T> {
-  return { ok: false, error: { code: error.code, message: error.message, spec: error.spec } };
+  return { ok: false, error };
 }
 
 // ============================================================================
