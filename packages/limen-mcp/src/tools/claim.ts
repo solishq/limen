@@ -16,9 +16,19 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen, MissionId, TaskId } from 'limen-ai';
+import type { SessionAdapter } from '../adapter.js';
 import { z } from 'zod';
+import { isPiiPredicate, containsControlChars } from './validation.js';
 
-export function registerClaimTools(server: McpServer, limen: Limen): void {
+/** MCP error response helper. */
+function mcpError(code: string, message: string) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify({ error: code, message }) }],
+    isError: true as const,
+  };
+}
+
+export function registerClaimTools(server: McpServer, limen: Limen, adapter: SessionAdapter): void {
 
   // ── limen_claim_assert ──
   server.tool(
@@ -84,6 +94,28 @@ export function registerClaimTools(server: McpServer, limen: Limen): void {
             content: [{ type: 'text' as const, text: JSON.stringify({ error: 'INVALID_INPUT', message: `runtimeWitness is not valid JSON: ${args.runtimeWitness}` }) }],
             isError: true,
           };
+        }
+      }
+
+      // NEW-01: Control character rejection on subject and objectValue
+      if (containsControlChars(args.subject)) {
+        return mcpError('INVALID_SUBJECT', 'Subject contains prohibited control characters.');
+      }
+      if (containsControlChars(args.objectValue)) {
+        return mcpError('INVALID_VALUE', 'objectValue contains prohibited control characters (U+0000–U+001F). Remove null bytes and control chars before storing.');
+      }
+
+      // NEW-01: Consent gate for PII predicates (same as limen_remember)
+      if (isPiiPredicate(args.predicate)) {
+        const parts = args.subject.split(':');
+        const dataSubjectId = parts.length >= 3 ? parts.slice(1).join(':') : args.subject;
+
+        const consentResult = limen.consent.check(dataSubjectId, 'claim_assertion');
+        if (!consentResult.ok) {
+          return mcpError('CONSENT_CHECK_FAILED', `Failed to check consent: ${consentResult.error.message}`);
+        }
+        if (consentResult.value === null) {
+          return mcpError('CONSENT_REQUIRED', `Consent required for PII predicate "${args.predicate}" on data subject "${dataSubjectId}". Register consent first via limen_consent_register.`);
         }
       }
 

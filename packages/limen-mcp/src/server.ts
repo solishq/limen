@@ -99,7 +99,7 @@ async function main(): Promise<void> {
   registerHealthTools(server, limen);
   registerAgentTools(server, limen);
   registerMissionTools(server, limen);
-  registerClaimTools(server, limen);
+  registerClaimTools(server, limen, adapter);
   registerWmTools(server, limen);
 
   // Register Phase 7 enhancement tools (convenience API wrappers)

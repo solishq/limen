@@ -27,29 +27,8 @@ import type { Limen } from 'limen-ai';
 import type { SessionAdapter } from '../adapter.js';
 import { z } from 'zod';
 
-// ── BK-01: PII predicate prefixes that require consent ──
-const PII_PREDICATE_PREFIXES: readonly string[] = [
-  'personal.',
-  'user.',
-  'identity.',
-];
-
-/** BK-01: Check if a predicate indicates personal data requiring consent. */
-function isPiiPredicate(predicate: string): boolean {
-  return PII_PREDICATE_PREFIXES.some(prefix => predicate.startsWith(prefix));
-}
-
-/**
- * BK-04: Regex matching control characters U+0000–U+001F except \n (0x0A),
- * \r (0x0D), and \t (0x09). These are stripped/rejected at the MCP boundary
- * to prevent null byte injection and related attacks.
- */
-const CONTROL_CHAR_REGEX = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
-
-/** BK-04: Reject strings containing dangerous control characters. */
-function containsControlChars(value: string): boolean {
-  return CONTROL_CHAR_REGEX.test(value);
-}
+// ── Shared validation (NEW-04: case-insensitive PII, NEW-02: control chars) ──
+import { isPiiPredicate, containsControlChars } from './validation.js';
 
 /**
  * BK-07: Predicate format validation — must be domain.property format
@@ -207,6 +186,10 @@ export function registerLearningTools(
         }
         if (entry.statement.length > 500) {
           return mcpError('CONV_STATEMENT_TOO_LONG', `Statement exceeds 500 chars (got ${entry.statement.length})`);
+        }
+        // NEW-02: Reject control characters (null byte injection) in statement
+        if (containsControlChars(entry.statement)) {
+          return mcpError('INVALID_VALUE', 'Entry statement contains prohibited control characters (U+0000–U+001F). Remove null bytes and control chars before storing.');
         }
       }
 

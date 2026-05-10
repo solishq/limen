@@ -32,6 +32,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen, BeliefView, RememberResult } from 'limen-ai';
 import { z } from 'zod';
+import { containsControlChars } from './validation.js';
 
 // ── Types ──
 
@@ -157,6 +158,11 @@ export function registerA2AChatTools(
           }
           mentions.push(m);
         }
+      }
+
+      // NEW-03: Reject control characters in message (null byte injection)
+      if (containsControlChars(args.message)) {
+        return mcpError('INVALID_VALUE', 'Message contains prohibited control characters (U+0000–U+001F). Remove null bytes and control chars before sending.');
       }
 
       // Build subject
