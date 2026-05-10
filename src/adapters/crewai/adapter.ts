@@ -1092,7 +1092,7 @@ export class LimenCrewAIAdapter {
       corePortConnected: this._corePortConnected,
       tokenBudgetRemaining: Math.max(0, this._tokenBudgetTotal - this._tokenBudgetConsumed),
       tokenBudgetTotal: this._tokenBudgetTotal,
-      lastError: this._lastError,
+      ...(this._lastError != null ? { lastError: this._lastError } : {}),
       details: {
         lastOperationEstimate: this._lastOperationEstimate,
       },

@@ -1180,7 +1180,7 @@ describe('F-03: getEntries() returns immutable copies', () => {
     const entries = logger.getEntries();
     // Object.freeze makes the object read-only in strict mode
     assert.throws(() => {
-      (entries[0] as Record<string, unknown>).event = 'tampered';
+      (entries[0] as unknown as Record<string, unknown>).event = 'tampered';
     }, /Cannot assign to read only property|object is not extensible/);
   });
 
@@ -1193,7 +1193,7 @@ describe('F-03: getEntries() returns immutable copies', () => {
 
     // Try to mutate via structuredClone bypass (should fail due to freeze)
     try {
-      (entriesBefore[0] as Record<string, unknown>).event = 'tampered';
+      (entriesBefore[0] as unknown as Record<string, unknown>).event = 'tampered';
     } catch {
       // Expected -- frozen
     }

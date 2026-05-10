@@ -31,8 +31,28 @@ import type { TimeProvider } from '../kernel/interfaces/time.js';
 import type { ClassificationLevel } from '../adapters/shared/types.js';
 import type {
   AgentId, TenantId, ConsentId,
-  ConsentableOperation, ConsentPurpose, ConsentContext,
+  ConsentableOperation, ConsentPurpose,
 } from '../adapters/shared/types.js';
+
+/**
+ * ST-19.08: Consent gate decision context.
+ * Produced by checkConsentGate() and consumed by callers to decide whether
+ * to proceed with an operation that requires consent.
+ *
+ * Invariants:
+ * - granted=true requires consentId to be non-null
+ * - granted=false requires consentId to be null
+ */
+export interface ConsentContext {
+  readonly agentId: AgentId;
+  readonly tenantId: TenantId | null;
+  readonly dataSubjectId: string;
+  readonly operation: ConsentableOperation;
+  readonly purpose: ConsentPurpose;
+  readonly consentId: ConsentId | null;
+  readonly granted: boolean;
+  readonly checkedAt: string;
+}
 import type { ConsentRegistry } from './security_types.js';
 
 // ============================================================================
@@ -140,7 +160,7 @@ export function detectConsentRequirement(
   if (isConsentRequiredClassification(content.classification)) {
     const entityId = extractEntityIdFromSubject(content.subject);
     if (entityId !== null) {
-      return { operation: 'process_sensitive', dataSubjectId: entityId };
+      return { operation: 'collect_analytics', dataSubjectId: entityId };
     }
     // Restricted/critical without entity subject — no data subject to check against
     // This is a non-personal classified operation; no consent gate needed
@@ -157,8 +177,8 @@ export function detectConsentRequirement(
  */
 function resolveOperation(content: ConsentCheckContent): ConsentableOperation {
   if (isPersonalDataPredicate(content.predicate)) return 'store_personal_data';
-  if (isConsentRequiredClassification(content.classification)) return 'process_sensitive';
-  return 'assert_claim';
+  if (isConsentRequiredClassification(content.classification)) return 'collect_analytics';
+  return 'store_personal_data';
 }
 
 /**

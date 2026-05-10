@@ -785,7 +785,7 @@ describe('CrewAI Adapter', () => {
       const ops = translateToolToOperations(toolCall);
       assert.ok(ops !== null);
       assert.equal(ops.length, 1);
-      assert.equal(ops[0].type, 'remember');
+      assert.equal(ops[0]!.type, 'remember');
     });
 
     it('returns null for unknown tools', () => {

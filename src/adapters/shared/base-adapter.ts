@@ -192,6 +192,15 @@ export abstract class BaseGovernedAdapter<
     this.#clock = clock ?? REAL_CLOCK;
   }
 
+  /**
+   * Protected accessor for framework-specific config.
+   * Subclasses need this for getAuditContext() and validateFrameworkConfig().
+   * Returns null when adapter is not yet initialized.
+   */
+  protected get _config(): TConfig | null {
+    return this.#config;
+  }
+
   // ── Abstract: Subclass MUST implement ──
 
   /** Framework identifier from SHARED_TYPES.md S21 */

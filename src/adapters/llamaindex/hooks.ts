@@ -62,21 +62,24 @@ export function translateToolToOperations(toolCall: AgentToolCall): LimenOperati
       const content = typeof args.content === 'string'
         ? args.content
         : args.content as StructuredContent;
-      return [{ type: 'remember', content, options: args.options as AgentMemoryOptions | undefined }];
+      const rememberOp: LimenOperation = args.options
+        ? { type: 'remember', content, options: args.options as AgentMemoryOptions }
+        : { type: 'remember', content };
+      return [rememberOp];
     }
 
     case 'limen_recall':
     case 'recall':
     case 'search_memory': {
-      return [{
-        type: 'recall',
-        query: {
-          text: typeof args.query === 'string' ? args.query : (args.text as string | undefined),
-          subject: args.subject as string | undefined,
-          predicate: args.predicate as string | undefined,
-        },
-        options: args.options as AgentMemoryOptions | undefined,
-      }];
+      const query: import('../shared/types.js').AgentRecallQuery = {
+        ...(typeof args.query === 'string' ? { text: args.query } : args.text != null ? { text: args.text as string } : {}),
+        ...(args.subject != null ? { subject: args.subject as string } : {}),
+        ...(args.predicate != null ? { predicate: args.predicate as string } : {}),
+      };
+      const recallOp: LimenOperation = args.options
+        ? { type: 'recall', query, options: args.options as import('../shared/types.js').AgentRecallOptions }
+        : { type: 'recall', query };
+      return [recallOp];
     }
 
     case 'limen_forget':
@@ -130,7 +133,6 @@ export function translateToolToOperations(toolCall: AgentToolCall): LimenOperati
       return [{
         type: 'discard_branch',
         branchId: args.branchId as string & { readonly __brand: 'AgentBranchId' },
-        reason: (args.reason as string) || 'Agent requested discard',
       }];
     }
 
@@ -138,26 +140,25 @@ export function translateToolToOperations(toolCall: AgentToolCall): LimenOperati
     case 'check_permission': {
       return [{
         type: 'check_permission',
-        permission: args.permission as string,
-        resource: (args.resource as string) || null,
+        action: args.action as import('../shared/types.js').ComputerAction,
+        context: args.context as import('../shared/types.js').GovernanceContext,
       }];
     }
 
     // LlamaIndex-specific: query -> governed recall
     case 'query':
     case 'retrieve': {
-      return [{
-        type: 'recall',
-        query: {
-          text: (args.query as string) || (args.text as string) || '',
-          subject: args.subject as string | undefined,
-          predicate: args.predicate as string | undefined,
-        },
-        options: {
-          limit: (args.topK as number) || (args.limit as number) || undefined,
-          searchMode: (args.searchMode as 'text' | 'semantic' | 'hybrid') || 'semantic',
-        },
-      }];
+      const queryObj: import('../shared/types.js').AgentRecallQuery = {
+        text: (args.query as string) || (args.text as string) || '',
+        ...(args.subject != null ? { subject: args.subject as string } : {}),
+        ...(args.predicate != null ? { predicate: args.predicate as string } : {}),
+      };
+      const limitVal = (args.topK as number) || (args.limit as number) || undefined;
+      const recallOptions: import('../shared/types.js').AgentRecallOptions = {
+        ...(limitVal != null ? { limit: limitVal } : {}),
+        searchMode: (args.searchMode as 'text' | 'semantic' | 'hybrid') || 'semantic',
+      };
+      return [{ type: 'recall', query: queryObj, options: recallOptions }];
     }
 
     // LlamaIndex-specific: ingest/index_insert -> governed remember
@@ -168,7 +169,10 @@ export function translateToolToOperations(toolCall: AgentToolCall): LimenOperati
         : typeof args.document === 'string'
           ? args.document
           : (args.content ?? args.document) as StructuredContent;
-      return [{ type: 'remember', content: content as string | StructuredContent, options: args.options as AgentMemoryOptions | undefined }];
+      const ingestOp: LimenOperation = args.options
+        ? { type: 'remember', content: content as string | StructuredContent, options: args.options as AgentMemoryOptions }
+        : { type: 'remember', content: content as string | StructuredContent };
+      return [ingestOp];
     }
 
     // LlamaIndex-specific: index_delete -> governed forget

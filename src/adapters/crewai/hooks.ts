@@ -128,21 +128,24 @@ export function translateToolToOperations(
       const content = typeof args.content === 'string'
         ? args.content
         : args.content as StructuredContent;
-      return [{ type: 'remember', content, options: args.options as AgentMemoryOptions | undefined }];
+      const rememberOp: LimenOperation = args.options
+        ? { type: 'remember', content, options: args.options as AgentMemoryOptions }
+        : { type: 'remember', content };
+      return [rememberOp];
     }
 
     case 'limen_recall':
     case 'recall':
     case 'search_memory': {
-      return [{
-        type: 'recall',
-        query: {
-          text: typeof args.query === 'string' ? args.query : (args.text as string | undefined),
-          subject: args.subject as string | undefined,
-          predicate: args.predicate as string | undefined,
-        },
-        options: args.options as AgentMemoryOptions | undefined,
-      }];
+      const query: import('./types.js').AgentRecallQuery = {
+        ...(typeof args.query === 'string' ? { text: args.query } : args.text != null ? { text: args.text as string } : {}),
+        ...(args.subject != null ? { subject: args.subject as string } : {}),
+        ...(args.predicate != null ? { predicate: args.predicate as string } : {}),
+      };
+      const recallOp: LimenOperation = args.options
+        ? { type: 'recall', query, options: args.options as import('./types.js').AgentRecallOptions }
+        : { type: 'recall', query };
+      return [recallOp];
     }
 
     case 'limen_forget':
@@ -196,7 +199,6 @@ export function translateToolToOperations(
       return [{
         type: 'discard_branch',
         branchId: args.branchId as string & { readonly __brand: 'AgentBranchId' },
-        reason: (args.reason as string) || 'Agent requested discard',
       }];
     }
 
@@ -204,8 +206,8 @@ export function translateToolToOperations(
     case 'check_permission': {
       return [{
         type: 'check_permission',
-        permission: args.permission as string,
-        resource: (args.resource as string) || null,
+        action: args.action as import('./types.js').ComputerAction,
+        context: args.context as import('./types.js').GovernanceContext,
       }];
     }
 
