@@ -65,10 +65,11 @@ async function createTestLimen(overrides?: { requireRbac?: boolean; autoConflict
 // ============================================================================
 
 describe('Phase 4.1: Conflict auto-detection in remember()', () => {
-  it('DC-P4-101 success: asserting conflicting claim creates contradicts relationship', async () => {
+  it('DC-P4-101 success: remember() with same subject+predicate auto-supersedes (FINDING-006)', async () => {
     const limen = await createTestLimen();
 
     // Assert two claims with same subject+predicate, different values
+    // FINDING-006: remember() auto-supersedes — only latest remains active
     const r1 = limen.remember('entity:company:acme', 'financial.revenue', '1000000');
     assert.ok(r1.ok, `remember 1: ${!r1.ok ? r1.error.message : ''}`);
     if (!r1.ok) return;
@@ -77,17 +78,23 @@ describe('Phase 4.1: Conflict auto-detection in remember()', () => {
     assert.ok(r2.ok, `remember 2: ${!r2.ok ? r2.error.message : ''}`);
     if (!r2.ok) return;
 
-    // Both should be disputed (bidirectional contradicts)
+    // Only the latest claim should be returned (first was auto-superseded)
     const recalled = limen.recall('entity:company:acme', 'financial.revenue');
     assert.ok(recalled.ok);
     if (!recalled.ok) return;
 
-    const claim1 = recalled.value.find(b => b.claimId === r1.value.claimId);
-    const claim2 = recalled.value.find(b => b.claimId === r2.value.claimId);
-    assert.ok(claim1, 'First claim should be in results');
-    assert.ok(claim2, 'Second claim should be in results');
-    assert.strictEqual(claim1!.disputed, true, 'DC-P4-202: First claim should be disputed (I-P4-09 bidirectional)');
-    assert.strictEqual(claim2!.disputed, true, 'DC-P4-202: Second claim should be disputed (I-P4-09 bidirectional)');
+    assert.strictEqual(recalled.value.length, 1, 'Only latest claim should be active after auto-supersession');
+    assert.strictEqual(recalled.value[0].claimId, r2.value.claimId, 'Latest claim should be the active one');
+    assert.strictEqual(recalled.value[0].value, '2000000', 'Latest value should be returned');
+
+    // Verify superseded claim is excluded but exists with includeSuperseded
+    const allClaims = limen.recall('entity:company:acme', 'financial.revenue', { includeSuperseded: true });
+    assert.ok(allClaims.ok);
+    if (!allClaims.ok) return;
+    assert.ok(allClaims.value.length >= 2, 'Both claims exist when includeSuperseded=true');
+    const superseded = allClaims.value.find(b => b.claimId === r1.value.claimId);
+    assert.ok(superseded, 'First claim should exist as superseded');
+    assert.strictEqual(superseded!.superseded, true, 'First claim should be marked superseded');
   });
 
   it('DC-P4-102 success: no conflict when values are the same', async () => {

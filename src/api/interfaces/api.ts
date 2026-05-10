@@ -361,7 +361,7 @@ export interface LimenConfig {
     readonly apiCallsPerMinute?: number;     // default: 100
     readonly emitEventPerMinute?: number;    // default: 10
     readonly maxConcurrentStreams?: number;   // default: 50
-  };
+  } | false;
 
   /** FM-12: Failover policy */
   readonly failoverPolicy?: 'degrade' | 'allow-overdraft' | 'block';
@@ -603,8 +603,9 @@ export interface Limen {
   /**
    * S32.4: Get engine health status.
    * Three-state: healthy (all + LLM), degraded (no LLM), unhealthy (critical failure).
+   * v5.0.0 FINDING-008: Synchronous — all subsystem health checks are sync.
    */
-  health(): Promise<HealthStatus>;
+  health(): HealthStatus;
 
   /**
    * S32.2: In-process metrics.

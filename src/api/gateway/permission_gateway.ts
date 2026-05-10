@@ -55,13 +55,17 @@ export interface MethodPermission {
  */
 export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> = {
   // ── Convenience API ──
-  'remember': { permission: 'assert_claim', rateLimit: 'api_calls' },
-  'recall': { permission: 'query_claims', rateLimit: 'api_calls' },
-  'forget': { permission: 'retract_claim', rateLimit: 'api_calls' },
-  'connect': { permission: 'relate_claims', rateLimit: 'api_calls' },
-  'search': { permission: 'query_claims', rateLimit: 'api_calls' },
-  'reflect': { permission: 'assert_claim', rateLimit: 'api_calls' },
-  'semanticSearch': { permission: 'query_claims', rateLimit: 'api_calls' },
+  // v5.0.0 FINDING-001: Convenience methods have NO rate limit at the gateway level.
+  // Rate limiting belongs at the TRANSPORT boundary (MCP, HTTP), not inside the library.
+  // Library consumers calling remember() 100+ times in batch/test scenarios is normal.
+  // The kernel rate limiter protects transport-facing APIs (chat, infer, missions).
+  'remember': { permission: 'assert_claim' },
+  'recall': { permission: 'query_claims' },
+  'forget': { permission: 'retract_claim' },
+  'connect': { permission: 'relate_claims' },
+  'search': { permission: 'query_claims' },
+  'reflect': { permission: 'assert_claim' },
+  'semanticSearch': { permission: 'query_claims' },
 
   // ── Chat/Infer ──
   'chat': { permission: 'chat', rateLimit: 'api_calls' },
@@ -69,15 +73,17 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'session': { permission: 'chat' },
 
   // ── Claims namespace ──
-  'claims.assertClaim': { permission: 'assert_claim', rateLimit: 'api_calls' },
-  'claims.retractClaim': { permission: 'retract_claim', rateLimit: 'api_calls' },
-  'claims.queryClaims': { permission: 'query_claims', rateLimit: 'api_calls' },
-  'claims.relateClaims': { permission: 'relate_claims', rateLimit: 'api_calls' },
-  'claims.searchClaims': { permission: 'query_claims', rateLimit: 'api_calls' },
+  // v5.0.0 FINDING-001: No rate limit on claim operations (library-level).
+  // Transport (MCP/HTTP) applies rate limiting before reaching the engine.
+  'claims.assertClaim': { permission: 'assert_claim' },
+  'claims.retractClaim': { permission: 'retract_claim' },
+  'claims.queryClaims': { permission: 'query_claims' },
+  'claims.relateClaims': { permission: 'relate_claims' },
+  'claims.searchClaims': { permission: 'query_claims' },
   // F-BR4-004: Single-claim status lookup — strictly narrower scope than queryClaims
-  'claims.getClaimStatus': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'claims.getClaimStatus': { permission: 'query_claims' },
   // R2-001: O(1) predicate lookup for telemetry retraction guard
-  'claims.getClaimPredicate': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'claims.getClaimPredicate': { permission: 'query_claims' },
 
   // ── Working Memory namespace ──
   'workingMemory.write': { permission: 'write_wm', rateLimit: 'api_calls' },

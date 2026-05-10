@@ -1326,8 +1326,8 @@ function createAssertClaimHandlerImpl(
           return err('UNAUTHORIZED', 'Agent not authorized to assert claims', 'SC-11');
         }
 
-        // 0a. Rate limit
-        if (!checkRateLimit(ctx.agentId, deps.time, rlCounters)) {
+        // 0a. Rate limit (v5.0.0: bypassed when disableRateLimit is true — library mode)
+        if (!deps.disableRateLimit && !checkRateLimit(ctx.agentId, deps.time, rlCounters)) {
           return err('RATE_LIMITED', 'Rate limit exceeded', 'SC-11');
         }
 
@@ -2119,8 +2119,8 @@ function createRelateClaimsHandlerImpl(
           return err('UNAUTHORIZED', 'Agent not authorized to create relationships', 'SC-12');
         }
 
-        // 0a. Rate limit
-        if (!checkRateLimit(ctx.agentId, deps.time, rlCounters)) {
+        // 0a. Rate limit (v5.0.0: bypassed when disableRateLimit is true — library mode)
+        if (!deps.disableRateLimit && !checkRateLimit(ctx.agentId, deps.time, rlCounters)) {
           return err('RATE_LIMITED', 'Rate limit exceeded', 'SC-12');
         }
 
@@ -2274,8 +2274,8 @@ function createQueryClaimsHandlerImpl(
         return err('UNAUTHORIZED', 'Agent not authorized to query claims', 'SC-13');
       }
 
-      // 0a. Rate limit
-      if (!checkRateLimit(ctx.agentId, deps.time, rlCounters)) {
+      // 0a. Rate limit (v5.0.0: bypassed when disableRateLimit is true — library mode)
+      if (!deps.disableRateLimit && !checkRateLimit(ctx.agentId, deps.time, rlCounters)) {
         return err('RATE_LIMITED', 'Rate limit exceeded', 'SC-13');
       }
 

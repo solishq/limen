@@ -811,22 +811,22 @@ describe('Phase 1: Full lifecycle integration', () => {
   it('remember -> recall -> connect -> forget lifecycle', async () => {
     const limen = await createTestLimen();
 
-    // 1. Remember two beliefs
+    // 1. Remember two beliefs with DIFFERENT predicates (no auto-supersession)
     const r1 = limen.remember('entity:user:alice', 'preference.color', 'blue');
     assert.ok(r1.ok, `remember 1: ${!r1.ok ? r1.error.message : ''}`);
     if (!r1.ok) return;
 
-    const r2 = limen.remember('entity:user:alice', 'preference.color', 'green');
+    const r2 = limen.remember('entity:user:alice', 'preference.food', 'pizza');
     assert.ok(r2.ok, `remember 2: ${!r2.ok ? r2.error.message : ''}`);
     if (!r2.ok) return;
 
-    // 2. Recall beliefs
+    // 2. Recall beliefs — both should be present (different predicates)
     const recalled = limen.recall('entity:user:alice');
     assert.ok(recalled.ok, `recall: ${!recalled.ok ? recalled.error.message : ''}`);
     if (!recalled.ok) return;
     assert.ok(recalled.value.length >= 2, 'Should find both beliefs');
 
-    // 3. Connect: green supersedes blue
+    // 3. Connect: food supersedes color
     const connected = limen.connect(r2.value.claimId, r1.value.claimId, 'supersedes');
     assert.ok(connected.ok, `connect: ${!connected.ok ? connected.error.message : ''}`);
 
@@ -837,7 +837,7 @@ describe('Phase 1: Full lifecycle integration', () => {
     const blueFound = afterConnect.value.some(b => b.claimId === r1.value.claimId);
     assert.equal(blueFound, false, 'Superseded claim should be excluded');
 
-    // 5. Forget the green claim
+    // 5. Forget the food claim
     const forgotten = limen.forget(r2.value.claimId);
     assert.ok(forgotten.ok, `forget: ${!forgotten.ok ? forgotten.error.message : ''}`);
 
@@ -845,7 +845,7 @@ describe('Phase 1: Full lifecycle integration', () => {
     const afterForget = limen.recall('entity:user:alice');
     assert.ok(afterForget.ok);
     if (!afterForget.ok) return;
-    // Green was retracted, blue was superseded
+    // Food was retracted, color was superseded
     const remaining = afterForget.value.filter(
       b => b.claimId === r1.value.claimId || b.claimId === r2.value.claimId,
     );

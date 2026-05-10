@@ -36,12 +36,12 @@ import type { HealthStatus, SubsystemHealth } from '../interfaces/api.js';
  * @param startTime - Engine start time for uptime calculation
  * @returns HealthStatus
  */
-export async function getHealth(
+export function getHealth(
   kernel: Kernel,
   substrate: Substrate,
   conn: DatabaseConnection,
   startTime: number,
-): Promise<HealthStatus> {
+): HealthStatus {
   // Get kernel health
   const kernelHealthResult = kernel.health();
   const kernelHealth: KernelHealth | null = kernelHealthResult.ok ? kernelHealthResult.value : null;

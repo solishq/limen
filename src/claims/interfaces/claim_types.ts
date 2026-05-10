@@ -706,6 +706,13 @@ export interface ClaimSystemDeps {
   readonly traceEmitter: TraceEmitter;
   /** Rate limiter for per-agent call calls */
   readonly rateLimiter?: import('../../kernel/interfaces/rate_limiter.js').RateLimiter;
+  /**
+   * v5.0.0: Disable per-agent rate limiting at the claim system level.
+   * Library consumers calling convenience API in batch/test scenarios should not
+   * be rate-limited — rate limiting belongs at the TRANSPORT boundary (MCP, HTTP).
+   * When true, checkRateLimit is bypassed for all claim operations.
+   */
+  readonly disableRateLimit?: boolean;
   /** WMP Trigger 4: pre-emission boundary capture. Absent when task has no WMP namespace. */
   readonly wmpCapture?: WmpPreEmissionCapture;
   /** DC-CCP-118: Scope validation for capability_result evidence. Optional — when absent, no scope check. */

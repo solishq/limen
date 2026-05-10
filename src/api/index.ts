@@ -691,7 +691,9 @@ export async function createLimen(
 
   const tenancyMode = resolvedConfig.tenancy?.mode ?? 'single';
   const defaultTimeoutMs = resolvedConfig.defaultTimeoutMs ?? 60000;
-  const maxConcurrentStreams = resolvedConfig.rateLimiting?.maxConcurrentStreams ?? 50;
+  const rateLimitingConfig = (resolvedConfig.rateLimiting !== false && resolvedConfig.rateLimiting)
+    ? resolvedConfig.rateLimiting : undefined;
+  const maxConcurrentStreams = rateLimitingConfig?.maxConcurrentStreams ?? 50;
 
   // Phase 1: Validate CognitiveConfig.maxAutoConfidence (I-CONV-03)
   const maxAutoConfidence = resolvedConfig.cognitive?.maxAutoConfidence ?? DEFAULT_MAX_AUTO_CONFIDENCE;
@@ -723,12 +725,12 @@ export async function createLimen(
     ...(resolvedConfig.requireRbac ? { requireRbac: true } : {}),
     // H12-FIX: Thread rate limiting config overrides to kernel rate limiter.
     // exactOptionalPropertyTypes: only include defined values.
-    ...(resolvedConfig.rateLimiting ? {
+    ...(rateLimitingConfig ? {
       rateLimiting: {
-        ...(resolvedConfig.rateLimiting.apiCallsPerMinute !== undefined
-          ? { apiCallsPerMinute: resolvedConfig.rateLimiting.apiCallsPerMinute } : {}),
-        ...(resolvedConfig.rateLimiting.emitEventPerMinute !== undefined
-          ? { emitEventPerMinute: resolvedConfig.rateLimiting.emitEventPerMinute } : {}),
+        ...(rateLimitingConfig.apiCallsPerMinute !== undefined
+          ? { apiCallsPerMinute: rateLimitingConfig.apiCallsPerMinute } : {}),
+        ...(rateLimitingConfig.emitEventPerMinute !== undefined
+          ? { emitEventPerMinute: rateLimitingConfig.emitEventPerMinute } : {}),
       },
     } : {}),
   });
@@ -969,6 +971,12 @@ export async function createLimen(
     rateLimiter: kernel.rateLimiter,
     capabilityResultScopeValidator,
     time: kernel.time,
+    // v5.0.0 FINDING-001: Disable claim-level rate limiting unconditionally.
+    // Rate limiting belongs at the TRANSPORT boundary (MCP, HTTP), not inside the library.
+    // Library consumers calling convenience API in batch/test scenarios hit the 100/min limit
+    // rapidly because each remember() = query + assert + N relate operations.
+    // The kernel rateLimiter (API facade level) handles transport protection.
+    disableRateLimit: true,
     // Phase 3: Stability and freshness configuration for decay computation.
     // Spread conditionally to avoid passing undefined with exactOptionalPropertyTypes.
     ...(config?.cognitive?.stability ? { stabilityConfig: config.cognitive.stability } : {}),
@@ -1715,7 +1723,7 @@ export async function createLimen(
     // that injects context before reaching the engine. This is a known limitation
     // for the Phase 4 API surface; the transport layer (Phase 5+) will enforce
     // 'view_telemetry' permission before proxying health calls.
-    async health(): Promise<HealthStatus> {
+    health(): HealthStatus {
       return getHealth(kernel, substrate, getConnection(), startTime);
     },
 

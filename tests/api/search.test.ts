@@ -646,10 +646,10 @@ describe('Phase 2: FTS5 Search', () => {
     it('complete lifecycle works correctly', async () => {
       const limen = await createTestLimen();
 
-      // Step 1: Remember -- use unique content that can be searched
-      const r1 = limen.remember('entity:project:limen', 'observation.note', 'lifecycle event sourcing pattern');
+      // Step 1: Remember -- use unique content that can be searched (different predicates to avoid auto-supersession)
+      const r1 = limen.remember('entity:project:limen', 'pattern.eventsourcing', 'lifecycle event sourcing pattern');
       assert.ok(r1.ok);
-      const r2 = limen.remember('entity:project:limen', 'observation.note', 'lifecycle CQRS pattern with search');
+      const r2 = limen.remember('entity:project:limen', 'pattern.cqrs', 'lifecycle CQRS pattern with search');
       assert.ok(r2.ok);
 
       // Step 2: Search finds both (search for "lifecycle" which appears in both values)

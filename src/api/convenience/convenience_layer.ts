@@ -231,11 +231,38 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
       ...(options?.reasoning !== undefined ? { reasoning: options.reasoning } : {}),
     };
 
+    // FINDING-006: Auto-supersession — same subject+predicate replaces prior claims.
+    // Query for existing active claims with same subject+predicate BEFORE asserting.
+    const existingResult = claims.queryClaims({
+      subject,
+      predicate,
+      status: 'active',
+      limit: 100,
+      includeEvidence: false,
+      includeRelationships: false,
+    });
+    const priorClaimIds: string[] = existingResult.ok
+      ? existingResult.value.claims
+          .filter(item => !item.superseded)
+          .map(item => item.claim.id as string)
+      : [];
+
     const result = claims.assertClaim(input);
     if (!result.ok) return result;
 
+    // Create 'supersedes' relationships from new claim to all prior claims
+    const newClaimId = result.value.claim.id;
+    for (const priorId of priorClaimIds) {
+      claims.relateClaims({
+        fromClaimId: newClaimId,
+        toClaimId: priorId as ClaimId,
+        type: 'supersedes' as RelationshipType,
+        missionId,
+      });
+    }
+
     return ok({
-      claimId: result.value.claim.id,
+      claimId: newClaimId,
       confidence: result.value.claim.confidence,
     });
   }
@@ -289,9 +316,16 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
       predicate?: string,
       options?: RecallOptions,
     ): Result<readonly BeliefView[]> {
+      // FINDING-007: If predicate is a bare prefix (no dot), auto-expand to wildcard.
+      // 'decision' -> 'decision.*' (valid prefix query).
+      // 'decision.rationale' -> exact match (already valid).
+      const resolvedPredicate = predicate
+        ? (predicate.includes('.') ? predicate : `${predicate}.*`)
+        : undefined;
+
       const input: ClaimQueryInput = {
         ...(subject ? { subject } : {}),
-        ...(predicate ? { predicate } : {}),
+        ...(resolvedPredicate ? { predicate: resolvedPredicate } : {}),
         status: 'active',
         ...(options?.minConfidence !== undefined ? { minConfidence: options.minConfidence } : {}),
         limit: options?.limit ?? DEFAULT_RECALL_LIMIT,
@@ -331,11 +365,19 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
           : item.claim.confidence * decayFactor * cascadePen;
 
         // Reclassify freshness at query time
+        // FINDING-004: Use createdAt as fallback for never-accessed claims.
+        // A just-created claim with no access should be 'fresh', not 'stale'.
         const lastAccessMs = item.claim.lastAccessedAt
           ? Date.parse(item.claim.lastAccessedAt)
           : null;
+        const createdAtMs = item.claim.createdAt
+          ? Date.parse(item.claim.createdAt)
+          : null;
+        const effectiveAccessMs = (lastAccessMs && Number.isFinite(lastAccessMs))
+          ? lastAccessMs
+          : (createdAtMs && Number.isFinite(createdAtMs) ? createdAtMs : null);
         const freshness = classifyFreshness(
-          lastAccessMs && Number.isFinite(lastAccessMs) ? lastAccessMs : null,
+          effectiveAccessMs,
           nowMs,
           freshnessThresholds,
         );
