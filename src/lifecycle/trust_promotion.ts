@@ -212,7 +212,11 @@ export function validatePromotion(
   // LM-11.05: high requires 100+ ops + human/senior approval
   if (targetLevel === 'high') {
     const sessionEvidence = evidence.find(e => e.type === 'session_count');
-    if (!sessionEvidence || (typeof sessionEvidence.value === 'number' && sessionEvidence.value < 100)) {
+    // R2-BK-02: Apply same Number()+isNaN() pattern as medium promotion (BK-11)
+    const highSessionCount = sessionEvidence
+      ? (typeof sessionEvidence.value === 'number' ? sessionEvidence.value : Number(sessionEvidence.value))
+      : 0;
+    if (!sessionEvidence || isNaN(highSessionCount) || highSessionCount < 100) {
       return rejected('high trust requires 100+ successful operations');
     }
     const humanEvidence = evidence.find(e => e.type === 'human_endorsement');

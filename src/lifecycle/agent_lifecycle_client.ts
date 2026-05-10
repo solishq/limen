@@ -311,16 +311,59 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
       // Table may not exist in all configurations
     }
 
+    // R2-BK-01: Query core_missions for completed/failed counts (LM-13.22)
+    let totalMissionsCompleted = 0;
+    let totalMissionsFailed = 0;
+    try {
+      const missionStats = conn.get<{ completed: number; failed: number }>(
+        `SELECT
+          SUM(CASE WHEN state = 'COMPLETED' THEN 1 ELSE 0 END) as completed,
+          SUM(CASE WHEN state = 'FAILED' THEN 1 ELSE 0 END) as failed
+         FROM core_missions WHERE agent_id = ?`,
+        [agentId],
+      );
+      totalMissionsCompleted = missionStats?.completed ?? 0;
+      totalMissionsFailed = missionStats?.failed ?? 0;
+    } catch {
+      // core_missions table may not exist in all configurations
+    }
+
+    // R2-BK-01: Compute session durations from obs_sessions (LM-13.22)
+    let lastSessionDuration: number | null = null;
+    let averageSessionDuration = 0;
+    try {
+      // Last session duration: most recent completed session
+      const lastSession = conn.get<{ duration_ms: number | null }>(
+        `SELECT (julianday(ended_at) - julianday(started_at)) * 86400000 as duration_ms
+         FROM obs_sessions
+         WHERE agent_id = ? AND ended_at IS NOT NULL
+         ORDER BY ended_at DESC LIMIT 1`,
+        [agentId],
+      );
+      lastSessionDuration = lastSession?.duration_ms ?? null;
+
+      // Average session duration across all completed sessions
+      const avgSession = conn.get<{ avg_ms: number | null }>(
+        `SELECT AVG((julianday(ended_at) - julianday(started_at)) * 86400000) as avg_ms
+         FROM obs_sessions
+         WHERE agent_id = ? AND ended_at IS NOT NULL`,
+        [agentId],
+      );
+      averageSessionDuration = avgSession?.avg_ms ?? 0;
+    } catch {
+      // obs_sessions table may not exist or lack started_at/ended_at columns
+    }
+
     return {
       totalSessions,
       totalClaimsAsserted,
       totalClaimsRetracted,
-      totalMissionsCompleted: 0,  // Requires mission table query — counted when missions subsystem present
-      totalMissionsFailed: 0,
+      totalMissionsCompleted,
+      totalMissionsFailed,
       totalGovernanceRefusals: refusalCount?.count ?? 0,
       activeTechniques,
-      lastSessionDuration: null,
-      averageSessionDuration: 0,
+      lastSessionDuration,
+      averageSessionDuration,
     };
   }
 
@@ -481,7 +524,7 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
       }
       if (filter?.owner) {
         conditions.push('owner = ?');
-        params.push(filter.owner);
+        params.push(filter.owner as string);
       }
 
       let sql = 'SELECT * FROM lm_agents';
@@ -1039,13 +1082,19 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
         );
         const claimsAffected = affectedClaims?.count ?? 0;
 
-        // BK-13: Count pending transfers that would be blocked
-        // Transfers require consent — revoking means no new transfers can proceed
-        const pendingTransfers = conn.get<{ count: number }>(
-          `SELECT COUNT(*) as count FROM lm_agent_consents WHERE agent_id = ? AND status = 'active' AND purpose = 'knowledge_transfer'`,
-          [consentRow.agent_id],
-        );
-        const transfersBlocked = pendingTransfers?.count ?? 0;
+        // R2-BK-04: Count transfer operations authorized by THIS specific consent.
+        // Previous code counted all transfer consents for the agent, which is wrong semantics.
+        let transfersBlocked = 0;
+        try {
+          const blockedOps = conn.get<{ count: number }>(
+            `SELECT COUNT(*) as count FROM lm_capability_history
+             WHERE agent_id = ? AND capability = 'knowledge_transfer' AND reason LIKE ?`,
+            [consentRow.agent_id, `%${consentId as string}%`],
+          );
+          transfersBlocked = blockedOps?.count ?? 0;
+        } catch {
+          // lm_capability_history may not have matching entries; fall back to 0
+        }
 
         // BK-05: Audit is fail-closed
         const auditResult = appendAudit(conn, actor, 'lifecycle.consent.revoked', 'consent', consentId as string,
@@ -1186,17 +1235,29 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
 
       const maxClassification = options.classification ?? (['unrestricted', 'internal', 'confidential', 'restricted', 'critical'][agentClearance] as ClassificationLevel) ?? 'unrestricted';
 
-      // BK-07: Query actual claims from claim_assertions table
-      const claimRows = conn.query<{
+      // BK-07 + R2-BK-03: Query actual claims, include classification if column exists
+      type ClaimRow = {
         id: string; subject: string; predicate: string; object_value: string;
         confidence: number; valid_at: string; reasoning: string | null;
-        object_type: string;
-      }>(
-        `SELECT id, subject, predicate, object_value, confidence, valid_at, reasoning, object_type
-         FROM claim_assertions
-         WHERE source_agent_id = ? AND status = 'active' AND archived = 0`,
-        [agentId as string],
-      );
+        object_type: string; classification?: string;
+      };
+      let claimRows: ClaimRow[];
+      try {
+        claimRows = conn.query<ClaimRow>(
+          `SELECT id, subject, predicate, object_value, confidence, valid_at, reasoning, object_type, classification
+           FROM claim_assertions
+           WHERE source_agent_id = ? AND status = 'active' AND archived = 0`,
+          [agentId as string],
+        );
+      } catch {
+        // classification column may not exist (pre-migration 034) — fall back without it
+        claimRows = conn.query<ClaimRow>(
+          `SELECT id, subject, predicate, object_value, confidence, valid_at, reasoning, object_type
+           FROM claim_assertions
+           WHERE source_agent_id = ? AND status = 'active' AND archived = 0`,
+          [agentId as string],
+        );
+      }
 
       const claims: ExportedClaim[] = [];
       const domains = new Set<string>();
@@ -1209,8 +1270,11 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
         if (options.minConfidence !== undefined && cr.confidence < options.minConfidence) continue;
 
         domains.add(domain);
-        // Determine claim classification based on clearance (conservative: unrestricted default)
-        const claimClassification: ClassificationLevel = 'unrestricted';
+        // R2-BK-03: Use actual classification from claim_assertions if available,
+        // fall back to 'unrestricted' only when column data is absent.
+        const claimClassification: ClassificationLevel = cr.classification
+          ? (cr.classification as ClassificationLevel)
+          : 'unrestricted';
 
         claims.push({
           originalId: cr.id as ClaimId,

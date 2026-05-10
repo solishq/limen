@@ -106,7 +106,7 @@ export interface AgentFilter {
   readonly tenantId?: TenantId;                               // LM-3.36
   readonly trustLevel?: AgentTrustLevel;                      // LM-3.37
   readonly capability?: AgentCapability;                      // LM-3.38
-  readonly owner?: string;                                    // LM-3.39
+  readonly owner?: UserId | AgentId;                           // LM-3.39 (R2-BK-05: branded types, matches BK-14)
   readonly limit?: number;                                    // LM-3.40
   readonly offset?: number;                                   // LM-3.41
 }
