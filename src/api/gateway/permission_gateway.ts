@@ -214,6 +214,14 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'roles.assign': { permission: 'manage_roles' },
   'roles.revoke': { permission: 'manage_roles' },
 
+  // ── Audit Visualization namespace (Phase 5 Subsystem 5) ──
+  'auditVisualization.queryEntries': { permission: 'view_audit', rateLimit: 'api_calls' },
+  'auditVisualization.getTimeline': { permission: 'view_audit', rateLimit: 'api_calls' },
+  'auditVisualization.getBeliefGraph': { permission: 'view_audit', rateLimit: 'api_calls' },
+  'auditVisualization.getGovernanceHeatmap': { permission: 'view_audit', rateLimit: 'api_calls' },
+  'auditVisualization.export': { permission: 'export_compliance', rateLimit: 'api_calls' },
+  'auditVisualization.verifyChainIntegrity': { permission: 'view_audit', rateLimit: 'api_calls' },
+
   // ── Replay namespace (v3.0.0 WG-02) ──
   'replay.verify': { permission: 'view_telemetry' },
   'replay.getSnapshots': { permission: 'view_telemetry' },

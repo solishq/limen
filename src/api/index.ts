@@ -2378,6 +2378,40 @@ export async function createLimen(
     },
 
     // v3.0.0 WG-01: Maintenance operations
+    // Phase 5 Subsystem 5: Audit Visualization (AV-8.1 through AV-8.6)
+    auditVisualization: {
+      queryEntries(filter: import('../audit/visualization/visualization_types.js').AuditFilter, pagination: import('../audit/visualization/visualization_types.js').Pagination) {
+        const { createAuditQueryService } = require('../audit/visualization/audit_query_service.js') as typeof import('../audit/visualization/audit_query_service.js');
+        const svc = createAuditQueryService({ conn: getConnection(), timeProvider: kernel.time, clearanceLevel: getContext().clearanceLevel });
+        return svc.queryEntries(filter, pagination);
+      },
+      getTimeline(sessionId: import('../kernel/interfaces/common.js').SessionId) {
+        const { createAuditQueryService } = require('../audit/visualization/audit_query_service.js') as typeof import('../audit/visualization/audit_query_service.js');
+        const svc = createAuditQueryService({ conn: getConnection(), timeProvider: kernel.time, clearanceLevel: getContext().clearanceLevel });
+        return svc.getTimeline(sessionId);
+      },
+      getBeliefGraph(options: import('../audit/visualization/visualization_types.js').BeliefGraphOptions) {
+        const { createAuditQueryService } = require('../audit/visualization/audit_query_service.js') as typeof import('../audit/visualization/audit_query_service.js');
+        const svc = createAuditQueryService({ conn: getConnection(), timeProvider: kernel.time, clearanceLevel: getContext().clearanceLevel });
+        return svc.getBeliefGraph(options);
+      },
+      getGovernanceHeatmap(options: import('../audit/visualization/visualization_types.js').HeatmapOptions) {
+        const { createAuditQueryService } = require('../audit/visualization/audit_query_service.js') as typeof import('../audit/visualization/audit_query_service.js');
+        const svc = createAuditQueryService({ conn: getConnection(), timeProvider: kernel.time, clearanceLevel: getContext().clearanceLevel });
+        return svc.getGovernanceHeatmap(options);
+      },
+      export(request: import('../audit/visualization/visualization_types.js').ExportRequest) {
+        const { createAuditQueryService } = require('../audit/visualization/audit_query_service.js') as typeof import('../audit/visualization/audit_query_service.js');
+        const svc = createAuditQueryService({ conn: getConnection(), timeProvider: kernel.time, clearanceLevel: getContext().clearanceLevel });
+        return svc.export(request);
+      },
+      verifyChainIntegrity(options: import('../audit/visualization/visualization_types.js').IntegrityCheckOptions) {
+        const { createAuditQueryService } = require('../audit/visualization/audit_query_service.js') as typeof import('../audit/visualization/audit_query_service.js');
+        const svc = createAuditQueryService({ conn: getConnection(), timeProvider: kernel.time, clearanceLevel: getContext().clearanceLevel });
+        return svc.verifyChainIntegrity(options);
+      },
+    } satisfies import('../audit/visualization/visualization_types.js').AuditQueryService,
+
     maintenance: {
       runRetention() {
         const conn = getConnection();

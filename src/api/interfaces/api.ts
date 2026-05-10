@@ -134,6 +134,15 @@ export type {
   ComplianceExportOptions, GovernanceConfig, GovernanceErrorCode,
 } from '../../governance/classification/governance_types.js';
 
+// Phase 5 Subsystem 5: Audit Visualization types
+export type {
+  AuditQueryService, AuditFilter, Pagination, PaginatedResult,
+  SessionTimeline, BeliefGraphSnapshot, GovernanceHeatmapData,
+  ExportRequest, ExportResult, IntegrityReport, IntegrityCheckOptions,
+  BeliefGraphOptions, HeatmapOptions, AuditActionType, GovernanceDecision,
+  AgentAuditEntry,
+} from '../../audit/visualization/visualization_types.js';
+
 // Phase 11: Vector Search types
 export type {
   EmbeddingProvider, VectorConfig, StoredEmbedding,
@@ -884,6 +893,17 @@ export interface Limen {
     /** Get all snapshots for a mission. */
     getSnapshots(missionId: string): Result<readonly import('../../substrate/replay/replay_engine.js').ReplaySnapshot[]>;
   };
+
+  // -- Phase 5 Subsystem 5: Audit Visualization --
+
+  /**
+   * Phase 5 Subsystem 5: Audit visualization and query service.
+   * Provides timeline, belief graph, governance heatmap, export, and integrity
+   * verification over the append-only hash-chained audit log.
+   * AV-10.3: Classification enforcement at service layer.
+   * AV-10.10: All data derives exclusively from audit entries.
+   */
+  readonly auditVisualization: import('../../audit/visualization/visualization_types.js').AuditQueryService;
 
   // -- Lifecycle --
 
