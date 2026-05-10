@@ -14,6 +14,7 @@
  */
 
 import type { AgentId } from '../kernel/interfaces/index.js';
+import type { TimeProvider } from '../kernel/interfaces/time.js';
 import type {
   A2AGovernanceRule, A2AAction, A2AVerdict, A2ARuleCondition,
   CapabilityBoundary,
@@ -38,8 +39,9 @@ export function evaluateA2ARules(
   rules: readonly A2AGovernanceRule[],
   action: A2AAction,
   targetAgent: AgentId,
+  time: TimeProvider,
 ): A2AVerdict {
-  const now = new Date().toISOString();
+  const now = time.nowISO();
 
   for (const rule of rules) {
     if (!rule.enabled) continue;

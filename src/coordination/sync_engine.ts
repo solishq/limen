@@ -378,14 +378,17 @@ export function getSyncLog(
     params.push(options.type);
   }
 
+  // BRK-CO-013: Include nodeId in HLC comparisons for total ordering
   if (options?.since) {
-    sql += ' AND (physical_ts > ? OR (physical_ts = ? AND logical_ts > ?))';
-    params.push(options.since.physical, options.since.physical, options.since.logical);
+    sql += ' AND (physical_ts > ? OR (physical_ts = ? AND logical_ts > ?) OR (physical_ts = ? AND logical_ts = ? AND node_id > ?))';
+    params.push(options.since.physical, options.since.physical, options.since.logical,
+      options.since.physical, options.since.logical, options.since.nodeId);
   }
 
   if (options?.until) {
-    sql += ' AND (physical_ts < ? OR (physical_ts = ? AND logical_ts < ?))';
-    params.push(options.until.physical, options.until.physical, options.until.logical);
+    sql += ' AND (physical_ts < ? OR (physical_ts = ? AND logical_ts < ?) OR (physical_ts = ? AND logical_ts = ? AND node_id < ?))';
+    params.push(options.until.physical, options.until.physical, options.until.logical,
+      options.until.physical, options.until.logical, options.until.nodeId);
   }
 
   sql += ' ORDER BY physical_ts, logical_ts, node_id LIMIT ? OFFSET ?';

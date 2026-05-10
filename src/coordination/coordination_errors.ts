@@ -35,7 +35,7 @@ export type CoordinationErrorCode =
   | 'SYNC_CONFLICT_UNRESOLVABLE'
   | 'SYNC_HASH_CHAIN_BROKEN'
   | 'SYNC_TIMEOUT'
-  | 'SYNC_WATERMARK_REGRESSION'
+  | 'SYNC_WATERMARK_REGRESSION' // CO-6.6 amendment: used by distributed sync when watermark moves backward
   | 'REPLAY_HASH_MISMATCH'
   | 'REPLAY_SNAPSHOT_NOT_FOUND'
   | 'REPLAY_MISSION_NOT_FOUND'
@@ -134,6 +134,7 @@ export function syncTimeout(timeoutMs: number): AgentCoordinationError {
   return { code: 'SYNC_TIMEOUT', message: `Sync timed out after ${timeoutMs}ms`, spec: 'ACG-6.7', timeoutMs };
 }
 
+/** CO-6.6 amendment: BRK-CO-010 — documented as contract extension for distributed sync watermark enforcement */
 export function syncWatermarkRegression(peerId: string, current: string, attempted: string): AgentCoordinationError {
   return { code: 'SYNC_WATERMARK_REGRESSION', message: `Watermark regression for peer ${peerId}: attempted ${attempted} < current ${current}`, spec: 'ACG-6.6', peerId, current, attempted };
 }

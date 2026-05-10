@@ -463,29 +463,12 @@ describe('Coordination Governance — Session Forking (CO-3.6 through CO-3.9, CO
   });
 
   // CO-5.2: inheritWorkingMemory defaults to true
-  // DEFECT-DETECTED: default inheritWorkingMemory=true triggers SQLITE_ERROR because
-  // session_fork.ts references non-existent `core_working_memory` table.
-  // Contract §5.1 says default is true. This test documents the defect.
-  it('CO-5.2: DEFECT — inheritWorkingMemory default=true fails due to missing table', async () => {
-    // forkSession with default options throws SQLITE_ERROR (not returned as Result)
-    // because session_fork.ts references `core_working_memory` which does not exist
-    // (actual table is `working_memory_entries`).
-    // This is a double defect: (1) wrong table name, (2) throws instead of returning Result.
-    let threw = false;
-    let throwResult: unknown;
-    try {
-      const result = await client.forkSession(ctx, 1);
-      // If we get here without throw, check if it's an error result
-      if (!result.ok) {
-        threw = true; // Treat error result as expected
-        throwResult = result;
-      }
-    } catch (e) {
-      threw = true;
-      throwResult = e;
-    }
-    assert.equal(threw, true,
-      'DEFECT: forkSession with default inheritWorkingMemory=true fails because session_fork.ts references core_working_memory (table does not exist; actual table is working_memory_entries)');
+  // BRK-CO-004 REMEDIATION: Table name fixed from core_working_memory to working_memory_entries.
+  // forkSession with default options (inheritWorkingMemory=true) now succeeds.
+  it('CO-5.2: inheritWorkingMemory default=true succeeds (BRK-CO-004 fix)', async () => {
+    const result = await client.forkSession(ctx, 1);
+    assert.equal(result.ok, true,
+      'forkSession with default inheritWorkingMemory=true must succeed after BRK-CO-004 table name fix');
   });
 
   // CO-3.7: listForks returns Result<ForkedSession[]>
@@ -1015,10 +998,9 @@ describe('Coordination Governance — Audit Production (CO-1.5, CO-12.9)', () =>
     assert.ok(countAfter > countBefore, 'registerA2ARule must produce at least one audit entry');
   });
 
-  // DEFECT-DETECTED: CO-12.9 requires "Failed operations produce audit entries with error context"
-  // but ensureTenant() early-returns without creating an audit entry.
-  // This test documents the defect.
-  it('CO-12.9: DEFECT — failed operations with null tenant do NOT produce audit entries', async () => {
+  // BRK-CO-005 REMEDIATION: CO-12.9 requires "Failed operations produce audit entries with error context"
+  // Previously ensureTenant() early-returned without audit. Now fixed — audit entry IS produced.
+  it('CO-12.9: failed operations with null tenant produce audit entries (BRK-CO-005 fix)', async () => {
     const setup = createTestCoordinationClient();
     const { client, conn } = setup;
     const badCtx = createTestOperationContext({ tenantId: null });
@@ -1028,10 +1010,9 @@ describe('Coordination Governance — Audit Production (CO-1.5, CO-12.9)', () =>
     await client.registerA2ARule(badCtx, makeRuleInput());
 
     const countAfter = conn.get<{ cnt: number }>('SELECT COUNT(*) as cnt FROM core_audit_log')?.cnt ?? 0;
-    // Per contract CO-12.9 this should produce an audit entry.
-    // Implementation skips audit on tenant mismatch early-return.
-    assert.equal(countAfter, countBefore,
-      'DEFECT: null-tenant early-return skips audit entry production. Contract CO-12.9 requires audit for all failures.');
+    // CO-12.9: Failed operations MUST produce audit entries.
+    assert.ok(countAfter > countBefore,
+      'CO-12.9: null-tenant early-return must produce audit entry for failed operation');
   });
 });
 

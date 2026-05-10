@@ -35,7 +35,7 @@ function ok<T>(value: T): Result<T> {
 }
 
 function errResult<T>(error: AgentCoordinationError): Result<T> {
-  return { ok: false, error: { code: error.code, message: error.message, spec: error.spec } };
+  return { ok: false, error };
 }
 
 // ============================================================================
@@ -46,11 +46,17 @@ const ALL_SNAPSHOT_TABLES: readonly SnapshotTable[] = Object.freeze([
   'claims', 'relationships', 'working_memory', 'governance_rules', 'audit_entries',
 ]);
 
-/** Table name mapping: SnapshotTable -> actual SQLite table */
+/**
+ * Table name mapping: SnapshotTable -> actual SQLite table.
+ * BRK-CO-011 implementation note: Snapshot table identifiers (e.g., 'claims')
+ * use domain-level names while actual SQLite tables use prefixed names
+ * (e.g., 'claim_assertions'). This mapping is the canonical translation layer.
+ * BRK-CO-004: working_memory maps to 'working_memory_entries' (not core_working_memory).
+ */
 const TABLE_MAP: Readonly<Record<SnapshotTable, string>> = Object.freeze({
   claims: 'claim_assertions',
   relationships: 'claim_relationships',
-  working_memory: 'core_working_memory',
+  working_memory: 'working_memory_entries',
   governance_rules: 'coordination_a2a_rules',
   audit_entries: 'core_audit_log',
 });
@@ -248,9 +254,13 @@ export function verifyReplay(
     }
   }
 
-  // Compute current state hash
+  // BRK-CO-008: When verifying a subset of tables, recompute expected hash from only
+  // those tables' hashes in the snapshot, not from the full-state hash.
   const sortedCurrentHashes = tablesToVerify.map(t => currentTableHashes[t] ?? '').sort();
   const actualHash = createHash('sha256').update(sortedCurrentHashes.join(':')).digest('hex');
+
+  const sortedExpectedHashes = tablesToVerify.map(t => expectedHashes[t] ?? '').sort();
+  const expectedHash = createHash('sha256').update(sortedExpectedHashes.join(':')).digest('hex');
 
   const durationMs = time.nowMs() - startMs;
 
@@ -259,7 +269,7 @@ export function verifyReplay(
     verified: divergences.length === 0,
     fromSnapshotId: fromSnapshot.id,
     toSnapshotId: toSnapshot.id,
-    expectedHash: toSnapshot.state_hash,
+    expectedHash,
     actualHash,
     tableResults: Object.freeze(tableResults as Record<SnapshotTable, TableVerification>),
     divergences: Object.freeze(divergences),
@@ -410,6 +420,16 @@ function computeTableHash(
 ): { hash: string; rowCount: number } {
   const tableName = TABLE_MAP[table];
   const pkExpr = PK_MAP[table];
+
+  // BRK-CO-007: Runtime assertion — tableName and pkExpr come from frozen constant maps,
+  // but validate they only contain safe characters as defense-in-depth.
+  if (!/^[a-z_]+$/.test(tableName)) {
+    return { hash: createHash('sha256').update('').digest('hex'), rowCount: 0 };
+  }
+  // pkExpr is either a simple column name or a concat expression — validate pattern
+  if (!/^[a-z_]+(?:\s*\|\|\s*'[^']*'\s*\|\|\s*[a-z_]+)?$/.test(pkExpr)) {
+    return { hash: createHash('sha256').update('').digest('hex'), rowCount: 0 };
+  }
 
   // Check if table exists (governance_rules table may not exist yet)
   const tableExists = conn.get<{ name: string }>(

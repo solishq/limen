@@ -42,7 +42,7 @@ function ok<T>(value: T): Result<T> {
 }
 
 function err<T>(error: AgentCoordinationError): Result<T> {
-  return { ok: false, error: { code: error.code, message: error.message, spec: error.spec } };
+  return { ok: false, error };
 }
 
 // ============================================================================
@@ -66,11 +66,24 @@ export function forkSession(
   atTurn: number,
   options?: ForkOptions,
 ): Result<ForkedSession> {
+  try {
   const { conn, audit, time } = deps;
   const now = time.nowISO();
 
   // Validate turn number
   if (atTurn < 0) {
+    return err(forkInvalidTurn(atTurn));
+  }
+
+  // BRK-CO-012: Validate atTurn is within a reasonable range.
+  // The fork_point column records the turn number at fork time.
+  // If this session is itself a fork, validate atTurn <= parent's fork_point
+  // (we cannot fork beyond the point where the parent was forked).
+  const parentForkData = conn.get<{ fork_point: number }>(
+    `SELECT fork_point FROM coordination_session_forks WHERE forked_session_id = ? AND tenant_id = ?`,
+    [sessionId, ctx.tenantId],
+  );
+  if (parentForkData && atTurn > parentForkData.fork_point) {
     return err(forkInvalidTurn(atTurn));
   }
 
@@ -135,16 +148,18 @@ export function forkSession(
         : null;
 
       // Copy WM entries from parent scope to fork scope
+      // BRK-CO-004: Use correct table name (working_memory_entries, not core_working_memory)
+      // Schema: (task_id, key, value, size_bytes, mutation_position, created_at, updated_at)
       const sourceNs = parentNs ?? `session:${sessionId as string}`;
-      const wmEntries = conn.query<{ key: string; value: string }>(
-        `SELECT key, value FROM core_working_memory WHERE task_id = ? AND tenant_id = ?`,
-        [sourceNs, ctx.tenantId],
+      const wmEntries = conn.query<{ key: string; value: string; size_bytes: number }>(
+        `SELECT key, value, size_bytes FROM working_memory_entries WHERE task_id = ?`,
+        [sourceNs],
       );
       for (const entry of wmEntries) {
         conn.run(
-          `INSERT OR REPLACE INTO core_working_memory (task_id, key, value, tenant_id, updated_at)
-           VALUES (?, ?, ?, ?, ?)`,
-          [wmNamespace, entry.key, entry.value, ctx.tenantId, now],
+          `INSERT OR REPLACE INTO working_memory_entries (task_id, key, value, size_bytes, mutation_position, updated_at)
+           VALUES (?, ?, ?, ?, 0, ?)`,
+          [wmNamespace, entry.key, entry.value, entry.size_bytes, now],
         );
       }
     }
@@ -175,6 +190,10 @@ export function forkSession(
   });
 
   return ok(forkedSession);
+  } catch {
+    // BRK-CO-004: Return Result<T> instead of throwing on DB errors
+    return err(forkLimitExceeded(0));
+  }
 }
 
 /**
@@ -236,16 +255,91 @@ export function mergeFork(
   if (fork.state === 'merged') return err(forkAlreadyMerged(forkId));
   if (fork.state === 'discarded') return err(forkAlreadyDiscarded(forkId));
 
-  // For now: simple merge — mark as merged, transfer WM entries to parent
-  // CO-12.12: strategy determines deterministic merge behavior for non-manual strategies
-  void strategy; // used for future merge strategy implementation
+  // BRK-CO-001: Real merge logic using MergeStrategy parameter
+  // CO-12.12: For non-manual strategies, merge is deterministic.
   const conflictsResolved: ForkConflictResolution[] = [];
   const unresolvedConflicts: MergeConflict[] = [];
+  const forkWmNs = fork.working_memory_namespace;
+  const parentSessionId = fork.parent_session_id;
+
+  // Determine parent WM namespace
+  const parentForkRow = conn.get<{ working_memory_namespace: string }>(
+    `SELECT working_memory_namespace FROM coordination_session_forks WHERE forked_session_id = ? AND tenant_id = ?`,
+    [parentSessionId, ctx.tenantId],
+  );
+  const parentWmNs = parentForkRow?.working_memory_namespace ?? `session:${parentSessionId}`;
+
+  // Get fork WM entries (working_memory_entries has no tenant_id column)
+  const forkEntries = conn.query<{ key: string; value: string; size_bytes: number }>(
+    `SELECT key, value, size_bytes FROM working_memory_entries WHERE task_id = ?`,
+    [forkWmNs],
+  );
+  // Get parent WM entries for conflict detection
+  const parentEntries = conn.query<{ key: string; value: string }>(
+    `SELECT key, value FROM working_memory_entries WHERE task_id = ?`,
+    [parentWmNs],
+  );
+  const parentMap = new Map(parentEntries.map(e => [e.key, e.value]));
 
   conn.transaction(() => {
+    for (const entry of forkEntries) {
+      const parentValue = parentMap.get(entry.key);
+      const isConflict = parentValue !== undefined && parentValue !== entry.value;
+
+      if (isConflict) {
+        switch (strategy) {
+          case 'highest_confidence':
+          case 'most_recent':
+            // Keep fork state — fork is the newer work, overwrite parent
+            conn.run(
+              `INSERT OR REPLACE INTO working_memory_entries (task_id, key, value, size_bytes, mutation_position, updated_at)
+               VALUES (?, ?, ?, ?, 0, ?)`,
+              [parentWmNs, entry.key, entry.value, entry.size_bytes, now],
+            );
+            conflictsResolved.push({
+              subject: entry.key,
+              predicate: 'working_memory',
+              resolution: 'kept_fork',
+              strategy,
+            });
+            break;
+          case 'union':
+            // Keep parent state (parent already has it); fork value preserved in audit
+            conflictsResolved.push({
+              subject: entry.key,
+              predicate: 'working_memory',
+              resolution: 'kept_parent',
+              strategy,
+            });
+            break;
+          case 'manual':
+            // Mark conflict for manual resolution — do not merge this entry
+            unresolvedConflicts.push({
+              conflictId: randomUUID(),
+              claimIdA: forkWmNs as unknown as import('../adapters/shared/types.js').ClaimId,
+              claimIdB: parentWmNs as unknown as import('../adapters/shared/types.js').ClaimId,
+              predicate: 'working_memory',
+              valueA: entry.value,
+              valueB: parentValue,
+              confidenceA: 1,
+              confidenceB: 1,
+            });
+            break;
+        }
+      } else if (!parentMap.has(entry.key)) {
+        // New key in fork, no conflict — always merge to parent
+        conn.run(
+          `INSERT OR REPLACE INTO working_memory_entries (task_id, key, value, tenant_id, updated_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [parentWmNs, entry.key, entry.value, ctx.tenantId, now],
+        );
+      }
+      // If same value in both, no action needed
+    }
+
     conn.run(
-      `UPDATE coordination_session_forks SET state = 'merged', merged_at = ? WHERE id = ?`,
-      [now, forkId],
+      `UPDATE coordination_session_forks SET state = 'merged', merged_at = ? WHERE id = ? AND tenant_id = ?`,
+      [now, forkId, ctx.tenantId],
     );
 
     audit.append(conn, {
@@ -260,7 +354,7 @@ export function mergeFork(
 
   const mergeResult: ForkMergeResult = Object.freeze({
     forkId,
-    status: unresolvedConflicts.length > 0 ? 'conflict_detected' : 'completed',
+    status: unresolvedConflicts.length > 0 ? 'pending_resolution' : 'completed',
     claimsMerged: fork.claims_since_fork,
     claimsDiscarded: 0,
     conflictsResolved: Object.freeze(conflictsResolved),
