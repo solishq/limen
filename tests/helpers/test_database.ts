@@ -4,8 +4,21 @@
  * Test Database Harness for Limen v1.0
  * Phase 4A-1: Foundation for all behavioral verification tests.
  *
+ * WHY THIS FILE IS ~130 LINES OF SETUP:
+ * Limen's test harness creates a real in-memory SQLite database with the full
+ * production schema (all migrations applied). This is intentional -- not mocks.
+ * The harness provides: (1) branded ID constructors that satisfy the type system
+ * without production ID generation, (2) a DatabaseConnection wrapping :memory:
+ * SQLite with production-identical PRAGMAs, (3) a real AuditTrail (not stubbed)
+ * for hash-chain integrity tests, (4) an OrchestrationDeps factory with real
+ * conn+audit and a minimal substrate stub, (5) seed helpers for direct database
+ * insertion (bypassing orchestration validation). Every test file imports from
+ * here to get a fresh, isolated database instance. The migration list must stay
+ * in sync with src/api/index.ts -- adding a new migration requires adding it
+ * in both places.
+ *
  * Provides:
- * - createTestDatabase(): In-memory SQLite with full schema (all 12 migrations)
+ * - createTestDatabase(): In-memory SQLite with full schema (all migrations)
  * - createTestOrchestrationDeps(): OrchestrationDeps with real conn + audit, stubbed substrate
  * - createTestOperationContext(): OperationContext with configurable branded IDs
  * - Seed helpers for creating missions, tasks, artifacts at known states
