@@ -10,6 +10,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen } from 'limen-ai';
 import { z } from 'zod';
+import { containsControlChars } from './validation.js';
 
 /** MCP error response helper. */
 function mcpError(code: string, message: string) {
@@ -45,6 +46,14 @@ export function registerTelemetryTools(server: McpServer, limen: Limen): void {
       confidence: z.number().optional().describe('Confidence 0.0-1.0 (capped at maxAutoConfidence)'),
     },
     async (args) => {
+      // R3-01: Reject control characters in data field
+      if (containsControlChars(args.data)) {
+        return mcpError('INVALID_INPUT', 'data contains control characters');
+      }
+      if (args.subject && containsControlChars(args.subject)) {
+        return mcpError('INVALID_INPUT', 'subject contains control characters');
+      }
+
       // Parse data JSON
       let parsed: object;
       try {

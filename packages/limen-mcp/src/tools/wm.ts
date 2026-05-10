@@ -17,6 +17,15 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen, TaskId } from 'limen-ai';
 import { z } from 'zod';
+import { containsControlChars } from './validation.js';
+
+/** MCP error response helper. */
+function mcpError(code: string, message: string) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify({ error: code, message }) }],
+    isError: true as const,
+  };
+}
 
 export function registerWmTools(server: McpServer, limen: Limen): void {
 
@@ -30,6 +39,17 @@ export function registerWmTools(server: McpServer, limen: Limen): void {
       value: z.string().describe('Entry value (UTF-8 text)'),
     },
     async (args) => {
+      // Structural completeness: reject control characters in all user-controlled strings
+      if (containsControlChars(args.taskId)) {
+        return mcpError('INVALID_INPUT', 'taskId contains control characters');
+      }
+      if (containsControlChars(args.key)) {
+        return mcpError('INVALID_INPUT', 'key contains control characters');
+      }
+      if (containsControlChars(args.value)) {
+        return mcpError('INVALID_INPUT', 'value contains control characters');
+      }
+
       const result = limen.workingMemory.write({
         taskId: args.taskId as TaskId,
         key: args.key,

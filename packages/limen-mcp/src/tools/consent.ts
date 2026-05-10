@@ -12,6 +12,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen } from 'limen-ai';
 import { z } from 'zod';
+import { containsControlChars } from './validation.js';
 
 /** MCP error response helper. */
 function mcpError(code: string, message: string) {
@@ -51,6 +52,17 @@ export function registerConsentTools(server: McpServer, limen: Limen): void {
       expiresAt: z.string().optional().describe('Consent expiration (ISO 8601). Omit for indefinite.'),
     },
     async (args) => {
+      // R3-01/R3-02: Reject control characters in dataSubjectId and scope
+      if (containsControlChars(args.dataSubjectId)) {
+        return mcpError('INVALID_INPUT', 'dataSubjectId contains control characters');
+      }
+      if (containsControlChars(args.scope)) {
+        return mcpError('INVALID_INPUT', 'scope contains control characters');
+      }
+      if (args.expiresAt && containsControlChars(args.expiresAt)) {
+        return mcpError('INVALID_INPUT', 'expiresAt contains control characters');
+      }
+
       const result = safeCall(() => limen.consent.register({
         dataSubjectId: args.dataSubjectId,
         basis: args.basis,
@@ -77,6 +89,14 @@ export function registerConsentTools(server: McpServer, limen: Limen): void {
       scope: z.string().min(1).describe('Consent scope to check'),
     },
     async (args) => {
+      // R3-02: Reject control characters in consent check inputs
+      if (containsControlChars(args.dataSubjectId)) {
+        return mcpError('INVALID_INPUT', 'dataSubjectId contains control characters');
+      }
+      if (containsControlChars(args.scope)) {
+        return mcpError('INVALID_INPUT', 'scope contains control characters');
+      }
+
       const result = safeCall(() => limen.consent.check(args.dataSubjectId, args.scope));
 
       if (!result.ok) {

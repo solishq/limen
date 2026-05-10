@@ -14,6 +14,15 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen } from 'limen-ai';
 import { z } from 'zod';
+import { containsControlChars } from './validation.js';
+
+/** MCP error response helper. */
+function mcpError(code: string, message: string) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify({ error: code, message }) }],
+    isError: true as const,
+  };
+}
 
 export function registerAgentTools(server: McpServer, limen: Limen): void {
 
@@ -27,6 +36,17 @@ export function registerAgentTools(server: McpServer, limen: Limen): void {
       capabilities: z.string().optional().describe('Comma-separated capability list'),
     },
     async (args) => {
+      // Structural completeness: reject control characters in all user-controlled strings
+      if (containsControlChars(args.name)) {
+        return mcpError('INVALID_INPUT', 'name contains control characters');
+      }
+      if (args.domains && containsControlChars(args.domains)) {
+        return mcpError('INVALID_INPUT', 'domains contains control characters');
+      }
+      if (args.capabilities && containsControlChars(args.capabilities)) {
+        return mcpError('INVALID_INPUT', 'capabilities contains control characters');
+      }
+
       const domains = args.domains
         ? args.domains.split(',').map((d) => d.trim()).filter(Boolean)
         : undefined;
@@ -66,6 +86,9 @@ export function registerAgentTools(server: McpServer, limen: Limen): void {
       name: z.string().describe('Agent name to look up'),
     },
     async (args) => {
+      if (containsControlChars(args.name)) {
+        return mcpError('INVALID_INPUT', 'name contains control characters');
+      }
       const agent = await limen.agents.get(args.name);
       if (!agent) {
         return {
@@ -87,6 +110,9 @@ export function registerAgentTools(server: McpServer, limen: Limen): void {
       name: z.string().describe('Agent name to promote'),
     },
     async (args) => {
+      if (containsControlChars(args.name)) {
+        return mcpError('INVALID_INPUT', 'name contains control characters');
+      }
       const agent = await limen.agents.promote(args.name);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(agent, null, 2) }],

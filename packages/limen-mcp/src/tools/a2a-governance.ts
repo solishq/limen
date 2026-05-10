@@ -10,6 +10,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen } from 'limen-ai';
 import { z } from 'zod';
+import { containsControlChars } from './validation.js';
 
 /** MCP error response helper. */
 function mcpError(code: string, message: string) {
@@ -42,6 +43,11 @@ export function registerA2AGovernanceTools(server: McpServer, limen: Limen): voi
       block: z.string().describe('JSON governance block object'),
     },
     async (args) => {
+      // Structural completeness: reject control characters in JSON string inputs
+      if (containsControlChars(args.block)) {
+        return mcpError('INVALID_INPUT', 'block contains control characters');
+      }
+
       let parsed: object;
       try {
         parsed = JSON.parse(args.block) as object;
@@ -97,6 +103,10 @@ export function registerA2AGovernanceTools(server: McpServer, limen: Limen): voi
       rule: z.string().describe('JSON proactive rule object'),
     },
     async (args) => {
+      if (containsControlChars(args.rule)) {
+        return mcpError('INVALID_INPUT', 'rule contains control characters');
+      }
+
       let parsed: object;
       try {
         parsed = JSON.parse(args.rule) as object;

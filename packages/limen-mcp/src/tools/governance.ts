@@ -12,6 +12,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen } from 'limen-ai';
 import { z } from 'zod';
+import { containsControlChars } from './validation.js';
 
 /** MCP error response helper. */
 function mcpError(code: string, message: string) {
@@ -49,6 +50,14 @@ export function registerGovernanceTools(server: McpServer, limen: Limen): void {
       includeRelated: z.boolean().default(false).describe('Cascade erasure through derived_from chains (default: false)'),
     },
     async (args) => {
+      // Structural completeness: reject control characters in user-controlled strings
+      if (containsControlChars(args.dataSubjectId)) {
+        return mcpError('INVALID_INPUT', 'dataSubjectId contains control characters');
+      }
+      if (containsControlChars(args.reason)) {
+        return mcpError('INVALID_INPUT', 'reason contains control characters');
+      }
+
       const result = safeCall(() => limen.governance.erasure({
         dataSubjectId: args.dataSubjectId,
         reason: args.reason,
@@ -76,6 +85,13 @@ export function registerGovernanceTools(server: McpServer, limen: Limen): void {
       to: z.string().min(1).describe('Period end (ISO 8601 date)'),
     },
     async (args) => {
+      if (containsControlChars(args.from)) {
+        return mcpError('INVALID_INPUT', 'from contains control characters');
+      }
+      if (containsControlChars(args.to)) {
+        return mcpError('INVALID_INPUT', 'to contains control characters');
+      }
+
       const result = safeCall(() => limen.governance.exportAudit({
         from: args.from,
         to: args.to,

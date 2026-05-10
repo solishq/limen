@@ -12,6 +12,15 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen } from 'limen-ai';
 import { z } from 'zod';
+import { containsControlChars } from './validation.js';
+
+/** MCP error response helper. */
+function mcpError(code: string, message: string) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify({ error: code, message }) }],
+    isError: true as const,
+  };
+}
 
 export function registerMissionTools(server: McpServer, limen: Limen): void {
 
@@ -27,6 +36,20 @@ export function registerMissionTools(server: McpServer, limen: Limen): void {
       successCriteria: z.string().optional().describe('Comma-separated success criteria'),
     },
     async (args) => {
+      // R3-01/R3-03: Reject control characters in user-controlled string fields
+      if (containsControlChars(args.agent)) {
+        return mcpError('INVALID_INPUT', 'agent contains control characters');
+      }
+      if (containsControlChars(args.objective)) {
+        return mcpError('INVALID_INPUT', 'objective contains control characters');
+      }
+      if (args.successCriteria && containsControlChars(args.successCriteria)) {
+        return mcpError('INVALID_INPUT', 'successCriteria contains control characters');
+      }
+      if (containsControlChars(args.deadline)) {
+        return mcpError('INVALID_INPUT', 'deadline contains control characters');
+      }
+
       const successCriteria = args.successCriteria
         ? args.successCriteria.split(',').map((c) => c.trim()).filter(Boolean)
         : undefined;
