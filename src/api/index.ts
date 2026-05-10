@@ -191,8 +191,14 @@ import { createAgentLifecycleClient } from '../lifecycle/agent_lifecycle_client.
 // Phase 5 Subsystem 3: Output Governance migration (v50)
 import { getOutputGovernanceMigrations } from './migration/050_output_governance.js';
 
+// Subsystem 4: Coordination Governance migration (v51)
+import { getCoordinationGovernanceMigrations } from './migration/051_coordination_governance.js';
+
 // Phase 5 Subsystem 3: Output Governance Client
 import { createAgentOutputClient, type AgentOutputClient } from '../output/output_governance.js';
+
+// Subsystem 4: Coordination Governance Client
+import { createAgentCoordinationClient, type AgentCoordinationClient } from '../coordination/coordination_governance.js';
 
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
@@ -568,6 +574,7 @@ function buildOrchestrationAdapter(
       ...getAgentLifecycleMigrations(),                              // v48: Phase 5 agent lifecycle
       ...getLifecycleRemediationMigrations(),                        // v49: BK-12, BK-16, BK-17 remediation
       ...getOutputGovernanceMigrations(),                              // v50: Phase 5 output governance
+      ...getCoordinationGovernanceMigrations(),                          // v51: Subsystem 4 coordination governance
     ]);
     if (!phase4Governance.ok) {
       conn.close();
@@ -1351,6 +1358,15 @@ export async function createLimen(
     log({ level: 'info', category: 'init', message: 'A2A Governance API initialized' });
   }
 
+  // Subsystem 4: Coordination Governance Client
+  const coordinationClient: AgentCoordinationClient = createAgentCoordinationClient({
+    getConnection,
+    getContext,
+    audit: kernel.audit,
+    time: kernel.time,
+  });
+  log({ level: 'info', category: 'init', message: 'Coordination Governance Client initialized' });
+
   // ── Phase 11: Vector Search Subsystem ──
   // sqlite-vec is OPTIONAL. Try to load. If it fails, vector features degrade gracefully.
   // I-P11-01: Core features work without sqlite-vec.
@@ -1739,6 +1755,9 @@ export async function createLimen(
 
     // Phase 5 Subsystem 3: Full Output Governance Client (BRK-001: wired, not voided)
     outputGovernance: outputGovernanceClient,
+
+    // Subsystem 4: Coordination Governance Client
+    coordination: coordinationClient,
 
     // Phase 7 FR-002: A2A Governance namespace
     a2aGovernance: a2aGovernanceApi ?? {

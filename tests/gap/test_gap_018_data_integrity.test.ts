@@ -624,8 +624,8 @@ describe('CF-015: data export .limen format', () => {
         'Limen version must match package.json version');
 
       const schemaVer = meta.find(m => m.key === 'schema_version');
-      assert.equal(schemaVer?.value, '49',
-        'Schema version must match current (49)');
+      assert.equal(schemaVer?.value, '51',
+        'Schema version must match current (51)');
 
       exportDb.close();
     } finally {
@@ -985,12 +985,12 @@ describe('Migration v15: Audit tombstone infrastructure', () => {
   });
 
   // #23: Schema version is 48 (includes all migrations through agent_lifecycle)
-  it('#23 schema version is 49 after all migrations', () => {
+  it('#23 schema version is 51 after all migrations', () => {
     const conn = createTestDatabase();
     const version = conn.get<{ version: number }>(
       `SELECT MAX(version) as version FROM core_migrations WHERE status = 'applied'`
     );
-    assert.equal(version?.version, 49, 'Schema version must be 49 (BK-12/BK-16/BK-17 remediation)');
+    assert.equal(version?.version, 51, 'Schema version must be 51 (coordination governance)');
     conn.close();
   });
 

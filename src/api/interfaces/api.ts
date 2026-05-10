@@ -98,6 +98,9 @@ import type { A2AGovernanceApi } from '../a2a-governance/a2a_governance_api.js';
 // Phase 5 Subsystem 3: Full Output Governance Client (OG-3.1 through OG-3.17)
 import type { AgentOutputClient } from '../../output/output_governance.js';
 
+// Subsystem 4: Coordination Governance Client
+import type { AgentCoordinationClient } from '../../coordination/coordination_governance.js';
+
 // Re-export CCP/WMP types so consumers can construct inputs
 export type {
   ClaimCreateInput, AssertClaimOutput,
@@ -162,6 +165,9 @@ export type { OutputApi, OutputAssertOptions, OutputQueryOptions } from '../outp
 
 // Phase 5 Subsystem 3: Full Output Governance Client type (BRK-001)
 export type { AgentOutputClient } from '../../output/output_governance.js';
+
+// Subsystem 4: Coordination Governance Client type
+export type { AgentCoordinationClient } from '../../coordination/coordination_governance.js';
 
 // FR-006: Context Compiler types
 export type { CompileOptions, CompiledContext, CompileFormat, CompilePriority } from '../../cognitive/context_compiler.js';
@@ -664,6 +670,14 @@ export interface Limen {
    * null when convenience init failed (no mission/agent context).
    */
   readonly outputGovernance: AgentOutputClient | null;
+
+  /**
+   * Subsystem 4: Coordination governance client.
+   * Provides A2A governance, session forking, distributed sync,
+   * and deterministic replay verification.
+   * CO-3.1 through CO-3.20, 20 interface methods across 4 domains.
+   */
+  readonly coordination: AgentCoordinationClient;
 
   // -- Phase 7 FR-002: A2A Governance --
 

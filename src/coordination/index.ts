@@ -18,3 +18,32 @@ export {
   type DecisionInfo,
   type LockInfo,
 } from './limen_backend.js';
+
+// Subsystem 4: Coordination Governance
+export {
+  createAgentCoordinationClient,
+  type AgentCoordinationClient,
+} from './coordination_governance.js';
+
+export type {
+  // A2A types
+  A2AGovernanceRule, A2AGovernanceRuleInput, A2ARuleFilter,
+  A2AAction, A2AVerdict, A2ARuleAction, A2ARuleCondition, CapabilityBoundary,
+  DataClassificationRule, ProactiveRule, ProactiveTrigger, ProactiveAction,
+  // Fork types
+  ForkedSession, ForkOptions, ForkMergeResult, ForkConflictResolution, ForkState,
+  // Sync types
+  HLCTimestamp, SyncEvent, SyncEventPayload, SyncEventType,
+  SyncState, PeerRegistration, PeerState, Watermark,
+  SyncOptions, SyncResult, SyncLogOptions, SyncCapability, SyncConflictResolution,
+  // Replay types
+  SnapshotTrigger, SnapshotTable, SnapshotMetadata, StateSnapshot,
+  ReplayVerifyOptions, ReplayVerification, TableVerification,
+  DivergenceReport, DivergenceEntry, DivergenceSummary,
+  // Events
+  CoordinationEvent,
+} from './coordination_types.js';
+
+export type {
+  CoordinationErrorCode, AgentCoordinationError,
+} from './coordination_errors.js';

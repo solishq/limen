@@ -132,6 +132,28 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'outputGovernance.on': null,   // Event subscription — no permission needed
   'outputGovernance.off': null,  // Event unsubscription — no permission needed
 
+  // ── Coordination namespace (Subsystem 4) ──
+  'coordination.registerA2ARule': { permission: 'manage_cognitive', rateLimit: 'api_calls' },
+  'coordination.removeA2ARule': { permission: 'manage_cognitive', rateLimit: 'api_calls' },
+  'coordination.listA2ARules': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'coordination.validateA2AAction': { permission: 'manage_cognitive', rateLimit: 'api_calls' },
+  'coordination.getCapabilityBoundary': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'coordination.forkSession': { permission: 'manage_cognitive', rateLimit: 'api_calls' },
+  'coordination.listForks': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'coordination.mergeFork': { permission: 'manage_cognitive', rateLimit: 'api_calls' },
+  'coordination.discardFork': { permission: 'manage_cognitive', rateLimit: 'api_calls' },
+  'coordination.getSyncState': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'coordination.registerPeer': { permission: 'manage_cognitive', rateLimit: 'api_calls' },
+  'coordination.removePeer': { permission: 'manage_cognitive', rateLimit: 'api_calls' },
+  'coordination.triggerSync': { permission: 'manage_cognitive', rateLimit: 'api_calls' },
+  'coordination.getSyncLog': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'coordination.captureSnapshot': { permission: 'manage_cognitive', rateLimit: 'api_calls' },
+  'coordination.verifyReplay': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'coordination.getSnapshots': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'coordination.detectDivergence': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'coordination.on': null,  // Event subscription — no permission needed
+  'coordination.off': null, // Event unsubscription — no permission needed
+
   // ── Cognitive namespace ──
   'cognitive.consolidate': { permission: 'manage_cognitive' },
   'cognitive.health': { permission: 'query_claims' },
@@ -243,6 +265,7 @@ export const EXEMPT_METHODS: ReadonlySet<string> = new Set([
   // it is explicitly acknowledged rather than silently ignored.
   'claims', 'workingMemory', 'governance', 'consent', 'cognitive',
   'agents', 'missions', 'roles', 'data', 'metrics', 'security', 'output',
+  'coordination',
 ]);
 
 /**
