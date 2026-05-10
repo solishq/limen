@@ -650,7 +650,19 @@ export async function createLimen(
   // Zero-config: when called with no arguments, resolve defaults from environment.
   // Provider auto-detection, dev master key, temp data dir.
   // Throws INVALID_CONFIG with helpful message if no providers detected.
-  const resolvedConfig: LimenConfig = config ?? resolveDefaults();
+  // Merge user-provided partial config with auto-detected defaults.
+  // FINDING-015: `config ?? resolveDefaults()` replaced entire defaults when ANY config provided.
+  // Fix: always resolve defaults, then overlay user config on top.
+  const defaults = resolveDefaults();
+  const resolvedConfig: LimenConfig = config
+    ? {
+        ...defaults,
+        ...config,
+        // Preserve defaults for fields the user didn't specify
+        dataDir: config.dataDir ?? defaults.dataDir,
+        masterKey: config.masterKey ?? defaults.masterKey,
+      } as LimenConfig
+    : defaults;
 
   // Phase 8: Extract debug flag for error construction throughout the factory.
   // When true, LimenError preserves original stack traces and messages.
