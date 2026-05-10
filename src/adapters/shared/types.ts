@@ -101,7 +101,8 @@ export type Permission =
   | 'write_wm' | 'read_wm'
   | 'manage_consent' | 'view_consent'
   | 'manage_cognitive'
-  | 'manage_agents';
+  | 'manage_agents'
+  | 'governance_admin';
 
 /** SHARED_TYPES.md S1.3 -- OperationContext */
 export interface OperationContext {
