@@ -318,16 +318,11 @@ describe('Independent — Registration & Identity', () => {
     });
   }
 
-  // DISCREPANCY: Contract §3.1/SHARED_TYPES §21 lists CDX_FRAMEWORK as valid but implementation rejects it
-  it(`LM-14.03 DISCREPANCY: framework ${CDX_FRAMEWORK} SHOULD be accepted per contract`, async () => {
+  // BK-01 REMEDIATED: Contract §3.1/SHARED_TYPES §21 lists CDX_FRAMEWORK as valid — now enforced
+  it(`LM-14.03: framework ${CDX_FRAMEWORK} is accepted per contract (BK-01 fix verified)`, async () => {
     const r = await h.client.registerAgent(h.ctx, spec({ name: 'fw-cdx-test', framework: CDX_FRAMEWORK as any }));
-    // Contract says this SHOULD succeed. Implementation rejects it.
-    // Documenting as discrepancy: if this starts passing, the bug is fixed.
-    if (!r.ok) {
-      // Implementation bug confirmed — CDX_FRAMEWORK not in VALID_FRAMEWORKS
-      assert.ok(true, `KNOWN DISCREPANCY: ${CDX_FRAMEWORK} framework rejected by implementation (contract says accepted)`);
-    } else {
-      // Bug fixed — framework now accepted
+    assert.ok(r.ok, `Framework '${CDX_FRAMEWORK}' MUST be accepted per contract §3.1 — got error: ${!r.ok ? r.error.message : ''}`);
+    if (r.ok) {
       assert.equal(r.value.framework, CDX_FRAMEWORK);
     }
   });
