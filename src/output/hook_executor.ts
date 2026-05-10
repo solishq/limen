@@ -219,12 +219,17 @@ export function createHookExecutor(deps: HookExecutorDeps): HookExecutor {
 
       let result: HookResult;
       try {
-        // OG-12.12: 5000ms timeout
+        // OG-12.12: 5000ms timeout — BRK-015: clean up timer on success
+        let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
         result = await Promise.race([
-          hook.handler(context),
-          new Promise<HookResult>((_, reject) =>
-            setTimeout(() => reject(new Error('HOOK_TIMEOUT')), HOOK_TIMEOUT_MS)
-          ),
+          hook.handler(context).then(r => {
+            // BRK-015: Clear timeout on successful completion
+            if (timeoutHandle !== null) clearTimeout(timeoutHandle);
+            return r;
+          }),
+          new Promise<HookResult>((_, reject) => {
+            timeoutHandle = setTimeout(() => reject(new Error('HOOK_TIMEOUT')), HOOK_TIMEOUT_MS);
+          }),
         ]);
       } catch (error) {
         // OG-7.27 / OG-12.12: timeout or throw = proceed:true + warning audit

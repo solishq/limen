@@ -375,6 +375,15 @@ export function createTestOperationContext(options: TestContextOptions = {}): Op
     'manage_providers', 'manage_budgets', 'manage_roles',
     'purge_data',
     'approve_response', 'edit_response', 'takeover_session', 'review_batch',
+    // v2.1.0 fine-grained permissions (BRK-003: required for output governance checks)
+    'assert_claim', 'retract_claim', 'query_claims', 'relate_claims',
+    'write_wm', 'read_wm',
+    'manage_consent', 'view_consent',
+    'manage_cognitive', 'manage_agents',
+    // Phase 10: Governance permissions
+    'classify_claims', 'manage_classification_rules',
+    'manage_protected_predicates',
+    'request_erasure', 'export_compliance',
   ];
 
   return {

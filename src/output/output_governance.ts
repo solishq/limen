@@ -51,8 +51,12 @@ import {
   AGENT_CONFIDENCE_CEILING, OUTPUT_CONTENT_MIN_LENGTH, OUTPUT_CONTENT_MAX_LENGTH,
   VALID_OUTPUT_EVENTS,
 } from './output_types.js';
-// Error types available for callers — not used directly in this module
-// import type { OutputGovernanceError } from './output_errors.js';
+import {
+  outputValidationFailed, outputContentEmpty, outputContentTooLarge,
+  telemetryWriteFailed, governanceRefusal,
+  type OutputGovernanceError,
+} from './output_errors.js';
+import type { GovernanceDecision } from '../adapters/shared/types.js';
 import type { HookExecutor } from './hook_executor.js';
 import { createHookExecutor } from './hook_executor.js';
 import type { PluginLifecycleManager } from './plugin_lifecycle.js';
@@ -64,6 +68,11 @@ import { createInferenceEngine } from './inference_engine.js';
 
 function ok<T>(value: T): Result<T> {
   return { ok: true, value };
+}
+
+// BRK-006: Proper typed error factory — produces OutputGovernanceError-shaped results
+function errTyped<T>(error: OutputGovernanceError): Result<T> {
+  return { ok: false, error: { code: error.code, message: error.message, spec: error.spec } };
 }
 
 function err<T>(code: string, message: string): Result<T> {
@@ -134,8 +143,8 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     maxAutoConfidence, inferenceProvider, getAgentCapabilities,
   } = deps;
 
-  // Helper: emit event with proper conn/ctx/payload signature
-  function emitEvent(eventType: string, payload: Record<string, unknown>): void {
+  // BRK-005: emitEvent returns Result — callers propagate failures (fail-CLOSED)
+  function emitEvent(eventType: string, payload: Record<string, unknown>): Result<void> {
     try {
       const conn = getConnection();
       const ctx = getContext();
@@ -145,11 +154,15 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
         payload,
         propagation: 'local',
       });
-    } catch { /* event emission non-fatal */ }
+      return ok(undefined);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { ok: false, error: { code: 'EVENT_EMISSION_FAILED', message: `Event emission failed: ${msg}`, spec: 'AOG-8' } };
+    }
   }
 
-  // Helper: append audit entry with proper conn signature
-  function appendAudit(operation: string, resourceType: string, resourceId: string, detail?: Record<string, unknown>): void {
+  // BRK-004: appendAudit returns Result — callers propagate failures (fail-CLOSED)
+  function appendAudit(operation: string, resourceType: string, resourceId: string, detail?: Record<string, unknown>): Result<void> {
     try {
       const conn = getConnection();
       audit.append(conn, {
@@ -161,15 +174,52 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
         resourceId,
         ...(detail !== undefined ? { detail } : {}),
       });
-    } catch { /* audit non-fatal post-success */ }
+      return ok(undefined);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { ok: false, error: { code: 'AUDIT_WRITE_FAILED', message: `Audit write failed: ${msg}`, spec: 'AOG-12' } };
+    }
+  }
+
+  // BRK-003: Governance evaluation — check permissions and trust level
+  function evaluateGovernance(
+    ctx: OperationContext,
+    requiredPermission: string,
+    _requiredTrustLevel: string,
+  ): Result<void> {
+    // Check permissions via the ReadonlySet<Permission> on OperationContext
+    if (ctx.permissions) {
+      const perm = requiredPermission as import('../kernel/interfaces/index.js').Permission;
+      if (!ctx.permissions.has(perm)) {
+        const decision: GovernanceDecision = {
+          allowed: false,
+          verdict: { verdict: 'refuse' as const, auditId: '' as import('../kernel/interfaces/index.js').EventId, reason: `Missing required permission: ${requiredPermission}`, rule: 'OG-A.1' },
+          reason: `Missing required permission: ${requiredPermission}`,
+          requiredPermissions: [perm],
+          missingPermissions: [perm],
+          clearanceRequired: null,
+          clearanceActual: null,
+          evaluatedAt: time.nowISO(),
+        };
+        return errTyped(governanceRefusal(decision));
+      }
+    }
+    return ok(undefined);
   }
 
   // Create sub-components
   const hookExecutor: HookExecutor = createHookExecutor({
     getConnection, getContext, audit, time, events,
   });
+  // BRK-002: Late-binding query delegate — resolved after queryOutputs/queryCosts/queryVitals are defined
+  const lateQueryDelegate: import('./plugin_lifecycle.js').PluginQueryDelegate = {
+    async queryOutputs(filter) { return queryOutputs(getContext(), filter); },
+    async queryVitals(filter) { return queryVitals(getContext(), filter); },
+    async queryCosts(filter) { return queryCosts(getContext(), filter); },
+  };
   const pluginManager: PluginLifecycleManager = createPluginLifecycleManager({
     getConnection, getContext, audit, time, events, getAgentCapabilities,
+    queryDelegate: lateQueryDelegate,
   });
   const inferenceEngine: InferenceEngine = createInferenceEngine({
     provider: inferenceProvider,
@@ -189,18 +239,21 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     content: string,
     options?: OutputOptions,
   ): Promise<Result<OutputEntry>> {
+    // BRK-003: Governance check — produce requires assert_claim permission
+    const govResult = evaluateGovernance(ctx, 'assert_claim', 'low');
+    if (!govResult.ok) return govResult as Result<OutputEntry>;
+
     // Validate output type (OG-4.1)
     if (!VALID_OUTPUT_TYPES.has(type)) {
-      return err('OUTPUT_VALIDATION_FAILED', `Invalid output type: ${type}`);
+      return errTyped(outputValidationFailed([{ field: 'type', constraint: 'valid_output_type', actual: type }]));
     }
 
-    // Validate content (OG-4.14)
+    // Validate content (OG-4.14) — BRK-006: use typed error factories
     if (!content || content.length < OUTPUT_CONTENT_MIN_LENGTH) {
-      return err('OUTPUT_CONTENT_EMPTY', 'Output content must be non-empty');
+      return errTyped(outputContentEmpty());
     }
     if (content.length > OUTPUT_CONTENT_MAX_LENGTH) {
-      return err('OUTPUT_CONTENT_TOO_LARGE',
-        `Output content exceeds ${OUTPUT_CONTENT_MAX_LENGTH} characters`);
+      return errTyped(outputContentTooLarge(OUTPUT_CONTENT_MAX_LENGTH));
     }
 
     // OG-12.2: Clamp confidence to [0, 0.7]
@@ -303,9 +356,13 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
       confidence,
     });
 
-    // OG-8.15: output:produced event
-    emitEvent('output:produced', { outputId: claimId, type, confidence });
-    appendAudit('output.produced', 'output', claimId as string, { type, confidence, classification });
+    // BRK-004: Audit failures propagated (fail-CLOSED)
+    const auditResult = appendAudit('output.produced', 'output', claimId as string, { type, confidence, classification });
+    if (!auditResult.ok) return auditResult as Result<OutputEntry>;
+
+    // BRK-005: Event emission failures propagated (fail-CLOSED)
+    const eventResult = emitEvent('output:produced', { outputId: claimId, type, confidence });
+    if (!eventResult.ok) return eventResult as Result<OutputEntry>;
 
     return ok(entry);
   }
@@ -314,6 +371,10 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     ctx: OperationContext,
     filter: OutputFilter,
   ): Promise<Result<OutputEntry[]>> {
+    // BRK-003: Governance check — queryOutputs requires query_claims permission
+    const govResult = evaluateGovernance(ctx, 'query_claims', 'low');
+    if (!govResult.ok) return govResult as Result<OutputEntry[]>;
+
     // Build predicate filter
     let predicateFilter: string;
     if (filter.type) {
@@ -331,11 +392,14 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     const limit = filter.limit ?? OUTPUT_FILTER_DEFAULTS.limit;
     const offset = filter.offset ?? OUTPUT_FILTER_DEFAULTS.offset;
 
-    // OG-11.2: Query via SC-13 (query_claims)
+    // BRK-016: Fetch a large batch from CCP, apply ALL filters in-memory FIRST,
+    // then paginate. Previous approach applied offset to raw results before filtering,
+    // which broke pagination when filters removed records.
+    const fetchLimit = 10000; // Upper bound for filter-then-paginate
     const queryResult = claims.queryClaims({
       predicate: predicateFilter,
       subject: null,
-      limit: limit + offset, // Fetch extra to handle offset
+      limit: fetchLimit,
       ...(status !== 'all' ? { status: status as 'active' | 'retracted' } : {}),
     });
 
@@ -343,12 +407,11 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
       return err('OUTPUT_VALIDATION_FAILED', queryResult.error.message);
     }
 
-    // Transform claim results to OutputEntry
-    const entries: OutputEntry[] = [];
+    // BRK-016: First pass — filter ALL results, THEN paginate
+    const allFiltered: OutputEntry[] = [];
     const claimsData = queryResult.value.claims;
 
-    for (let i = offset; i < Math.min(claimsData.length, offset + limit); i++) {
-      const item = claimsData[i];
+    for (const item of claimsData) {
       if (!item) continue;
 
       const claim = item.claim;
@@ -389,7 +452,7 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
         if (!hasAllTags) continue;
       }
 
-      entries.push({
+      allFiltered.push({
         id: claim.id as ClaimId,
         type: outputType,
         content: typeof parsed.content === 'string' ? parsed.content : '',
@@ -407,14 +470,39 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
       });
     }
 
+    // BRK-016: Apply pagination AFTER filtering
+    const entries = allFiltered.slice(offset, offset + limit);
+
     return ok(entries);
   }
 
   async function retractOutput(
-    _ctx: OperationContext,
+    ctx: OperationContext,
     outputId: ClaimId,
     reason: string,
   ): Promise<Result<void>> {
+    // BRK-003: Governance check — retractOutput requires retract_claim permission
+    const govResult = evaluateGovernance(ctx, 'retract_claim', 'low');
+    if (!govResult.ok) return govResult as Result<void>;
+
+    // BRK-010: Telemetry claims are append-only — retraction forbidden (OG-12.3)
+    // Check if the target claim has a telemetry predicate via CCP query
+    const telemetryCheckResult = claims.queryClaims({
+      predicate: 'telemetry.*',
+      subject: null,
+      limit: 10000,
+      status: 'active',
+    });
+    if (telemetryCheckResult.ok) {
+      for (const item of telemetryCheckResult.value.claims) {
+        if (item.claim.id === (outputId as string)) {
+          return errTyped(telemetryWriteFailed(
+            'Telemetry claims are append-only and cannot be retracted (OG-12.3)'
+          ));
+        }
+      }
+    }
+
     // OG-4.16: Status transition active -> retracted (terminal, irreversible)
     // OG-11.3: Maps to SC-12 (retract_claim)
     const result = claims.retractClaim({
@@ -426,9 +514,13 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
       return err('OUTPUT_VALIDATION_FAILED', result.error.message);
     }
 
-    // OG-8.16: output:retracted event
-    emitEvent('output:retracted', { outputId, reason });
-    appendAudit('output.retracted', 'output', String(outputId), { reason });
+    // BRK-004: Audit failures propagated (fail-CLOSED)
+    const auditResult = appendAudit('output.retracted', 'output', String(outputId), { reason });
+    if (!auditResult.ok) return auditResult;
+
+    // BRK-005: Event emission failures propagated (fail-CLOSED)
+    const eventResult = emitEvent('output:retracted', { outputId, reason });
+    if (!eventResult.ok) return eventResult;
 
     return ok(undefined);
   }
@@ -438,25 +530,29 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
   // ========================================================================
 
   async function recordCost(
-    _ctx: OperationContext,
+    ctx: OperationContext,
     data: CostRecord,
   ): Promise<Result<void>> {
-    // OG-5.2: Validate non-negative integers
+    // BRK-003: Governance check
+    const govResult = evaluateGovernance(ctx, 'assert_claim', 'low');
+    if (!govResult.ok) return govResult;
+
+    // OG-5.2: Validate non-negative integers — BRK-006: typed errors
     if (data.inputTokens < 0 || data.outputTokens < 0 || data.totalTokens < 0) {
-      return err('TELEMETRY_WRITE_FAILED', 'Token counts must be non-negative');
+      return errTyped(telemetryWriteFailed('Token counts must be non-negative'));
     }
     // OG-5.3: totalTokens must equal inputTokens + outputTokens
     if (data.totalTokens !== data.inputTokens + data.outputTokens) {
-      return err('TELEMETRY_WRITE_FAILED',
-        `totalTokens (${data.totalTokens}) must equal inputTokens (${data.inputTokens}) + outputTokens (${data.outputTokens})`);
+      return errTyped(telemetryWriteFailed(
+        `totalTokens (${data.totalTokens}) must equal inputTokens (${data.inputTokens}) + outputTokens (${data.outputTokens})`));
     }
     // OG-5.4: cost non-negative
     if (data.cost < 0) {
-      return err('TELEMETRY_WRITE_FAILED', 'Cost must be non-negative');
+      return errTyped(telemetryWriteFailed('Cost must be non-negative'));
     }
     // OG-5.5: duration non-negative
     if (data.duration < 0) {
-      return err('TELEMETRY_WRITE_FAILED', 'Duration must be non-negative');
+      return errTyped(telemetryWriteFailed('Duration must be non-negative'));
     }
 
     // OG-5.6 / OG-11.4: Store as governed claim with predicate telemetry.cost
@@ -492,20 +588,24 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
   }
 
   async function recordVital(
-    _ctx: OperationContext,
+    ctx: OperationContext,
     data: VitalRecord,
   ): Promise<Result<void>> {
-    // OG-5.8: metric must be non-empty, dot-delimited
+    // BRK-003: Governance check
+    const govResult = evaluateGovernance(ctx, 'assert_claim', 'low');
+    if (!govResult.ok) return govResult;
+
+    // OG-5.8: metric must be non-empty, dot-delimited — BRK-006: typed errors
     if (!data.metric || data.metric.length === 0) {
-      return err('TELEMETRY_WRITE_FAILED', 'Vital metric must be non-empty');
+      return errTyped(telemetryWriteFailed('Vital metric must be non-empty'));
     }
     if (!data.metric.includes('.')) {
-      return err('TELEMETRY_WRITE_FAILED',
-        'Vital metric must be dot-delimited (e.g., throughput.requests)');
+      return errTyped(telemetryWriteFailed(
+        'Vital metric must be dot-delimited (e.g., throughput.requests)'));
     }
     // OG-5.9: unit must be non-empty
     if (!data.unit || data.unit.length === 0) {
-      return err('TELEMETRY_WRITE_FAILED', 'Vital unit must be non-empty');
+      return errTyped(telemetryWriteFailed('Vital unit must be non-empty'));
     }
 
     // OG-5.10 / OG-11.5: Store as governed claim with predicate telemetry.vital
@@ -541,9 +641,13 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
   }
 
   async function queryCosts(
-    _ctx: OperationContext,
+    ctx: OperationContext,
     filter: CostFilter,
   ): Promise<Result<CostRecord[]>> {
+    // BRK-003: Governance check
+    const govResult = evaluateGovernance(ctx, 'query_claims', 'low');
+    if (!govResult.ok) return govResult as Result<CostRecord[]>;
+
     // OG-11.6: Query via SC-13 with telemetry.cost filter
     const limit = filter.limit ?? 50;
     const offset = filter.offset ?? 0;
@@ -587,9 +691,13 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
   }
 
   async function queryVitals(
-    _ctx: OperationContext,
+    ctx: OperationContext,
     filter: VitalFilter,
   ): Promise<Result<VitalRecord[]>> {
+    // BRK-003: Governance check
+    const govResult = evaluateGovernance(ctx, 'query_claims', 'low');
+    if (!govResult.ok) return govResult as Result<VitalRecord[]>;
+
     // OG-11.7: Query via SC-13 with telemetry.vital filter
     const limit = filter.limit ?? 50;
     const offset = filter.offset ?? 0;
@@ -632,8 +740,11 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
   }
 
   async function getBudgetConsumption(
-    _ctx: OperationContext,
+    ctx: OperationContext,
   ): Promise<Result<BudgetConsumption>> {
+    // BRK-003: Governance check
+    const govResult = evaluateGovernance(ctx, 'query_claims', 'low');
+    if (!govResult.ok) return govResult as Result<BudgetConsumption>;
     // OG-11.8: Aggregate over telemetry.cost claims
     const queryResult = claims.queryClaims({
       predicate: 'telemetry.cost',
@@ -702,23 +813,32 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
   // ========================================================================
 
   async function installPlugin(
-    _ctx: OperationContext,
+    ctx: OperationContext,
     plugin: AgentPlugin,
     config?: PluginConfig,
   ): Promise<Result<string>> {
+    // BRK-003: installPlugin requires manage_agents permission (Appendix A)
+    const govResult = evaluateGovernance(ctx, 'manage_agents', 'verified');
+    if (!govResult.ok) return govResult as Result<string>;
     return pluginManager.install(plugin, config);
   }
 
   async function uninstallPlugin(
-    _ctx: OperationContext,
+    ctx: OperationContext,
     pluginId: string,
   ): Promise<Result<void>> {
+    // BRK-003: uninstallPlugin requires manage_agents permission
+    const govResult = evaluateGovernance(ctx, 'manage_agents', 'verified');
+    if (!govResult.ok) return govResult;
     return pluginManager.uninstall(pluginId);
   }
 
   async function listPlugins(
-    _ctx: OperationContext,
+    ctx: OperationContext,
   ): Promise<Result<PluginRegistration[]>> {
+    // BRK-003: listPlugins requires query_claims permission
+    const govResult = evaluateGovernance(ctx, 'query_claims', 'low');
+    if (!govResult.ok) return govResult as Result<PluginRegistration[]>;
     return pluginManager.list();
   }
 
@@ -727,22 +847,31 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
   // ========================================================================
 
   async function registerHook(
-    _ctx: OperationContext,
+    ctx: OperationContext,
     hook: AgentHook,
   ): Promise<Result<string>> {
+    // BRK-003: registerHook requires manage_agents permission
+    const govResult = evaluateGovernance(ctx, 'manage_agents', 'verified');
+    if (!govResult.ok) return govResult as Result<string>;
     return hookExecutor.register(hook);
   }
 
   async function unregisterHook(
-    _ctx: OperationContext,
+    ctx: OperationContext,
     hookId: string,
   ): Promise<Result<void>> {
+    // BRK-003: unregisterHook requires manage_agents permission
+    const govResult = evaluateGovernance(ctx, 'manage_agents', 'verified');
+    if (!govResult.ok) return govResult;
     return hookExecutor.unregister(hookId);
   }
 
   async function listHooks(
-    _ctx: OperationContext,
+    ctx: OperationContext,
   ): Promise<Result<HookRegistration[]>> {
+    // BRK-003: listHooks requires query_claims permission
+    const govResult = evaluateGovernance(ctx, 'query_claims', 'low');
+    if (!govResult.ok) return govResult as Result<HookRegistration[]>;
     return hookExecutor.list();
   }
 

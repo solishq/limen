@@ -111,6 +111,25 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'a2aGovernance.registerProactiveRule': { permission: 'manage_cognitive', rateLimit: 'api_calls' },
   'a2aGovernance.listProactiveRules': { permission: 'query_claims', rateLimit: 'api_calls' },
 
+  // ── Output Governance namespace (BRK-001: wired subsystem) ──
+  'outputGovernance.produce': { permission: 'assert_claim', rateLimit: 'api_calls' },
+  'outputGovernance.queryOutputs': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'outputGovernance.retractOutput': { permission: 'retract_claim', rateLimit: 'api_calls' },
+  'outputGovernance.recordCost': { permission: 'assert_claim', rateLimit: 'api_calls' },
+  'outputGovernance.recordVital': { permission: 'assert_claim', rateLimit: 'api_calls' },
+  'outputGovernance.queryCosts': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'outputGovernance.queryVitals': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'outputGovernance.getBudgetConsumption': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'outputGovernance.infer': { permission: 'assert_claim', rateLimit: 'api_calls' },
+  'outputGovernance.installPlugin': { permission: 'manage_agents', rateLimit: 'api_calls' },
+  'outputGovernance.uninstallPlugin': { permission: 'manage_agents', rateLimit: 'api_calls' },
+  'outputGovernance.listPlugins': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'outputGovernance.registerHook': { permission: 'manage_agents', rateLimit: 'api_calls' },
+  'outputGovernance.unregisterHook': { permission: 'manage_agents', rateLimit: 'api_calls' },
+  'outputGovernance.listHooks': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'outputGovernance.on': null,   // Event subscription — no permission needed
+  'outputGovernance.off': null,  // Event unsubscription — no permission needed
+
   // ── Cognitive namespace ──
   'cognitive.consolidate': { permission: 'manage_cognitive' },
   'cognitive.health': { permission: 'query_claims' },

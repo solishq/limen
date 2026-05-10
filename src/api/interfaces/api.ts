@@ -95,6 +95,9 @@ import type { TelemetryApi } from '../telemetry/telemetry_api.js';
 // Phase 7 FR-002: A2A Governance API types
 import type { A2AGovernanceApi } from '../a2a-governance/a2a_governance_api.js';
 
+// Phase 5 Subsystem 3: Full Output Governance Client (OG-3.1 through OG-3.17)
+import type { AgentOutputClient } from '../../output/output_governance.js';
+
 // Re-export CCP/WMP types so consumers can construct inputs
 export type {
   ClaimCreateInput, AssertClaimOutput,
@@ -156,6 +159,9 @@ export type { CognitiveHealthReport, CognitiveHealthConfig } from '../../cogniti
 
 // Phase 4 FR-001: Output Primitives API types
 export type { OutputApi, OutputAssertOptions, OutputQueryOptions } from '../output/output_api.js';
+
+// Phase 5 Subsystem 3: Full Output Governance Client type (BRK-001)
+export type { AgentOutputClient } from '../../output/output_governance.js';
 
 // FR-006: Context Compiler types
 export type { CompileOptions, CompiledContext, CompileFormat, CompilePriority } from '../../cognitive/context_compiler.js';
@@ -640,6 +646,17 @@ export interface Limen {
    * Each is schema-validated via Zod before storage as a governed claim.
    */
   readonly telemetry: TelemetryApi;
+
+  // -- Phase 5 Subsystem 3: Full Output Governance --
+
+  /**
+   * Phase 5 Subsystem 3: Full output governance client.
+   * Provides output primitives, telemetry, structured inference,
+   * plugin/hook lifecycle, and event management.
+   * OG-3.1 through OG-3.17, Appendix A governance checks.
+   * null when convenience init failed (no mission/agent context).
+   */
+  readonly outputGovernance: AgentOutputClient | null;
 
   // -- Phase 7 FR-002: A2A Governance --
 

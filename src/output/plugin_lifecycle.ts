@@ -51,6 +51,13 @@ interface PluginEntry {
 // Dependencies
 // ============================================================================
 
+// BRK-002: PluginQueryDelegate allows real query delegation from parent client
+export interface PluginQueryDelegate {
+  queryOutputs(filter: OutputFilter): Promise<Result<OutputEntry[]>>;
+  queryVitals(filter: VitalFilter): Promise<Result<VitalRecord[]>>;
+  queryCosts(filter: CostFilter): Promise<Result<CostRecord[]>>;
+}
+
 export interface PluginLifecycleDeps {
   readonly getConnection: () => DatabaseConnection;
   readonly getContext: () => OperationContext;
@@ -58,6 +65,8 @@ export interface PluginLifecycleDeps {
   readonly time: TimeProvider;
   readonly events: EventBus;
   readonly getAgentCapabilities: () => readonly string[];
+  // BRK-002: Delegate for real query operations
+  readonly queryDelegate?: PluginQueryDelegate;
 }
 
 // ============================================================================
@@ -77,7 +86,7 @@ export interface PluginLifecycleManager {
 const MAX_PLUGINS = 50;
 
 export function createPluginLifecycleManager(deps: PluginLifecycleDeps): PluginLifecycleManager {
-  const { getConnection, getContext, audit, time, events, getAgentCapabilities } = deps;
+  const { getConnection, getContext, audit, time, events, getAgentCapabilities, queryDelegate } = deps;
 
   const plugins = new Map<string, PluginEntry>();
 
@@ -160,22 +169,62 @@ export function createPluginLifecycleManager(deps: PluginLifecycleDeps): PluginL
       },
     };
 
-    // OG-7.10: Read-only API
+    // OG-7.10: Read-only API — BRK-002: delegate to real query implementation
     const pluginApi: PluginApi = {
-      async queryOutputs(_filter: OutputFilter): Promise<Result<OutputEntry[]>> {
+      async queryOutputs(filter: OutputFilter): Promise<Result<OutputEntry[]>> {
+        if (queryDelegate) return queryDelegate.queryOutputs(filter);
         return ok([]);
       },
-      async queryVitals(_filter: VitalFilter): Promise<Result<VitalRecord[]>> {
+      async queryVitals(filter: VitalFilter): Promise<Result<VitalRecord[]>> {
+        if (queryDelegate) return queryDelegate.queryVitals(filter);
         return ok([]);
       },
-      async queryCosts(_filter: CostFilter): Promise<Result<CostRecord[]>> {
+      async queryCosts(filter: CostFilter): Promise<Result<CostRecord[]>> {
+        if (queryDelegate) return queryDelegate.queryCosts(filter);
         return ok([]);
       },
     };
 
+    // BRK-014: Sandboxed plugins get isolated context
+    const isSandboxed = resolvedConfig.isolation === 'sandboxed';
+    const eventNamespace = isSandboxed ? `plugin:${pluginId}:` : '';
+
+    // BRK-014: Sandboxed API filters results to plugin's own outputs
+    const sandboxedApi: PluginApi = isSandboxed ? {
+      async queryOutputs(filter: OutputFilter): Promise<Result<OutputEntry[]>> {
+        // Sandboxed plugins only see outputs tagged with their pluginId
+        const result = await pluginApi.queryOutputs({ ...filter, tags: [...(filter.tags ?? []), `plugin:${pluginId}`] });
+        return result;
+      },
+      async queryVitals(filter: VitalFilter): Promise<Result<VitalRecord[]>> {
+        return pluginApi.queryVitals(filter);
+      },
+      async queryCosts(filter: CostFilter): Promise<Result<CostRecord[]>> {
+        return pluginApi.queryCosts(filter);
+      },
+    } : pluginApi;
+
+    // BRK-014: Sandboxed logger gets plugin ID prefix
+    const sandboxedLogger: PluginLogger = isSandboxed ? {
+      debug(message: string, data?: Record<string, unknown>) {
+        pluginLogger.debug(`[sandbox:${pluginId}] ${message}`, data);
+      },
+      info(message: string, data?: Record<string, unknown>) {
+        pluginLogger.info(`[sandbox:${pluginId}] ${message}`, data);
+      },
+      warn(message: string, data?: Record<string, unknown>) {
+        pluginLogger.warn(`[sandbox:${pluginId}] ${message}`, data);
+      },
+      error(message: string, data?: Record<string, unknown>) {
+        pluginLogger.error(`[sandbox:${pluginId}] ${message}`, data);
+      },
+    } : pluginLogger;
+
     const pluginContext: PluginContext = {
       on(event: AgentEvent, handler: AgentEventHandler): string {
-        const subResult = events.subscribe(String(event), (eventPayload) => {
+        // BRK-014: Sandboxed plugins subscribe to namespaced events
+        const eventName = isSandboxed ? `${eventNamespace}${String(event)}` : String(event);
+        const subResult = events.subscribe(eventName, (eventPayload) => {
           try {
             handler({
               eventId: '' as unknown as import('../adapters/shared/types.js').EventId,
@@ -199,8 +248,8 @@ export function createPluginLifecycleManager(deps: PluginLifecycleDeps): PluginL
         const idx = subscriptionIds.indexOf(subscriptionId);
         if (idx !== -1) subscriptionIds.splice(idx, 1);
       },
-      api: pluginApi,
-      logger: pluginLogger,
+      api: sandboxedApi,
+      logger: sandboxedLogger,
     };
 
     // OG-7.5: Call plugin.install()
@@ -209,6 +258,8 @@ export function createPluginLifecycleManager(deps: PluginLifecycleDeps): PluginL
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       appendAudit('plugin.install_error', 'plugin', pluginId, { pluginName: plugin.name, error: errorMessage });
+      // BRK-018: Emit plugin:error event when plugin errors occur
+      emitEvent('plugin:error', { pluginId, name: plugin.name, error: errorMessage, phase: 'install' });
       return err('PLUGIN_INSTALL_FAILED', errorMessage);
     }
 
@@ -225,13 +276,15 @@ export function createPluginLifecycleManager(deps: PluginLifecycleDeps): PluginL
 
     plugins.set(pluginId, entry);
 
-    // Persist to DB
+    // Persist to DB — BRK-012: include tenant_id
     try {
       const conn = getConnection();
+      const ctx = getContext();
+      const tenantId = ctx.tenantId ?? 'default';
       conn.run(
-        `INSERT INTO output_plugins (id, name, version, status, installed_at, error_count, last_error, config)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [pluginId, plugin.name, plugin.version, entry.status, now, 0, null,
+        `INSERT INTO output_plugins (id, tenant_id, name, version, status, installed_at, error_count, last_error, config)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [pluginId, tenantId, plugin.name, plugin.version, entry.status, now, 0, null,
          JSON.stringify(resolvedConfig)],
       );
     } catch { /* DB persistence non-fatal — in-memory is authoritative */ }
@@ -257,6 +310,8 @@ export function createPluginLifecycleManager(deps: PluginLifecycleDeps): PluginL
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       appendAudit('plugin.destroy_error', 'plugin', pluginId, { error: errorMessage });
+      // BRK-018: Emit plugin:error event when plugin errors occur during destroy
+      emitEvent('plugin:error', { pluginId, name: entry.plugin.name, error: errorMessage, phase: 'destroy' });
     }
 
     // OG-11.17: Cleanup subscriptions

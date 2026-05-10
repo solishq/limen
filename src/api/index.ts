@@ -192,7 +192,7 @@ import { createAgentLifecycleClient } from '../lifecycle/agent_lifecycle_client.
 import { getOutputGovernanceMigrations } from './migration/050_output_governance.js';
 
 // Phase 5 Subsystem 3: Output Governance Client
-import { createAgentOutputClient } from '../output/output_governance.js';
+import { createAgentOutputClient, type AgentOutputClient } from '../output/output_governance.js';
 
 // Sprint 4: Mission recovery (I-18)
 import { recoverMissions } from '../orchestration/missions/mission_recovery.js';
@@ -1297,8 +1297,12 @@ export async function createLimen(
 
   // Phase 5 Subsystem 3: Output Governance Client
   // Full output governance with hooks, plugins, inference, and telemetry.
-  let outputGovernanceClient: ReturnType<typeof createAgentOutputClient> | null = null;
+  // BRK-008: Generate a real session ID for the output governance client
+  const outputGovernanceSessionId = randomUUID() as import('../kernel/interfaces/index.js').SessionId;
+  let outputGovernanceClient: AgentOutputClient | null = null;
   if (convenienceMissionId && defaultAgentId) {
+    // BRK-007: Wire to actual capability lookup from lifecycle client
+    const capturedAgentId = defaultAgentId;
     outputGovernanceClient = createAgentOutputClient({
       claims: claimsApi,
       getConnection,
@@ -1309,15 +1313,28 @@ export async function createLimen(
       missionId: convenienceMissionId,
       taskId: null,
       agentId: defaultAgentId,
-      sessionId: '' as unknown as import('../kernel/interfaces/index.js').SessionId,
+      sessionId: outputGovernanceSessionId,
       maxAutoConfidence,
       inferenceProvider: null,
-      getAgentCapabilities: () => [],
+      getAgentCapabilities: () => {
+        // BRK-007: Delegate to lifecycle client for real capability lookup
+        try {
+          const conn = getConnection();
+          const row = conn.get<{ capabilities: string | null }>(
+            'SELECT capabilities FROM core_agents WHERE id = ?',
+            [capturedAgentId],
+          );
+          if (row?.capabilities) {
+            try {
+              return JSON.parse(row.capabilities) as readonly string[];
+            } catch { return []; }
+          }
+        } catch { /* non-fatal — return empty */ }
+        return [];
+      },
     });
     log({ level: 'info', category: 'init', message: 'Output Governance Client initialized' });
   }
-  // Retain reference for future Limen.outputGovernance wiring
-  void outputGovernanceClient;
 
   // Phase 7 FR-002: A2A Governance API
   // Uses the same convenience mission context. If convenience init failed, governance API also unavailable.
@@ -1719,6 +1736,9 @@ export async function createLimen(
       record() { throw new LimenError('ENGINE_UNHEALTHY', 'Telemetry API not initialized'); },
       query() { throw new LimenError('ENGINE_UNHEALTHY', 'Telemetry API not initialized'); },
     },
+
+    // Phase 5 Subsystem 3: Full Output Governance Client (BRK-001: wired, not voided)
+    outputGovernance: outputGovernanceClient,
 
     // Phase 7 FR-002: A2A Governance namespace
     a2aGovernance: a2aGovernanceApi ?? {

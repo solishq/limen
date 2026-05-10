@@ -200,17 +200,30 @@ export function createInferenceEngine(deps: InferenceEngineDeps): InferenceEngin
     let lastProvider = '';
     let lastModel = '';
     let currentPrompt = options.prompt;
-    const startTime = Date.now();
+    // BRK-009: Use injected TimeProvider instead of Date.now()
+    const startTime = time.nowMs();
+
+    // BRK-011: Helper to build cost record for ANY return path (success or failure)
+    function buildFailureCost(): CostRecord {
+      return buildCostRecord(
+        lastProvider || 'unknown', lastModel || 'unknown',
+        totalInputTokens, totalOutputTokens,
+        totalCost, totalDuration, missionId ?? null, null,
+      );
+    }
 
     for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
       // Check total timeout
-      const elapsed = Date.now() - startTime;
+      // BRK-009: Use injected TimeProvider
+      const elapsed = time.nowMs() - startTime;
       if (elapsed >= timeout) {
-        // OG-12.11: Cost tracking — totals available in event payload
+        // BRK-011: Record cost even on timeout
+        const _failCost = buildFailureCost();
         emitEvent('inference:failed', {
           reason: 'timeout',
           attempts: attempt - 1,
           errors: allValidationErrors,
+          cost: _failCost,
         });
 
         return err('INFERENCE_TIMEOUT',
@@ -223,7 +236,8 @@ export function createInferenceEngine(deps: InferenceEngineDeps): InferenceEngin
         const generateOptions: { model?: string; temperature?: number; strict?: boolean; timeoutMs?: number } = {
           temperature,
           strict,
-          timeoutMs: timeout - (Date.now() - startTime),
+          // BRK-009: Use injected TimeProvider
+          timeoutMs: timeout - (time.nowMs() - startTime),
         };
         if (options.model !== undefined) {
           generateOptions.model = options.model;
@@ -232,10 +246,13 @@ export function createInferenceEngine(deps: InferenceEngineDeps): InferenceEngin
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
 
+        // BRK-011: Record cost even on provider error
+        const _failCost = buildFailureCost();
         emitEvent('inference:failed', {
           reason: errorMessage,
           attempts: attempt,
           errors: allValidationErrors,
+          cost: _failCost,
         });
 
         return err('INFERENCE_TIMEOUT', `Provider error: ${errorMessage}`);
@@ -269,10 +286,13 @@ export function createInferenceEngine(deps: InferenceEngineDeps): InferenceEngin
           continue;
         }
 
+        // BRK-011: Record cost on retries exhausted
+        const _failCost = buildFailureCost();
         emitEvent('inference:failed', {
           reason: 'retries_exhausted',
           attempts: attempt,
           errors: allValidationErrors,
+          cost: _failCost,
         });
 
         return err('INFERENCE_RETRIES_EXHAUSTED',
@@ -316,11 +336,15 @@ export function createInferenceEngine(deps: InferenceEngineDeps): InferenceEngin
         continue;
       }
 
+      // BRK-011: Record cost on all retries exhausted
+      const _failCost = buildFailureCost();
+
       // All retries exhausted (OG-6.16)
       emitEvent('inference:failed', {
         reason: 'retries_exhausted',
         attempts: attempt,
         errors: allValidationErrors,
+        cost: _failCost,
       });
 
       return err('INFERENCE_RETRIES_EXHAUSTED',

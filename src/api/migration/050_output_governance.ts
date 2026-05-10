@@ -25,8 +25,10 @@ const MIGRATION_050_SQL = `
 -- OG-7.19, OG-7.28: 2 tables for output governance subsystem
 
 -- output_plugins: Plugin registration records (OG-7.19)
+-- BRK-012: Added tenant_id for multi-tenant isolation
 CREATE TABLE IF NOT EXISTS output_plugins (
   id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
   name TEXT NOT NULL,
   version TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'error')),
@@ -36,12 +38,14 @@ CREATE TABLE IF NOT EXISTS output_plugins (
   config TEXT NOT NULL DEFAULT '{}'
 );
 
--- Unique constraint on plugin name (OG-7.1: id uniqueness, name for lookup)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_output_plugins_name ON output_plugins(name);
+-- Unique constraint on plugin name per tenant (OG-7.1: id uniqueness, name for lookup)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_output_plugins_name ON output_plugins(tenant_id, name);
 
 -- output_hooks: Hook registration records (OG-7.28)
+-- BRK-012: Added tenant_id for multi-tenant isolation
 CREATE TABLE IF NOT EXISTS output_hooks (
   id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('before_assert', 'after_assert', 'before_recall', 'after_recall', 'before_decay', 'before_output', 'after_output')),
   priority INTEGER NOT NULL DEFAULT 50 CHECK (priority >= 0 AND priority <= 100),
   name TEXT NOT NULL,
@@ -53,7 +57,7 @@ CREATE TABLE IF NOT EXISTS output_hooks (
 );
 
 -- Index for hook lookup by type (OG-12.7: deterministic ordering)
-CREATE INDEX IF NOT EXISTS idx_output_hooks_type_priority ON output_hooks(type, priority, registered_at);
+CREATE INDEX IF NOT EXISTS idx_output_hooks_type_priority ON output_hooks(tenant_id, type, priority, registered_at);
 `;
 
 /**
