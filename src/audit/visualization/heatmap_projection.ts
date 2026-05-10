@@ -13,6 +13,8 @@
 import type { DatabaseConnection } from '../../kernel/interfaces/database.js';
 import type { TimeProvider } from '../../kernel/interfaces/time.js';
 import type { Result, AgentId } from '../../kernel/interfaces/index.js';
+import { CLASSIFICATION_LEVEL_ORDER } from '../../governance/classification/governance_types.js';
+import type { ClassificationLevel } from '../../governance/classification/governance_types.js';
 import type {
   GovernanceHeatmapData, HeatmapCell, GovernanceHeatmapTotals,
   HeatmapOptions, HeatmapGranularity, GovernanceDecision,
@@ -87,6 +89,7 @@ function extractDecision(detail: string | null): GovernanceDecision | null {
 export interface HeatmapProjectionDeps {
   readonly conn: DatabaseConnection;
   readonly timeProvider: TimeProvider;
+  readonly clearanceLevel: number | undefined;
 }
 
 /**
@@ -98,7 +101,7 @@ export function buildGovernanceHeatmap(
   deps: HeatmapProjectionDeps,
   options: HeatmapOptions,
 ): Result<GovernanceHeatmapData> {
-  const { conn } = deps;
+  const { conn, clearanceLevel } = deps;
   const { timeRange, granularity, agentId, actionCategory } = options;
 
   // Query audit entries in time range
@@ -111,13 +114,28 @@ export function buildGovernanceHeatmap(
   }
 
   const whereClause = conditions.join(' AND ');
-  const rows = conn.query<AuditRow>(
+  const allRows = conn.query<AuditRow>(
     `SELECT id, timestamp, actor_id, operation, detail
      FROM core_audit_log
      WHERE ${whereClause}
      ORDER BY timestamp ASC`,
     params,
   );
+
+  // BRK-AV-05: Filter entries whose classification exceeds requester's clearance
+  const maxLevel = clearanceLevel ?? 4;
+  const rows = allRows.filter(row => {
+    if (maxLevel >= 4) return true; // full clearance
+    if (!row.detail) return true;
+    try {
+      const parsed = JSON.parse(row.detail) as Record<string, unknown>;
+      if (!parsed.classification) return true;
+      const level = CLASSIFICATION_LEVEL_ORDER[parsed.classification as ClassificationLevel];
+      return level === undefined || level <= maxLevel;
+    } catch {
+      return true;
+    }
+  });
 
   // Aggregate into buckets
   // Key: `${bucketTimestamp}|${agentId}|${category}`

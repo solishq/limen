@@ -69,8 +69,8 @@ export function executeExport(
     };
   }
 
-  // Query entries with filters
-  const rows = queryFilteredEntries(conn, filters, options.maxRecords);
+  // Query entries with filters (BRK-AV-03: pass classificationMax for filtering)
+  const rows = queryFilteredEntries(conn, filters, options.maxRecords, filters.classificationMax);
 
   // Post-filter by classification clearance (AV-10.3) and redaction (AV-6.6)
   const maxLevel = clearanceLevel ?? 4;
@@ -123,6 +123,7 @@ function queryFilteredEntries(
   conn: DatabaseConnection,
   filters: ExportFilters,
   maxRecords?: number,
+  classificationMax?: ClassificationLevel,
 ): AuditRow[] {
   const conditions: string[] = [];
   const params: unknown[] = [];
@@ -153,15 +154,15 @@ function queryFilteredEntries(
   }
 
   if (filters.governanceFilter === 'refused_only') {
-    conditions.push("detail LIKE '%\"refuse\"%' OR detail LIKE '%\"refused\"%'");
+    conditions.push("(detail LIKE '%\"refuse\"%' OR detail LIKE '%\"refused\"%')");
   } else if (filters.governanceFilter === 'escalated_only') {
-    conditions.push("detail LIKE '%\"escalate\"%' OR detail LIKE '%\"escalated\"%'");
+    conditions.push("(detail LIKE '%\"escalate\"%' OR detail LIKE '%\"escalated\"%')");
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const limit = maxRecords ?? 10000;
 
-  return conn.query<AuditRow>(
+  const rows = conn.query<AuditRow>(
     `SELECT id, seq_no, tenant_id, timestamp, actor_type, actor_id, operation, resource_type, resource_id, detail, previous_hash, current_hash
      FROM core_audit_log
      ${whereClause}
@@ -169,6 +170,21 @@ function queryFilteredEntries(
      LIMIT ?`,
     [...params, limit],
   );
+
+  // BRK-AV-03: Apply classificationMax filter post-query
+  if (!classificationMax) return rows;
+  const maxLevel = CLASSIFICATION_LEVEL_ORDER[classificationMax];
+  return rows.filter(row => {
+    if (!row.detail) return true;
+    try {
+      const detail = JSON.parse(row.detail) as Record<string, unknown>;
+      if (!detail.classification) return true;
+      const level = CLASSIFICATION_LEVEL_ORDER[detail.classification as ClassificationLevel];
+      return level === undefined || level <= maxLevel;
+    } catch {
+      return true;
+    }
+  });
 }
 
 // ─── JSON Export ───
@@ -287,7 +303,19 @@ export function queryAuditEntries(
   }
 
   if (filter.governanceDecision) {
-    conditions.push(`detail LIKE ?`);
+    // BRK-AV-07: Validate against allowed values before use in query
+    const allowedDecisions = new Set(['allowed', 'denied', 'escalated', 'conditional']);
+    if (!allowedDecisions.has(filter.governanceDecision)) {
+      return {
+        ok: false,
+        error: {
+          code: 'AV_INVALID_FILTER',
+          message: `Invalid governanceDecision filter: '${filter.governanceDecision}'. Allowed: allowed, denied, escalated, conditional.`,
+          spec: 'AUDIT_VISUALIZATION_SCHEMA.md §8.7',
+        },
+      };
+    }
+    conditions.push('detail LIKE ?');
     params.push(`%"${filter.governanceDecision}"%`);
   }
 

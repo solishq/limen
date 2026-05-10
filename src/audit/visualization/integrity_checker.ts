@@ -159,6 +159,31 @@ export function verifyChainIntegrity(
     previousRow = row;
   }
 
+  // BRK-AV-04: Check for missing_parent violations
+  // If an entry's detail references a parent_id, that parent must exist in the result set
+  const idSet = new Set(rows.map(r => r.id));
+  for (const row of rows) {
+    if (!row.detail) continue;
+    try {
+      const detail = JSON.parse(row.detail) as Record<string, unknown>;
+      const parentId = detail.parent_id ?? detail.parentId;
+      if (typeof parentId === 'string' && parentId.length > 0) {
+        if (!idSet.has(parentId)) {
+          brokenLinks++;
+          if (!firstBreakAt) firstBreakAt = row.id as EventId;
+          violations.push(Object.freeze({
+            entryId: row.id as EventId,
+            type: 'missing_parent' as IntegrityViolationType,
+            expected: parentId,
+            actual: 'not_found',
+          }));
+        }
+      }
+    } catch {
+      // Non-JSON detail — skip parent check
+    }
+  }
+
   const report: IntegrityReport = Object.freeze({
     valid: violations.length === 0,
     entriesChecked: rows.length,

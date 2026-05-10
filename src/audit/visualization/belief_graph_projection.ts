@@ -43,6 +43,7 @@ interface ClaimRow {
   created_at: string;
   stability: number | null;
   classification: string | null;
+  last_accessed_at: string | null;
 }
 
 interface RelationshipRow {
@@ -60,11 +61,11 @@ interface RelationshipRow {
 // t = time since last review (in days)
 // S = stability (default 1.0)
 
-function computeFSRSDecay(createdAt: string, nowMs: number, stability: number | null): number {
+function computeFSRSDecay(lastReviewedAt: string, nowMs: number, stability: number | null): number {
   const stab = stability ?? 1.0;
   if (stab <= 0) return 0;
-  const createdMs = new Date(createdAt).getTime();
-  const elapsedDays = (nowMs - createdMs) / (1000 * 60 * 60 * 24);
+  const reviewMs = new Date(lastReviewedAt).getTime();
+  const elapsedDays = (nowMs - reviewMs) / (1000 * 60 * 60 * 24);
   if (elapsedDays <= 0) return 1.0;
   return Math.pow(1 + elapsedDays / (9 * stab), -1);
 }
@@ -179,7 +180,7 @@ export function buildBeliefGraphSnapshot(
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  // Query claims
+  // Query claims — last_accessed_at is on claim_assertions (BRK-AV-02)
   let claimRows: ClaimRow[];
   if (options.rootClaimId) {
     // BFS from root up to depth hops
@@ -207,7 +208,9 @@ export function buildBeliefGraphSnapshot(
     if (!row.id) continue;
     nodeIds.add(row.id);
     const confidence = row.confidence ?? 0;
-    const effectiveConfidence = computeFSRSDecay(row.created_at, nowMs, row.stability);
+    // BRK-AV-02: Use last_accessed_at for decay (§4.2: t = time since last review), fall back to created_at
+    const decayAnchor = row.last_accessed_at ?? row.created_at;
+    const effectiveConfidence = computeFSRSDecay(decayAnchor, nowMs, row.stability);
     const node: BeliefGraphNode = Object.freeze({
       id: row.id as ClaimId,
       label: row.predicate ?? row.subject ?? row.id,

@@ -231,24 +231,14 @@ export function buildSessionTimeline(
   );
 
   if (rows.length === 0) {
-    // Try matching by actor_id (agent sessions often map actor_id to session tracking)
-    const byActor = conn.query<AuditRow>(
-      `SELECT id, seq_no, tenant_id, timestamp, actor_type, actor_id, operation, resource_type, resource_id, detail, previous_hash, current_hash
-       FROM core_audit_log
-       WHERE resource_id = ?
-       ORDER BY seq_no ASC`,
-      [sessionId],
-    );
-    if (byActor.length === 0) {
-      return {
-        ok: false,
-        error: {
-          code: 'AV_SESSION_NOT_FOUND',
-          message: `No audit entries found for session: ${sessionId}`,
-          spec: 'AUDIT_VISUALIZATION_SCHEMA.md §3',
-        },
-      };
-    }
+    return {
+      ok: false,
+      error: {
+        code: 'AV_SESSION_NOT_FOUND',
+        message: `No audit entries found for session: ${sessionId}`,
+        spec: 'AUDIT_VISUALIZATION_SCHEMA.md §3',
+      },
+    };
   }
 
   // Post-filter by classification clearance (AV-10.3)

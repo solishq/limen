@@ -92,7 +92,7 @@ export function createAuditQueryService(config: AuditQueryServiceConfig): IAudit
      * AV-10.8: Privacy safety — only counts and rates.
      */
     getGovernanceHeatmap(options: HeatmapOptions): Result<GovernanceHeatmapData> {
-      return buildGovernanceHeatmap({ conn, timeProvider }, options);
+      return buildGovernanceHeatmap({ conn, timeProvider, clearanceLevel }, options);
     },
 
     /**
