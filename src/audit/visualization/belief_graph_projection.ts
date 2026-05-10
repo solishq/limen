@@ -303,12 +303,16 @@ function breadthFirstClaims(
   conn: DatabaseConnection,
   rootId: ClaimId,
   maxDepth: number,
-  _baseWhere: string,
-  _baseParams: unknown[],
+  baseWhere: string,
+  baseParams: unknown[],
 ): ClaimRow[] {
   const visited = new Set<string>();
   const queue: Array<{ id: string; depth: number }> = [{ id: rootId, depth: 0 }];
   const results: ClaimRow[] = [];
+
+  // Build the per-claim filter query: base conditions + id match
+  const baseCondition = baseWhere ? `${baseWhere} AND id = ?` : 'WHERE id = ?';
+  const claimQuery = `SELECT * FROM claim_assertions ${baseCondition}`;
 
   while (queue.length > 0) {
     const item = queue.shift()!;
@@ -316,8 +320,8 @@ function breadthFirstClaims(
     visited.add(item.id);
 
     const row = conn.get<ClaimRow>(
-      'SELECT * FROM claim_assertions WHERE id = ?',
-      [item.id],
+      claimQuery,
+      [...baseParams, item.id],
     );
     if (row) results.push(row);
 

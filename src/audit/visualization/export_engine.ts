@@ -304,13 +304,13 @@ export function queryAuditEntries(
 
   if (filter.governanceDecision) {
     // BRK-AV-07: Validate against allowed values before use in query
-    const allowedDecisions = new Set(['allowed', 'denied', 'escalated', 'conditional']);
+    const allowedDecisions = new Set(['allow', 'refuse', 'escalate', 'sandbox']);
     if (!allowedDecisions.has(filter.governanceDecision)) {
       return {
         ok: false,
         error: {
           code: 'AV_INVALID_FILTER',
-          message: `Invalid governanceDecision filter: '${filter.governanceDecision}'. Allowed: allowed, denied, escalated, conditional.`,
+          message: `Invalid governanceDecision filter: '${filter.governanceDecision}'. Allowed: allow, refuse, escalate, sandbox.`,
           spec: 'AUDIT_VISUALIZATION_SCHEMA.md §8.7',
         },
       };
@@ -362,7 +362,13 @@ export function queryAuditEntries(
   );
 
   // Post-filter by classification (AV-10.3)
-  const maxLevel = clearanceLevel ?? 4;
+  const serviceClearance = clearanceLevel ?? 4;
+  const filterClassMax = filter.classificationMax
+    ? CLASSIFICATION_LEVEL_ORDER[filter.classificationMax]
+    : undefined;
+  const maxLevel = filterClassMax !== undefined
+    ? Math.min(serviceClearance, filterClassMax)
+    : serviceClearance;
   const filteredItems: AgentAuditEntry[] = [];
   for (const row of rows) {
     // Check classification in detail
