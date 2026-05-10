@@ -746,9 +746,7 @@ describe('Independent — Knowledge Exchange', () => {
   });
 
   // --- LM-14.21: export requires knowledge_export capability ---
-  // DISCREPANCY: Contract LM-14.21 says source agent must have 'knowledge_export' capability.
-  // Implementation does not enforce the capability gate — allows export without it.
-  it('LM-14.21 DISCREPANCY: exportKnowledge should deny agent without knowledge_export capability', async () => {
+  it('LM-14.21: exportKnowledge denies agent without knowledge_export capability (BK-03)', async () => {
     const agent = await registerAgent(h.client, h.ctx, { name: 'export-denied' });
     // Agent is untrusted — no knowledge_export capability
     const r = await h.client.exportKnowledge(h.ctx, agent.id, {
@@ -756,12 +754,8 @@ describe('Independent — Knowledge Exchange', () => {
       includeTechniques: false,
       includeRelationships: false,
     } as KnowledgeExportOptions);
-    if (r.ok) {
-      // Implementation bug: export should be denied without capability
-      assert.ok(true, 'KNOWN DISCREPANCY: export succeeds without knowledge_export capability');
-    } else {
-      assert.ok(!r.ok, 'Correctly denied — capability gate enforced');
-    }
+    assert.ok(!r.ok, 'Export must be denied without knowledge_export capability');
+    assert.equal(r.error.code, LIFECYCLE_ERROR_CODES.CAPABILITY_DENIED);
   });
 
   // --- LM-9.01: export for non-existent agent ---
@@ -944,32 +938,20 @@ describe('Independent — Behavioral Contracts', () => {
   beforeEach(() => { h = createHarness(); });
 
   // --- LM-14.06: registration emits agent:registered ---
-  // DISCREPANCY: Contract LM-14.06/LM-8.02 requires agent:registered event emission.
-  // Implementation may not route events through client.on() subscription path.
-  // This is a contract compliance gap in event wiring.
-  it('LM-14.06 DISCREPANCY: registration should emit agent:registered event', async () => {
+  it('LM-14.06: registration emits agent:registered event via client.on()', async () => {
     let eventFired = false;
     h.client.on('agent:registered' as any, () => { eventFired = true; });
     await registerAgent(h.client, h.ctx, { name: 'event-reg' });
-    if (!eventFired) {
-      // Documenting as discrepancy — event wiring gap
-      assert.ok(true, 'KNOWN DISCREPANCY: agent:registered event not received via client.on()');
-    } else {
-      assert.ok(eventFired);
-    }
+    assert.ok(eventFired, 'agent:registered event must fire through client.on() subscription');
   });
 
   // --- LM-14.20: decommission emits agent:decommissioned ---
-  it('LM-14.20 DISCREPANCY: decommission should emit agent:decommissioned event', async () => {
+  it('LM-14.20: decommission emits agent:decommissioned event via client.on()', async () => {
     let eventFired = false;
     h.client.on('agent:decommissioned' as any, () => { eventFired = true; });
     const agent = await registerAgent(h.client, h.ctx, { name: 'event-decomm' });
     await h.client.decommissionAgent(h.ctx, agent.id, 'test');
-    if (!eventFired) {
-      assert.ok(true, 'KNOWN DISCREPANCY: agent:decommissioned event not received via client.on()');
-    } else {
-      assert.ok(eventFired);
-    }
+    assert.ok(eventFired, 'agent:decommissioned event must fire through client.on() subscription');
   });
 
   // --- LM-3.30/3.31/3.32: updateAgent fields ---
@@ -1125,8 +1107,7 @@ describe('Independent — Lifecycle Events', () => {
   });
 
   // --- LM-8.09: trust:promoted event ---
-  // DISCREPANCY: Same event wiring gap as LM-14.06.
-  it('LM-8.09 DISCREPANCY: promotion should emit trust:promoted event', async () => {
+  it('LM-8.09: promotion emits trust:promoted event via client.on()', async () => {
     let promoted = false;
     h.client.on('trust:promoted' as any, () => { promoted = true; });
     const agent = await registerAgent(h.client, h.ctx, { name: 'trust-event' });
@@ -1135,15 +1116,11 @@ describe('Independent — Lifecycle Events', () => {
       justification: 'test',
       evidence: [{ type: 'session_count', value: 1, description: 'test' }],
     });
-    if (!promoted) {
-      assert.ok(true, 'KNOWN DISCREPANCY: trust:promoted event not received via client.on()');
-    } else {
-      assert.ok(promoted);
-    }
+    assert.ok(promoted, 'trust:promoted event must fire through client.on() subscription');
   });
 
   // --- LM-8.10: trust:demoted event ---
-  it('LM-8.10 DISCREPANCY: demotion should emit trust:demoted event', async () => {
+  it('LM-8.10: demotion emits trust:demoted event via client.on()', async () => {
     let demoted = false;
     h.client.on('trust:demoted' as any, () => { demoted = true; });
     const agent = await registerAgent(h.client, h.ctx, { name: 'demote-event' });
@@ -1153,11 +1130,7 @@ describe('Independent — Lifecycle Events', () => {
       evidence: [{ type: 'session_count', value: 1, description: 'test' }],
     });
     await h.client.demoteAgent(h.ctx, agent.id, 'test');
-    if (!demoted) {
-      assert.ok(true, 'KNOWN DISCREPANCY: trust:demoted event not received via client.on()');
-    } else {
-      assert.ok(demoted);
-    }
+    assert.ok(demoted, 'trust:demoted event must fire through client.on() subscription');
   });
 });
 

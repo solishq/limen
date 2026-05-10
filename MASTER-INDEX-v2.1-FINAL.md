@@ -28,7 +28,7 @@
 
 | Path | Role | Version | Canonical Owner | Hash | Dependency Direction | LCI Note |
 |------|------|---------|-----------------|------|----------------------|----------|
-| `contracts/phase-x.contracts.json` | Machine-readable Phase X compliance authority | manifest 1.0.0 | Phase X Contract Authority | `22e6527726dbc4b0247a39720d142b0c83ba83bea2b0f6ec5f4d8d17c7c9baa0` | Upstream of Phase X hash verification, HB-37/HB-38 proof, and LCI closure | Records versioned list, hashes, defense sets, monotonicity proof, LCI assertion, and closure proof. |
+| `contracts/phase-x.contracts.json` | Machine-readable Phase X compliance authority | manifest 1.0.0 | Phase X Contract Authority | `4ef94d9796c30acc1834e3afa34f15969bd0a82cbc7aa0641f185c115a0e3ae9` | Upstream of Phase X hash verification, HB-37/HB-38 proof, and LCI closure | Records versioned list, hashes, defense sets, monotonicity proof, LCI assertion, and closure proof. |
 
 ### 2.2 Prompt-Required Core Phase X Files
 
@@ -42,7 +42,7 @@
 | `contracts/AGENT_INTELLIGENCE_BRIDGE.md` | Technique learning and cognitive health bridge | 1.2.0 | Phase X Contract Authority | `bdb9ee6d2b0d47cb9802a7b23206eccf0c3ec46f17224a12454222c73c63599b` | Depends on shared types, memory bridge, TGP, Cognitive Engine, CCP, and FSRS | Intelligence operations remain inside governed claim and technique boundaries. |
 | `contracts/AGENT_EXECUTION_GOVERNANCE.md` | Mission lifecycle, orchestration, budget governance, and scheduling | 1.2.1 | Phase X Contract Authority | `fc3ab621bb3a4bbeb73befbb44022c76951934cdc5e3d0b708f56921f72fb06a` | Depends on shared types, lifecycle, governance, rate limits, and audit | RateLimit, AuditPath, and budget governance for mission execution. |
 | `contracts/AGENT_CONTEXT_GOVERNANCE.md` | Context budget and working memory governance | 1.2.2 | Phase X Contract Authority | `16734eac3539e5c36a14ce6cf30cb4229e55c55443aa55604fb832ffb9a90460` | Depends on shared types, memory bridge, TokenEstimator, and audit | TokenEstimator and context boundary closure. |
-| `contracts/AGENT_LIFECYCLE_MANAGEMENT.md` | Agent registration, trust, consent, and knowledge exchange | 1.3.0 | Phase X Contract Authority | `c08b987f496ccdab1e6a78c67a974ad1eb740cb42ec99d1578b87e6a9d65552d` | Depends on shared types; upstream of adapter binding and session lifecycle | LifecycleState, ConsentGate, and trust/capability closure. |
+| `contracts/AGENT_LIFECYCLE_MANAGEMENT.md` | Agent registration, trust, consent, and knowledge exchange | 1.3.0 | Phase X Contract Authority | `e70ebba93a31771e3c12b92e5ecfcfe015209c3318cf511257090252d92c9a65` | Depends on shared types; upstream of adapter binding and session lifecycle | LifecycleState, ConsentGate, and trust/capability closure. |
 | `docs/PHASE_X_ARCHITECTURE_OVERVIEW.md` | Phase X architecture overview | 1.3.0 | Phase X Contract Authority | `32bded9d0e5cb3b90278b5081bff0a74e4e0d6bea5cfb68142c7d5d8c5035676` | Descriptive overview; downstream of ratified Phase X contracts | Architecture summary must not override indexed contract text. |
 
 ### 2.3 Additional Manifest-Listed Phase X Contracts

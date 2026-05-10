@@ -8,6 +8,17 @@
  * All mutations produce audit entries (LM-13.24).
  * All mutations take OperationContext (LM-13.26).
  *
+ * @example
+ * ```ts
+ * const client = createAgentLifecycleClient({ getConnection, audit, kernelEvents, time, getContext });
+ * const result = await client.registerAgent(ctx, { name: 'my-agent', framework: 'claude', version: '1.0', capabilities: ['memory_read'], owner: 'user-1' });
+ * if (result.ok) {
+ *   const agent = result.value; // RegisteredAgent with id, trustLevel, capabilities
+ *   client.on('trust:promoted', (evt) => console.log('Promoted:', evt.data));
+ *   await client.promoteAgent(ctx, agent.id, { targetLevel: 'low', justification: 'Ready', evidence: [{ type: 'session_count', value: 10, description: 'Completed 10 sessions' }] });
+ * }
+ * ```
+ *
  * Architecture:
  * - Single composition root via createAgentLifecycleClient factory
  * - Dependencies injected (AD-10)

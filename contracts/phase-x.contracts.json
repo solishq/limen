@@ -61,7 +61,7 @@
     {
       "path": "contracts/AGENT_LIFECYCLE_MANAGEMENT.md",
       "contractVersion": "1.3.0",
-      "sha256": "c08b987f496ccdab1e6a78c67a974ad1eb740cb42ec99d1578b87e6a9d65552d",
+      "sha256": "e70ebba93a31771e3c12b92e5ecfcfe015209c3318cf511257090252d92c9a65",
       "role": "lifecycle_management"
     },
     {

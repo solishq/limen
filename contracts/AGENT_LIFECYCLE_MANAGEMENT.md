@@ -3,12 +3,11 @@
 
 # Agent Lifecycle Management Contract v1.3.0
 
-> **Implementation Status (Finding-39):** This contract is RATIFIED DESIGN — Pending Implementation.
-> The `AgentLifecycleClient` interface defined herein has no TypeScript implementation in `src/`.
-> Adapter-level lifecycle management in `src/adapters/shared/base-adapter.ts` provides
-> local lifecycle simulation but does not implement this contract's system-wide agent lifecycle.
+> **Implementation Status:** IMPLEMENTED. Full `AgentLifecycleClient` in `src/lifecycle/agent_lifecycle_client.ts`.
+> All 21 interface methods operational. Breaker-verified (R1: 18, R2: 5, R3: 0 findings).
+> Certifier GO. Witness 94/100.
 
-**Status:** RATIFIED DESIGN -- Pending Implementation
+**Status:** RATIFIED DESIGN -- Implemented
 **Governing:** SolisForge Protocol v1.4 [HISTORICAL: CDM v2.1 + Contract Compliance v2.1 — superseded]
 **Scope:** Agent registration, capability evolution, consent governance, and knowledge exchange
 **Classification:** internal
@@ -954,3 +953,9 @@ For existing agents (registered via the thin registration API):
 **Contract Hash:** Tracked in `contracts/phase-x.contracts.json`
 **Ratified:** Design-ratified; implementation ratification requires manifest hash verification.
 **Signatories:** Founder approval record tracked outside the contract text.
+
+---
+
+## Amendment Process
+
+This contract resides in the `contracts/` frozen zone. Amendments follow the SolisForge Protocol v1.4, Section 8.1 (Contract Amendment Process). Changes require: (1) a written amendment proposal with rationale, (2) impact analysis on dependent contracts, (3) Founder approval, and (4) manifest hash update in `contracts/phase-x.contracts.json`. No implementation change may alter contract semantics without completing this process first.
