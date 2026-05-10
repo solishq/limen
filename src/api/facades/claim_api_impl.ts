@@ -77,6 +77,11 @@ export class ClaimApiImpl implements ClaimApi {
     return this.raw.getClaimStatus(this.getConnection(), this.getContext(), claimId);
   }
 
+  /** R2-001: O(1) predicate lookup by claim ID. */
+  getClaimPredicate(claimId: string): Result<string | 'not_found'> {
+    return this.raw.getClaimPredicate(this.getConnection(), this.getContext(), claimId);
+  }
+
   searchClaims(input: SearchClaimInput): Result<SearchClaimResult> {
     const result = this.raw.searchClaims(this.getConnection(), this.getContext(), input);
     // Phase 3 (I-P3-05): Record access for RETURNED claims

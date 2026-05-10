@@ -229,6 +229,13 @@ export interface ClaimApi {
    * derive from queryClaims alone).
    */
   getClaimStatus(claimId: string): Result<'active' | 'retracted' | 'not_found'>;
+  /**
+   * R2-001: O(1) predicate lookup by claim ID. Returns the claim's predicate
+   * string or 'not_found'. Used by output governance to enforce append-only
+   * telemetry (OG-12.3) without O(N) full scan.
+   * Permission: 'query_claims'.
+   */
+  getClaimPredicate(claimId: string): Result<string | 'not_found'>;
 }
 
 // Sprint 7: Consumer-facing WorkingMemoryApi — no conn/ctx required (DC-P4-406, C-SEC-05)

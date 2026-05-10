@@ -151,6 +151,17 @@ function createTestOutputClient(opts?: {
       }
       return { ok: true as const, value: undefined };
     },
+    // R2-001: O(1) predicate lookup for telemetry retraction guard
+    getClaimPredicate(claimId: string) {
+      const entry = claimStore.get(claimId);
+      if (!entry) return { ok: true as const, value: 'not_found' as const };
+      return { ok: true as const, value: entry.claim.predicate as string };
+    },
+    getClaimStatus(claimId: string) {
+      const entry = claimStore.get(claimId);
+      if (!entry) return { ok: true as const, value: 'not_found' as const };
+      return { ok: true as const, value: entry.claim.status as string };
+    },
   };
 
   // Minimal EventBus stub

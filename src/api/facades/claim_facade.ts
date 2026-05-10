@@ -67,6 +67,12 @@ export interface RawClaimFacade {
     ctx: OperationContext,
     claimId: string,
   ): Result<'active' | 'retracted' | 'not_found'>;
+  /** R2-001: O(1) predicate lookup by claim ID. */
+  getClaimPredicate(
+    conn: DatabaseConnection,
+    ctx: OperationContext,
+    claimId: string,
+  ): Result<string | 'not_found'>;
 }
 
 // ============================================================================
@@ -180,6 +186,26 @@ export function createRawClaimFacade(
         return { ok: false, error: result.error };
       }
       return { ok: true, value: result.value.status };
+    },
+
+    /**
+     * R2-001: O(1) predicate lookup by claim ID.
+     * Delegates to ClaimStore.get — same tenant scoping as getClaimStatus.
+     */
+    getClaimPredicate(
+      conn: DatabaseConnection,
+      ctx: OperationContext,
+      claimId: string,
+    ): Result<string | 'not_found'> {
+      requirePermission(rbac, ctx, 'query_claims');
+      const result = claimSystem.store.get(conn, claimId as ClaimId, ctx.tenantId);
+      if (!result.ok) {
+        if (result.error.code === 'CLAIM_NOT_FOUND') {
+          return { ok: true, value: 'not_found' };
+        }
+        return { ok: false, error: result.error };
+      }
+      return { ok: true, value: result.value.predicate };
     },
   });
 }

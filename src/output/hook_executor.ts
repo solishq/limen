@@ -218,9 +218,10 @@ export function createHookExecutor(deps: HookExecutorDeps): HookExecutor {
       };
 
       let result: HookResult;
+      // R2-005: Hoist timeoutHandle so it's accessible in catch for cleanup
+      let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
       try {
         // OG-12.12: 5000ms timeout — BRK-015: clean up timer on success
-        let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
         result = await Promise.race([
           hook.handler(context).then(r => {
             // BRK-015: Clear timeout on successful completion
@@ -232,6 +233,8 @@ export function createHookExecutor(deps: HookExecutorDeps): HookExecutor {
           }),
         ]);
       } catch (error) {
+        // R2-005: Clear timeout timer on rejection to prevent resource leak
+        if (timeoutHandle !== null) clearTimeout(timeoutHandle);
         // OG-7.27 / OG-12.12: timeout or throw = proceed:true + warning audit
         hook.errorCount++;
         hook.firedCount++;

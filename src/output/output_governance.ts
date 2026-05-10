@@ -57,6 +57,8 @@ import {
   type OutputGovernanceError,
 } from './output_errors.js';
 import type { GovernanceDecision } from '../adapters/shared/types.js';
+import { TRUST_TO_CLEARANCE } from '../adapters/shared/types.js';
+import type { AgentTrustLevel } from '../adapters/shared/types.js';
 import type { HookExecutor } from './hook_executor.js';
 import { createHookExecutor } from './hook_executor.js';
 import type { PluginLifecycleManager } from './plugin_lifecycle.js';
@@ -181,11 +183,11 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     }
   }
 
-  // BRK-003: Governance evaluation — check permissions and trust level
+  // BRK-003 + R2-003: Governance evaluation — check permissions AND trust level
   function evaluateGovernance(
     ctx: OperationContext,
     requiredPermission: string,
-    _requiredTrustLevel: string,
+    requiredTrustLevel: string,
   ): Result<void> {
     // Check permissions via the ReadonlySet<Permission> on OperationContext
     if (ctx.permissions) {
@@ -204,6 +206,24 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
         return errTyped(governanceRefusal(decision));
       }
     }
+
+    // R2-003: Evaluate trust level via clearanceLevel on OperationContext
+    // If clearanceLevel is present on ctx, compare against required trust level's clearance
+    const requiredClearance = TRUST_TO_CLEARANCE[requiredTrustLevel as AgentTrustLevel] ?? 0;
+    if (ctx.clearanceLevel !== undefined && ctx.clearanceLevel < requiredClearance) {
+      const decision: GovernanceDecision = {
+        allowed: false,
+        verdict: { verdict: 'refuse' as const, auditId: '' as import('../kernel/interfaces/index.js').EventId, reason: `Insufficient trust level: required ${requiredTrustLevel} (clearance ${requiredClearance}), actual clearance ${ctx.clearanceLevel}`, rule: 'OG-A.2' },
+        reason: `Insufficient trust level: required ${requiredTrustLevel} (clearance ${requiredClearance}), actual clearance ${ctx.clearanceLevel}`,
+        requiredPermissions: [],
+        missingPermissions: [],
+        clearanceRequired: requiredClearance,
+        clearanceActual: ctx.clearanceLevel,
+        evaluatedAt: time.nowISO(),
+      };
+      return errTyped(governanceRefusal(decision));
+    }
+
     return ok(undefined);
   }
 
@@ -485,21 +505,14 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     const govResult = evaluateGovernance(ctx, 'retract_claim', 'low');
     if (!govResult.ok) return govResult as Result<void>;
 
-    // BRK-010: Telemetry claims are append-only — retraction forbidden (OG-12.3)
-    // Check if the target claim has a telemetry predicate via CCP query
-    const telemetryCheckResult = claims.queryClaims({
-      predicate: 'telemetry.*',
-      subject: null,
-      limit: 10000,
-      status: 'active',
-    });
-    if (telemetryCheckResult.ok) {
-      for (const item of telemetryCheckResult.value.claims) {
-        if (item.claim.id === (outputId as string)) {
-          return errTyped(telemetryWriteFailed(
-            'Telemetry claims are append-only and cannot be retracted (OG-12.3)'
-          ));
-        }
+    // R2-001: Telemetry claims are append-only — retraction forbidden (OG-12.3)
+    // O(1) lookup via getClaimPredicate instead of O(N) full scan
+    const predicateResult = claims.getClaimPredicate(outputId as string);
+    if (predicateResult.ok && typeof predicateResult.value === 'string' && predicateResult.value !== 'not_found') {
+      if (predicateResult.value.startsWith('telemetry.')) {
+        return errTyped(telemetryWriteFailed(
+          'Telemetry claims are append-only and cannot be retracted (OG-12.3)'
+        ));
       }
     }
 
@@ -577,12 +590,18 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
       return err('TELEMETRY_WRITE_FAILED', result.error.message);
     }
 
-    // OG-8.17: telemetry:cost_recorded event
-    emitEvent('telemetry:cost_recorded', {
+    // R2-004: Audit + event with fail-closed propagation
+    const costAuditResult = appendAudit('telemetry.cost_recorded', 'telemetry', result.value.claim.id as string, {
+      provider: data.provider, model: data.model, totalTokens: data.totalTokens, cost: data.cost,
+    });
+    if (!costAuditResult.ok) return costAuditResult;
+
+    const costEventResult = emitEvent('telemetry:cost_recorded', {
       costId: result.value.claim.id,
       totalTokens: data.totalTokens,
       cost: data.cost,
     });
+    if (!costEventResult.ok) return costEventResult;
 
     return ok(undefined);
   }
@@ -630,12 +649,18 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
       return err('TELEMETRY_WRITE_FAILED', result.error.message);
     }
 
-    // OG-8.18: telemetry:vital_recorded event
-    emitEvent('telemetry:vital_recorded', {
+    // R2-004: Audit + event with fail-closed propagation
+    const vitalAuditResult = appendAudit('telemetry.vital_recorded', 'telemetry', result.value.claim.id as string, {
+      metric: data.metric, value: data.value, unit: data.unit,
+    });
+    if (!vitalAuditResult.ok) return vitalAuditResult;
+
+    const vitalEventResult = emitEvent('telemetry:vital_recorded', {
       vitalId: result.value.claim.id,
       metric: data.metric,
       value: data.value,
     });
+    if (!vitalEventResult.ok) return vitalEventResult;
 
     return ok(undefined);
   }
@@ -648,14 +673,16 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     const govResult = evaluateGovernance(ctx, 'query_claims', 'low');
     if (!govResult.ok) return govResult as Result<CostRecord[]>;
 
-    // OG-11.6: Query via SC-13 with telemetry.cost filter
+    // R2-002: Query via SC-13 with telemetry.cost filter
+    // Fetch large batch, apply ALL filters FIRST, then paginate (same pattern as queryOutputs)
     const limit = filter.limit ?? 50;
     const offset = filter.offset ?? 0;
+    const fetchLimit = 10000; // Upper bound for filter-then-paginate
 
     const queryResult = claims.queryClaims({
       predicate: 'telemetry.cost',
       subject: null,
-      limit: limit + offset,
+      limit: fetchLimit,
       status: 'active',
     });
 
@@ -663,11 +690,10 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
       return err('TELEMETRY_WRITE_FAILED', queryResult.error.message);
     }
 
-    const records: CostRecord[] = [];
+    const allFiltered: CostRecord[] = [];
     const claimsData = queryResult.value.claims;
 
-    for (let i = offset; i < Math.min(claimsData.length, offset + limit); i++) {
-      const item = claimsData[i];
+    for (const item of claimsData) {
       if (!item) continue;
 
       try {
@@ -676,16 +702,19 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
           : JSON.stringify(item.claim.object.value);
         const parsed = JSON.parse(value) as CostRecord;
 
-        // Apply filters
+        // Apply filters BEFORE pagination
         if (filter.provider && parsed.provider !== filter.provider) continue;
         if (filter.model && parsed.model !== filter.model) continue;
         if (filter.timeRange) {
           if (parsed.timestamp < filter.timeRange.from || parsed.timestamp > filter.timeRange.to) continue;
         }
 
-        records.push(parsed);
+        allFiltered.push(parsed);
       } catch { /* parse failure — skip */ }
     }
+
+    // R2-002: Apply pagination AFTER filtering
+    const records = allFiltered.slice(offset, offset + limit);
 
     return ok(records);
   }
@@ -698,14 +727,16 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
     const govResult = evaluateGovernance(ctx, 'query_claims', 'low');
     if (!govResult.ok) return govResult as Result<VitalRecord[]>;
 
-    // OG-11.7: Query via SC-13 with telemetry.vital filter
+    // R2-002: Query via SC-13 with telemetry.vital filter
+    // Fetch large batch, apply ALL filters FIRST, then paginate (same pattern as queryOutputs)
     const limit = filter.limit ?? 50;
     const offset = filter.offset ?? 0;
+    const fetchLimit = 10000; // Upper bound for filter-then-paginate
 
     const queryResult = claims.queryClaims({
       predicate: 'telemetry.vital',
       subject: null,
-      limit: limit + offset,
+      limit: fetchLimit,
       status: 'active',
     });
 
@@ -713,11 +744,10 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
       return err('TELEMETRY_WRITE_FAILED', queryResult.error.message);
     }
 
-    const records: VitalRecord[] = [];
+    const allFiltered: VitalRecord[] = [];
     const claimsData = queryResult.value.claims;
 
-    for (let i = offset; i < Math.min(claimsData.length, offset + limit); i++) {
-      const item = claimsData[i];
+    for (const item of claimsData) {
       if (!item) continue;
 
       try {
@@ -726,15 +756,18 @@ export function createAgentOutputClient(deps: AgentOutputClientDeps): AgentOutpu
           : JSON.stringify(item.claim.object.value);
         const parsed = JSON.parse(value) as VitalRecord;
 
-        // Apply filters
+        // Apply filters BEFORE pagination
         if (filter.metric && parsed.metric !== filter.metric) continue;
         if (filter.timeRange) {
           if (parsed.timestamp < filter.timeRange.from || parsed.timestamp > filter.timeRange.to) continue;
         }
 
-        records.push(parsed);
+        allFiltered.push(parsed);
       } catch { /* parse failure — skip */ }
     }
+
+    // R2-002: Apply pagination AFTER filtering
+    const records = allFiltered.slice(offset, offset + limit);
 
     return ok(records);
   }
