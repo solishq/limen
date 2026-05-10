@@ -54,6 +54,8 @@ import {
   MAX_STATEMENT_LENGTH,
   MAX_REFLECT_ENTRIES,
   MAX_REASONING_LENGTH,
+  MAX_VALUE_LENGTH,
+  PROTECTED_PREDICATE_PREFIXES,
   DEFAULT_RECALL_LIMIT,
   DEFAULT_SEARCH_LIMIT,
   MAX_SEARCH_LIMIT,
@@ -182,6 +184,27 @@ export function createConvenienceLayer(deps: ConvenienceLayerDeps): ConvenienceL
     value: string,
     options?: RememberOptions,
   ): Result<RememberResult> {
+    // FINDING-019: Reject empty or whitespace-only values (meaningless claims).
+    if (!value || value.trim().length === 0) {
+      return err('CONV_VALUE_EMPTY', 'Value must be non-empty and not whitespace-only');
+    }
+
+    // FINDING-018: Reject values exceeding maximum length.
+    if (value.length > MAX_VALUE_LENGTH) {
+      return err('CONV_VALUE_TOO_LONG',
+        `Value must be at most ${MAX_VALUE_LENGTH} characters, got ${value.length}`);
+    }
+
+    // FINDING-017: Reject protected predicate namespaces at the library level.
+    // Protected predicates (governance.*, hardban.*, system.*) require elevated trust
+    // and must use ClaimApi.assertClaim() directly with proper RBAC permissions.
+    for (const prefix of PROTECTED_PREDICATE_PREFIXES) {
+      if (predicate.startsWith(prefix)) {
+        return err('CONV_PROTECTED_PREDICATE',
+          `Predicate '${predicate}' is in a protected namespace ('${prefix.slice(0, -1)}') and cannot be written via the convenience API. Use the system-level ClaimApi with appropriate permissions.`);
+      }
+    }
+
     // Validate confidence if provided
     if (options?.confidence !== undefined) {
       if (!Number.isFinite(options.confidence) || options.confidence < 0 || options.confidence > 1) {

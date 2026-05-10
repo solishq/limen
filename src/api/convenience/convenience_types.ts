@@ -251,7 +251,10 @@ export type ConvenienceErrorCode =
   | 'CONV_INVALID_RELATIONSHIP' // connect() invalid relationship type
   | 'CONV_SELF_REFERENCE'       // connect() same claim on both sides
   | 'CONV_INVALID_REASON'       // Phase 4: forget() with invalid retraction reason
-  | 'CONV_REASONING_TOO_LONG';  // Phase 5: remember() reasoning exceeds MAX_REASONING_LENGTH
+  | 'CONV_REASONING_TOO_LONG'   // Phase 5: remember() reasoning exceeds MAX_REASONING_LENGTH
+  | 'CONV_VALUE_TOO_LONG'       // remember() value exceeds MAX_VALUE_LENGTH (500 chars)
+  | 'CONV_VALUE_EMPTY'          // remember() value is empty or whitespace-only
+  | 'CONV_PROTECTED_PREDICATE'; // remember() predicate is in a protected namespace
 
 /** Valid relationship types for connect() */
 export const VALID_RELATIONSHIP_TYPES: readonly RelationshipType[] = [
@@ -275,6 +278,24 @@ export const MAX_REFLECT_ENTRIES = 100;
 
 /** Phase 5: Maximum reasoning text length for convenience API */
 export const MAX_REASONING_LENGTH = 1000;
+
+/** Maximum value length for remember() calls (same as reflect statement limit) */
+export const MAX_VALUE_LENGTH = 500;
+
+/**
+ * Protected predicate prefixes that require elevated trust.
+ * The convenience API rejects these at the library level regardless of RBAC state.
+ * System-level operations must use ClaimApi.assertClaim() directly with proper
+ * permissions to write to protected predicates.
+ *
+ * FINDING-017: Protected predicates were only enforced at the MCP layer (RBAC gate).
+ * The library-level convenience API must also enforce this boundary.
+ */
+export const PROTECTED_PREDICATE_PREFIXES: readonly string[] = [
+  'governance.',
+  'hardban.',
+  'system.',
+];
 
 // ── Phase 2: search() Types ──
 

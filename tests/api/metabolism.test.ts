@@ -205,11 +205,13 @@ describe('Phase 3: Cognitive Metabolism Integration', () => {
     it('stability reflects predicate category', async () => {
       const limen = await createTestLimen();
 
-      // Governance claim -> 365 days
-      limen.remember('entity:test:1', 'governance.policy', 'gov claim');
-      const gov = limen.recall('entity:test:1', 'governance.*');
-      assert.ok(gov.ok);
-      assert.equal(gov.value[0]!.stability, 365);
+      // Decision claim -> 180 days (architectural stability)
+      // FINDING-017 FIX: governance.* is now protected at the convenience layer.
+      // Use a non-protected predicate to verify stability resolution.
+      limen.remember('entity:test:1', 'decision.policy', 'decision claim');
+      const dec = limen.recall('entity:test:1', 'decision.*');
+      assert.ok(dec.ok);
+      assert.equal(dec.value[0]!.stability, 180);
 
       // Warning claim -> 30 days
       limen.remember('entity:test:2', 'warning.security', 'warn claim');

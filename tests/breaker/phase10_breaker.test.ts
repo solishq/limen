@@ -132,18 +132,19 @@ describe('F-P10-002/003: Protected predicate enforcement at integration level', 
       });
       assert.equal(protectResult.ok, true);
 
-      // In single-tenant mode, the default context has ALL permissions (including manage_roles).
-      // The guard IS now wired (F-P10-002 fix), but the caller is authorized.
-      // This test verifies the guard fires AND allows authorized callers through.
+      // FINDING-017 FIX: governance.* is now rejected at the convenience layer
+      // before RBAC or the predicate guard even fires. The convenience API blocks
+      // all protected namespaces regardless of trust level. System-level writes
+      // to governance.* must go through ClaimApi.assertClaim() directly.
       const claimResult = limen.remember('entity:test:gov', 'governance.policy', 'secret policy');
 
-      // FIX VERIFIED: The claim succeeds because the default context has manage_roles.
-      // Before the fix, it succeeded because the guard was never wired.
-      // After the fix, it succeeds because the caller IS authorized.
-      // The guard IS firing — verified by the pure function tests in DC-P10-401/402.
       assert.equal(
-        claimResult.ok, true,
-        'Authorized caller should be allowed through the protected predicate guard',
+        claimResult.ok, false,
+        'Convenience API must reject governance.* predicates',
+      );
+      assert.equal(
+        (claimResult as any).error.code, 'CONV_PROTECTED_PREDICATE',
+        'Error code must be CONV_PROTECTED_PREDICATE',
       );
     });
   });

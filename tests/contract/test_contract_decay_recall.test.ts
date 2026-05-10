@@ -233,19 +233,21 @@ describe('WG-04: Decay in Convenience Recall (I-CONV-DECAY)', () => {
 
   it('DC-DECAY-06 [SUCCESS]: resolveStability wiring produces different effectiveConfidence for different predicate stability values (F-V3P1-007)', async () => {
     // F-V3P1-007: Verify that the resolveStability wiring in recall actually differentiates
-    // predicates. governance.* has stability=365, warning.* has stability=30.
+    // predicates. decision.* has stability=180, warning.* has stability=30.
     // At the same age, the claim with lower stability decays faster.
+    // FINDING-017 FIX: governance.* is now protected at the convenience layer.
+    // Use decision.* (180-day stability) vs warning.* (30-day stability).
     const dir = trackDir(makeTempDir());
     const limen = trackInstance(await createLimen({ dataDir: dir, masterKey: makeKey() }));
 
     // Create two claims with identical validAt (60 days ago) but different predicate domains
     const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
 
-    const govResult = limen.remember('entity:stability:gov', 'governance.test', 'governance claim', {
+    const decResult = limen.remember('entity:stability:dec', 'decision.test', 'decision claim', {
       validAt: sixtyDaysAgo,
       confidence: 0.9,
     });
-    assert.equal(govResult.ok, true, 'governance remember must succeed');
+    assert.equal(decResult.ok, true, 'decision remember must succeed');
 
     const warnResult = limen.remember('entity:stability:warn', 'warning.test', 'warning claim', {
       validAt: sixtyDaysAgo,
@@ -254,34 +256,34 @@ describe('WG-04: Decay in Convenience Recall (I-CONV-DECAY)', () => {
     assert.equal(warnResult.ok, true, 'warning remember must succeed');
 
     // Recall both
-    const govRecall = limen.recall('entity:stability:gov', 'governance.test');
-    assert.equal(govRecall.ok, true, 'governance recall must succeed');
-    if (!govRecall.ok) return;
-    assert.equal(govRecall.value.length, 1, 'must return exactly 1 governance belief');
+    const decRecall = limen.recall('entity:stability:dec', 'decision.test');
+    assert.equal(decRecall.ok, true, 'decision recall must succeed');
+    if (!decRecall.ok) return;
+    assert.equal(decRecall.value.length, 1, 'must return exactly 1 decision belief');
 
     const warnRecall = limen.recall('entity:stability:warn', 'warning.test');
     assert.equal(warnRecall.ok, true, 'warning recall must succeed');
     if (!warnRecall.ok) return;
     assert.equal(warnRecall.value.length, 1, 'must return exactly 1 warning belief');
 
-    const govConf = govRecall.value[0]!.effectiveConfidence;
+    const decConf = decRecall.value[0]!.effectiveConfidence;
     const warnConf = warnRecall.value[0]!.effectiveConfidence;
 
-    // governance.* stability = 365 days, warning.* stability = 30 days
-    // At 60 days age: governance decay is mild (60/365 ratio), warning decay is severe (60/30 ratio)
+    // decision.* stability = 180 days, warning.* stability = 30 days
+    // At 60 days age: decision decay is mild (60/180 ratio), warning decay is severe (60/30 ratio)
     // FSRS: R(t) = (1 + t/(9*S))^(-1)
-    // Gov: R(60) = (1 + 60/(9*365))^(-1) = (1 + 0.0183)^(-1) ~ 0.982
+    // Dec: R(60) = (1 + 60/(9*180))^(-1) = (1 + 0.037)^(-1) ~ 0.964
     // Warn: R(60) = (1 + 60/(9*30))^(-1) = (1 + 0.222)^(-1) ~ 0.818
-    // So govConf should be significantly higher than warnConf
+    // So decConf should be significantly higher than warnConf
     assert.ok(
-      govConf > warnConf,
-      `governance effectiveConfidence (${govConf}) must be greater than warning effectiveConfidence (${warnConf}) due to higher stability`,
+      decConf > warnConf,
+      `decision effectiveConfidence (${decConf}) must be greater than warning effectiveConfidence (${warnConf}) due to higher stability`,
     );
 
     // Verify the difference is meaningful (not just floating point noise)
     assert.ok(
-      govConf - warnConf > 0.05,
-      `difference between governance (${govConf}) and warning (${warnConf}) effectiveConfidence must be > 0.05`,
+      decConf - warnConf > 0.05,
+      `difference between decision (${decConf}) and warning (${warnConf}) effectiveConfidence must be > 0.05`,
     );
   });
 });

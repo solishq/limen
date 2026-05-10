@@ -746,12 +746,12 @@ describe('Phase 10: Protected Predicate Wiring (F-P10-002, F-P10-003)', () => {
       });
       assert.equal(protectResult.ok, true);
 
-      // Try to assert a governance.* claim — the default context has all permissions,
-      // so this should succeed (dormant RBAC gives all permissions in single-user mode)
+      // FINDING-017 FIX: governance.* is now rejected at the convenience layer
+      // before RBAC fires. The convenience API blocks all protected namespaces.
       const claimResult = limen.remember('entity:test:gov1', 'governance.policy', 'test value');
-      // In single-tenant mode with requireRbac, the default context still has all permissions
-      // So this should succeed. The guard fires but allows because context has manage_budgets.
-      assert.equal(claimResult.ok, true);
+      assert.equal(claimResult.ok, false,
+        'Convenience API must reject governance.* predicates');
+      assert.equal((claimResult as any).error.code, 'CONV_PROTECTED_PREDICATE');
     });
   });
 

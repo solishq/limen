@@ -953,33 +953,37 @@ describe('Phase 2: FTS5 Search', () => {
     it('F-P2-003: sanitizeFts5Query escapes double quotes', async () => {
       const { sanitizeFts5Query } = await import('../../src/search/search_utils.js');
 
-      // Input with embedded quotes should be escaped
+      // Input with embedded quotes should be escaped per-term
+      // FINDING-016 FIX: Terms are individually quoted (implicit AND) instead
+      // of wrapped as a single phrase. Embedded quotes are doubled within each term.
       const result = sanitizeFts5Query('test "quoted" value');
-      assert.equal(result, '"test ""quoted"" value"',
-        'Double quotes must be escaped by doubling and wrapped in quotes');
+      assert.equal(result, '"test" """quoted""" "value"',
+        'Each term must be individually quoted with embedded quotes doubled');
     });
 
     it('F-P2-003: sanitizeFts5Query neutralizes FTS5 operators', async () => {
       const { sanitizeFts5Query } = await import('../../src/search/search_utils.js');
 
-      // Boolean operators should be neutralized by quoting
+      // Boolean operators are neutralized by per-term quoting
+      // FINDING-016 FIX: Each word is quoted independently, so operators
+      // like AND, NOT, NEAR become literal search terms, not FTS5 operators.
       const andQuery = sanitizeFts5Query('cats AND dogs');
-      assert.equal(andQuery, '"cats AND dogs"', 'AND operator should be neutralized');
+      assert.equal(andQuery, '"cats" "AND" "dogs"', 'AND operator should be neutralized');
 
       const notQuery = sanitizeFts5Query('NOT secret');
-      assert.equal(notQuery, '"NOT secret"', 'NOT operator should be neutralized');
+      assert.equal(notQuery, '"NOT" "secret"', 'NOT operator should be neutralized');
 
       const nearQuery = sanitizeFts5Query('word NEAR another');
-      assert.equal(nearQuery, '"word NEAR another"', 'NEAR operator should be neutralized');
+      assert.equal(nearQuery, '"word" "NEAR" "another"', 'NEAR operator should be neutralized');
     });
 
     it('F-P2-003: sanitizeFts5Query neutralizes column filter syntax', async () => {
       const { sanitizeFts5Query } = await import('../../src/search/search_utils.js');
 
-      // Column filters like "subject:value" should be neutralized
+      // Column filters like "subject:value" should be neutralized by per-term quoting
       const result = sanitizeFts5Query('subject:* NOT object_value:*');
-      assert.equal(result, '"subject:* NOT object_value:*"',
-        'Column filter syntax should be neutralized by quoting');
+      assert.equal(result, '"subject:*" "NOT" "object_value:*"',
+        'Column filter syntax should be neutralized by per-term quoting');
     });
 
     it('F-P2-003: search with FTS5 injection attempt does not crash', async () => {

@@ -95,10 +95,19 @@ export function analyzeQuery(query: string): QueryAnalysis {
  * Unsanitized user input can cause FTS5 syntax errors (unbalanced quotes) or
  * injection (column filters, boolean operators changing query semantics).
  *
- * Strategy: Escape all double-quotes within the input by doubling them,
- * then wrap the entire query in double quotes to force FTS5 to treat it as
- * a literal phrase. This neutralizes ALL FTS5 operators, column filters,
- * and special syntax while preserving the search intent.
+ * Strategy (FINDING-016 fix): Split into individual terms, escape each by
+ * wrapping in double quotes. This produces implicit AND between terms rather
+ * than a strict phrase match. Each quoted term is matched independently,
+ * allowing multi-word queries like "auth timeout" to match documents containing
+ * both words anywhere in the content (not necessarily adjacent).
+ *
+ * For the trigram table, each quoted term matches as an independent substring,
+ * so "auth" matches "authentication" and "timeout" matches "timeout" — both
+ * must be present for the document to match.
+ *
+ * Security: Each term is individually quoted, which neutralizes ALL FTS5
+ * operators (AND, OR, NOT, NEAR), column filters (column:term), wildcards (*),
+ * prefix/caret (^), and special syntax within each term.
  *
  * Invariant: I-P2-06 (error containment), DC-P2-008 (syntax error defense)
  *
@@ -106,12 +115,21 @@ export function analyzeQuery(query: string): QueryAnalysis {
  * @returns Sanitized string safe for FTS5 MATCH
  */
 export function sanitizeFts5Query(query: string): string {
-  // Step 1: Escape any existing double-quotes by doubling them.
-  // FTS5 phrase queries use "..." and "" is the escape for a literal quote.
-  const escaped = query.replace(/"/g, '""');
+  // Step 1: Split into whitespace-delimited terms, filter empties.
+  const terms = query.split(/\s+/).filter(t => t.length > 0);
 
-  // Step 2: Wrap in double quotes to create a phrase query.
-  // This neutralizes: AND, OR, NOT, NEAR, *, ^, +, -, column:term syntax.
-  // FTS5 treats the entire content as a literal phrase to match.
-  return `"${escaped}"`;
+  // Step 2: Escape each term individually — double any embedded quotes,
+  // then wrap in double quotes. This neutralizes all FTS5 special syntax
+  // within each term while allowing implicit AND between terms.
+  const escapedTerms = terms.map(term => {
+    const escaped = term.replace(/"/g, '""');
+    return `"${escaped}"`;
+  });
+
+  // Step 3: Join with space — FTS5 uses implicit AND between terms.
+  // If query was all whitespace (shouldn't reach here due to caller checks),
+  // fall back to the original escaped-phrase approach for safety.
+  return escapedTerms.length > 0
+    ? escapedTerms.join(' ')
+    : `"${query.replace(/"/g, '""')}"`;
 }
