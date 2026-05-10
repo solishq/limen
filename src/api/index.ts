@@ -182,6 +182,8 @@ import { getSyncFoundationMigrations } from './migration/047_sync_foundation.js'
 
 // Phase 5: Agent Lifecycle Management migration (v48)
 import { getAgentLifecycleMigrations } from './migration/048_agent_lifecycle.js';
+// Phase 5: Lifecycle remediation migration (v49) — BK-12, BK-16, BK-17
+import { getLifecycleRemediationMigrations } from './migration/049_lifecycle_remediation.js';
 
 // Phase 5: Agent Lifecycle Client
 import { createAgentLifecycleClient } from '../lifecycle/agent_lifecycle_client.js';
@@ -558,6 +560,7 @@ function buildOrchestrationAdapter(
       ...getFts5RetractionGuardMigrations(),                      // v46: Phase 5 fix — FTS5 retraction guard
       ...getSyncFoundationMigrations(),                            // v47: Phase 13A sync foundation
       ...getAgentLifecycleMigrations(),                              // v48: Phase 5 agent lifecycle
+      ...getLifecycleRemediationMigrations(),                        // v49: BK-12, BK-16, BK-17 remediation
     ]);
     if (!phase4Governance.ok) {
       conn.close();

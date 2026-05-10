@@ -58,6 +58,7 @@ import { getCognitiveEngineMigrations } from '../../src/api/migration/036_cognit
 import { getFts5RetractionGuardMigrations } from '../../src/api/migration/046_fts5_retraction_guard.js';
 import { getSyncFoundationMigrations } from '../../src/api/migration/047_sync_foundation.js';
 import { getAgentLifecycleMigrations } from '../../src/api/migration/048_agent_lifecycle.js';
+import { getLifecycleRemediationMigrations } from '../../src/api/migration/049_lifecycle_remediation.js';
 import { createAuditTrail } from '../../src/kernel/audit/audit_trail.js';
 import { createTenantScopedConnection } from '../../src/kernel/tenant/tenant_scope.js';
 import type {
@@ -177,6 +178,7 @@ export function createTestDatabase(tenancyMode: TenancyConfig['mode'] = 'single'
     ...getFts5RetractionGuardMigrations(),
     ...getSyncFoundationMigrations(),
     ...getAgentLifecycleMigrations(),
+    ...getLifecycleRemediationMigrations(),
   ].sort((a, b) => a.version - b.version);
 
   // Create audit_trail view aliasing core_audit_log (tests reference audit_trail)

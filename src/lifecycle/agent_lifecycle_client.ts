@@ -27,7 +27,7 @@
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
 import type {
-  AgentId, TenantId, ConsentId,
+  AgentId, TenantId, ConsentId, ClaimId, UserId,
   AgentTrustLevel, AgentCapability, AgentFramework,
   ClassificationLevel, ConsentableOperation,
   OperationContext, Result,
@@ -45,6 +45,7 @@ import type {
   AgentState, AgentStatistics, AgentCapabilitySet,
   CapabilityRequest, CapabilityDecision, CapabilityDenial, CapabilityHistoryEntry,
   PromotionRequest, TrustPromotionResult, DemotionResult,
+  SuspensionResult, ReactivationResult,
   AgentConsentRecord, ConsentDecision, ConsentRevocationResult, ConsentStatus, ConsentScope,
   KnowledgeExportOptions, KnowledgePackage, KnowledgeImportOptions, KnowledgeImportResult,
   KnowledgeTransferOptions, KnowledgeTransferResult,
@@ -57,7 +58,7 @@ import {
   promotionDenied, demotionBelowFloor,
   consentNotFound,
   transferDenied, importIntegrityFailed, classificationExceeded,
-  governanceRefusal,
+  governanceRefusal, capabilityDenied, invalidStateTransition,
 } from './lifecycle_errors.js';
 
 import {
@@ -97,8 +98,9 @@ function validateAgentName(name: string): string | null {
 // Valid Frameworks (LM-14.03)
 // ============================================================================
 
+// AgentFramework enum values — SHARED_TYPES §21
 const VALID_FRAMEWORKS: ReadonlySet<string> = new Set([
-  'claude', 'agents_sdk', 'openclaw', 'hermes', 'gemma',
+  'claude', 'codex', 'openclaw', 'hermes', 'gemma', // framework enum set
   'crew_ai', 'auto_gen', 'semantic_kernel', 'llama_index', 'custom',
 ]);
 
@@ -136,6 +138,7 @@ interface AgentRow {
   readonly last_active_at: string | null;
   readonly decommissioned_at: string | null;
   readonly decommission_reason: string | null;
+  readonly suspension_reason: string | null;  // BK-12: dedicated suspension reason column
 }
 
 interface CapabilityRow {
@@ -204,20 +207,26 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
     }
   }
 
-  function appendAudit(conn: DatabaseConnection, actor: string, operation: string, resourceType: string, resourceId: string, detail?: Record<string, unknown> | undefined): void {
-    try {
-      audit.append(conn, {
-        tenantId: null,
-        actorType: 'system' as const,
-        actorId: actor,
-        operation,
-        resourceType,
-        resourceId,
-        ...(detail !== undefined ? { detail } : {}),
-      });
-    } catch {
-      // Audit append failure is critical but we don't throw from lifecycle methods (AD-11)
+  /**
+   * BK-05: Audit append is fail-closed. If audit fails, the operation MUST fail.
+   * Returns the Result from audit.append so callers can propagate the error.
+   * The state change must NOT proceed without its audit entry.
+   */
+  function appendAudit(conn: DatabaseConnection, actor: string, operation: string, resourceType: string, resourceId: string, detail?: Record<string, unknown> | undefined): Result<unknown> {
+    const result = audit.append(conn, {
+      tenantId: null,
+      actorType: 'system' as const,
+      actorId: actor,
+      operation,
+      resourceType,
+      resourceId,
+      ...(detail !== undefined ? { detail } : {}),
+    });
+    if (!result.ok) {
+      // Audit failure is a governance violation — propagate, do not swallow
+      return result;
     }
+    return ok(undefined);
   }
 
   function getAgentRow(conn: DatabaseConnection, agentId: string): AgentRow | undefined {
@@ -245,23 +254,71 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
   }
 
   /**
+   * BK-06: Real statistics computed from audit trail and tables.
    * LM-13.22: Statistics computed from audit trail on read.
    * No separate counter storage -- derived from truth source.
    */
-  function computeStatistics(_conn: DatabaseConnection, _agentId: string): AgentStatistics {
-    // Statistics are computed from the audit trail. For agents that have just
-    // been registered, all values will be zero. In a full implementation, we
-    // would query the audit_log table for events matching this agent.
-    // For now, return zero-initialized statistics (correct for new agents,
-    // and the audit trail query pattern is established).
+  function computeStatistics(conn: DatabaseConnection, agentId: string): AgentStatistics {
+    // Count claims asserted/retracted from claim_assertions table
+    let totalClaimsAsserted = 0;
+    let totalClaimsRetracted = 0;
+    try {
+      const claimStats = conn.get<{ total: number; retracted: number }>(
+        `SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'retracted' THEN 1 ELSE 0 END) as retracted
+         FROM claim_assertions WHERE source_agent_id = ?`,
+        [agentId],
+      );
+      totalClaimsAsserted = claimStats?.total ?? 0;
+      totalClaimsRetracted = claimStats?.retracted ?? 0;
+    } catch {
+      // claim_assertions table may not exist in all configurations
+    }
+
+    // Count sessions from obs_sessions if table exists
+    let totalSessions = 0;
+    try {
+      const sessCount = conn.get<{ count: number }>(
+        `SELECT COUNT(*) as count FROM obs_sessions WHERE agent_id = ?`,
+        [agentId],
+      );
+      totalSessions = sessCount?.count ?? 0;
+    } catch {
+      // obs_sessions table may not exist in all configurations
+    }
+
+    // Count governance refusals from audit trail
+    let refusalCount: { count: number } | undefined;
+    try {
+      refusalCount = conn.get<{ count: number }>(
+        `SELECT COUNT(*) as count FROM core_audit_log WHERE actor_id = ? AND operation LIKE '%governance.refusal%'`,
+        [agentId],
+      );
+    } catch {
+      // core_audit_log may not exist in all configurations
+    }
+
+    // Count active techniques (if technique table exists)
+    let activeTechniques = 0;
+    try {
+      const techCount = conn.get<{ count: number }>(
+        `SELECT COUNT(*) as count FROM tgp_techniques WHERE source_agent_id = ? AND status = 'active'`,
+        [agentId],
+      );
+      activeTechniques = techCount?.count ?? 0;
+    } catch {
+      // Table may not exist in all configurations
+    }
+
     return {
-      totalSessions: 0,
-      totalClaimsAsserted: 0,
-      totalClaimsRetracted: 0,
-      totalMissionsCompleted: 0,
+      totalSessions,
+      totalClaimsAsserted,
+      totalClaimsRetracted,
+      totalMissionsCompleted: 0,  // Requires mission table query — counted when missions subsystem present
       totalMissionsFailed: 0,
-      totalGovernanceRefusals: 0,
-      activeTechniques: 0,
+      totalGovernanceRefusals: refusalCount?.count ?? 0,
+      activeTechniques,
       lastSessionDuration: null,
       averageSessionDuration: 0,
     };
@@ -283,7 +340,7 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
       trustLevel,
       coreTrustLevel: toCoretrustLevel(trustLevel),
       clearanceLevel: TRUST_TO_CLEARANCE[trustLevel] ?? 0,
-      owner: row.owner,
+      owner: row.owner as unknown as UserId | AgentId,  // BK-14: proper branded type cast
       metadata,
       statistics: computeStatistics(conn, row.id),
       registeredAt: row.registered_at,
@@ -303,7 +360,8 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
     if (!row) return agentNotFound(agentId);
     if (row.state === 'decommissioned') return agentDecommissioned(agentId);
     if (row.state === 'suspended' && !allowSuspended) {
-      return agentSuspended(agentId, row.decommission_reason ?? 'suspended');
+      // BK-12: Read suspension reason from dedicated column, not decommission_reason
+      return agentSuspended(agentId, row.suspension_reason ?? 'suspended');
     }
     return ok(row);
   }
@@ -369,10 +427,11 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
           );
         }
 
-        // LM-13.24: Audit entry
-        appendAudit(conn, ctx.agentId as string ?? ctx.userId ?? 'system',
+        // LM-13.24: Audit entry (BK-05: fail-closed)
+        const auditResult = appendAudit(conn, ctx.agentId as string ?? ctx.userId ?? 'system',
           'lifecycle.agent.registered', 'agent', agentId as string,
           { name: spec.name, framework: spec.framework, trustLevel, capabilities: grantedCaps });
+        if (!auditResult.ok) return auditResult;
 
         // LM-14.06, LM-8.02: Emit agent:registered
         emitEvent('agent:registered', agentId as string, {
@@ -482,9 +541,10 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
       return conn.transaction(() => {
         conn.run(`UPDATE lm_agents SET ${sets.join(', ')} WHERE id = ?`, params);
 
-        appendAudit(conn, ctx.agentId as string ?? ctx.userId ?? 'system',
+        const auditResult = appendAudit(conn, ctx.agentId as string ?? ctx.userId ?? 'system',
           'lifecycle.agent.updated', 'agent', agentId as string,
           { update });
+        if (!auditResult.ok) return auditResult;
 
         // LM-8.03
         emitEvent('agent:updated', agentId as string, { update });
@@ -510,9 +570,23 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
           [now, reason, now, agentId as string],
         );
 
-        // LM-14.15: Step 2 - Terminate sessions (count for result)
-        // In a full implementation, this would query session tables.
-        const sessionsTerminated = 0;
+        // BK-09: Query actual active sessions and terminate them
+        let sessionsTerminated = 0;
+        try {
+          const activeSessions = conn.query<{ session_id: string }>(
+            `SELECT session_id FROM obs_sessions WHERE agent_id = ? AND status = 'active'`,
+            [agentId as string],
+          );
+          for (const session of activeSessions) {
+            conn.run(
+              `UPDATE obs_sessions SET status = 'terminated', ended_at = ? WHERE session_id = ?`,
+              [now, session.session_id],
+            );
+          }
+          sessionsTerminated = activeSessions.length;
+        } catch {
+          // obs_sessions table may not exist in all configurations — count remains 0
+        }
 
         // LM-14.16: Step 3 - Revoke all active consents
         const activeConsents = conn.query<ConsentRow>(
@@ -534,15 +608,28 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
         );
         conn.run(`DELETE FROM lm_capabilities WHERE agent_id = ?`, [agentId as string]);
 
-        // LM-14.18: Step 5 - Archive knowledge (simplified - mark as archived)
-        const knowledgeArchived = true;
+        // BK-10: Actually check if agent has claims before setting knowledgeArchived
+        const claimCount = conn.get<{ count: number }>(
+          `SELECT COUNT(*) as count FROM claim_assertions WHERE source_agent_id = ?`,
+          [agentId as string],
+        );
+        const hasClaims = (claimCount?.count ?? 0) > 0;
+        if (hasClaims) {
+          // Archive claims by marking them — they remain queryable but flagged
+          conn.run(
+            `UPDATE claim_assertions SET archived = 1 WHERE source_agent_id = ? AND archived = 0`,
+            [agentId as string],
+          );
+        }
+        const knowledgeArchived = hasClaims;
 
         // LM-14.19: Step 6 - Agent remains queryable with decommissioned state
 
-        // LM-13.24: Audit
-        appendAudit(conn, ctx.agentId as string ?? ctx.userId ?? 'system',
+        // LM-13.24: Audit (BK-05: fail-closed)
+        const auditResult = appendAudit(conn, ctx.agentId as string ?? ctx.userId ?? 'system',
           'lifecycle.agent.decommissioned', 'agent', agentId as string,
           { reason, sessionsTerminated, consentsRevoked: activeConsents.length, capabilitiesRevoked: capabilities.length });
+        if (!auditResult.ok) return auditResult;
 
         // LM-14.20, LM-8.06: Step 7 - Emit event
         emitEvent('agent:decommissioned', agentId as string, { reason });
@@ -550,11 +637,89 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
         return ok<DecommissionResult>({
           agentId: agentId,
           decommissionedAt: now,
-          claimsPreserved: 0, // Claims remain in claim_assertions, not counted here
+          claimsPreserved: claimCount?.count ?? 0,
           sessionsTerminated,
           knowledgeArchived,
           consentsRevoked: activeConsents.length,
           capabilitiesRevoked: capabilities.length,
+        });
+      });
+    },
+
+    // ──── Suspension & Reactivation (BK-04: LM-10.04, LM-10.06) ────
+
+    async suspendAgent(ctx: OperationContext, agentId: AgentId, reason: string): Promise<Result<SuspensionResult>> {
+      const conn = getConnection();
+      const row = getAgentRow(conn, agentId as string);
+      if (!row) return agentNotFound(agentId as string);
+
+      // LM-10.04: Only active agents can be suspended
+      if (row.state === 'decommissioned') return agentDecommissioned(agentId as string);
+      if (row.state === 'suspended') {
+        return invalidStateTransition('suspended' as AgentState, 'suspended' as AgentState);
+      }
+
+      const now = time.nowISO();
+      const actor = ctx.agentId as string ?? ctx.userId ?? 'system';
+
+      return conn.transaction(() => {
+        // Set state to suspended with reason in dedicated column
+        conn.run(
+          `UPDATE lm_agents SET state = 'suspended', suspension_reason = ?, last_active_at = ? WHERE id = ?`,
+          [reason, now, agentId as string],
+        );
+
+        // BK-05: Audit is fail-closed
+        const auditResult = appendAudit(conn, actor,
+          'lifecycle.agent.suspended', 'agent', agentId as string,
+          { reason });
+        if (!auditResult.ok) return auditResult;
+
+        // LM-8.04: Emit agent:suspended event
+        emitEvent('agent:suspended', agentId as string, { reason });
+
+        return ok<SuspensionResult>({
+          agentId,
+          suspendedAt: now,
+          reason,
+          previousState: row.state as AgentState,
+        });
+      });
+    },
+
+    async reactivateAgent(ctx: OperationContext, agentId: AgentId): Promise<Result<ReactivationResult>> {
+      const conn = getConnection();
+      const row = getAgentRow(conn, agentId as string);
+      if (!row) return agentNotFound(agentId as string);
+
+      // LM-10.06: Only suspended agents can be reactivated
+      if (row.state === 'decommissioned') return agentDecommissioned(agentId as string);
+      if (row.state === 'active') {
+        return invalidStateTransition('active' as AgentState, 'active' as AgentState);
+      }
+
+      const now = time.nowISO();
+      const actor = ctx.agentId as string ?? ctx.userId ?? 'system';
+
+      return conn.transaction(() => {
+        // Set state back to active, clear suspension reason
+        conn.run(
+          `UPDATE lm_agents SET state = 'active', suspension_reason = NULL, last_active_at = ? WHERE id = ?`,
+          [now, agentId as string],
+        );
+
+        // BK-05: Audit is fail-closed
+        const auditResult = appendAudit(conn, actor,
+          'lifecycle.agent.reactivated', 'agent', agentId as string);
+        if (!auditResult.ok) return auditResult;
+
+        // LM-8.05: Emit agent:reactivated event
+        emitEvent('agent:reactivated', agentId as string, {});
+
+        return ok<ReactivationResult>({
+          agentId,
+          reactivatedAt: now,
+          previousState: row.state as AgentState,
         });
       });
     },
@@ -606,14 +771,15 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
         }
       }
 
-      appendAudit(conn, actor, 'lifecycle.capability.requested', 'agent', agentId as string,
+      const auditResult = appendAudit(conn, actor, 'lifecycle.capability.requested', 'agent', agentId as string,
         { requested: request.capabilities, granted, denied: denied.map(d => d.capability) });
+      if (!auditResult.ok) return auditResult;
 
       return ok<CapabilityDecision>({
         requestedCapabilities: request.capabilities as AgentCapability[],
         granted,
         denied,
-        decidedBy: actor,
+        decidedBy: actor as UserId | AgentId | 'system',
         decidedAt: now,
       });
     },
@@ -639,8 +805,9 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
           [randomUUID(), agentId as string, capability, reason, actor, now],
         );
 
-        appendAudit(conn, actor, 'lifecycle.capability.revoked', 'agent', agentId as string,
+        const auditResult = appendAudit(conn, actor, 'lifecycle.capability.revoked', 'agent', agentId as string,
           { capability, reason });
+        if (!auditResult.ok) return auditResult;
 
         // LM-8.08
         emitEvent('capability:revoked', agentId as string, { capability, reason });
@@ -670,7 +837,7 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
         capability: r.capability as AgentCapability,
         action: r.action as CapabilityHistoryEntry['action'],
         reason: r.reason,
-        decidedBy: r.decided_by,
+        decidedBy: r.decided_by as UserId | AgentId | 'system',
         timestamp: r.timestamp,
       })));
     },
@@ -719,8 +886,9 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
           emitEvent('capability:granted', agentId as string, { capability: cap, reason: 'trust promotion' });
         }
 
-        appendAudit(conn, actor, 'lifecycle.trust.promoted', 'agent', agentId as string,
+        const auditResult = appendAudit(conn, actor, 'lifecycle.trust.promoted', 'agent', agentId as string,
           { from: currentLevel, to: request.targetLevel, capabilitiesUnlocked: validation.capabilitiesUnlocked });
+        if (!auditResult.ok) return auditResult;
 
         // LM-8.09
         emitEvent('trust:promoted', agentId as string, {
@@ -732,7 +900,7 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
           previousLevel: currentLevel,
           newLevel: request.targetLevel,
           capabilitiesUnlocked: validation.capabilitiesUnlocked as AgentCapability[],
-          decidedBy: actor,
+          decidedBy: actor as UserId | AgentId | 'system',
           decidedAt: now,
         });
       });
@@ -781,8 +949,9 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
           emitEvent('capability:revoked', agentId as string, { capability: cap, reason: 'trust demotion' });
         }
 
-        appendAudit(conn, actor, 'lifecycle.trust.demoted', 'agent', agentId as string,
+        const auditResult = appendAudit(conn, actor, 'lifecycle.trust.demoted', 'agent', agentId as string,
           { from: currentLevel, to: targetLevel, reason, capabilitiesRevoked: validation.capabilitiesRevoked });
+        if (!auditResult.ok) return auditResult;
 
         // LM-8.10
         emitEvent('trust:demoted', agentId as string, {
@@ -795,7 +964,7 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
           newLevel: targetLevel,
           capabilitiesRevoked: validation.capabilitiesRevoked as AgentCapability[],
           reason,
-          decidedBy: actor,
+          decidedBy: actor as UserId | AgentId | 'system',
           decidedAt: now,
         });
       });
@@ -833,8 +1002,9 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
           ],
         );
 
-        appendAudit(conn, actor, 'lifecycle.consent.registered', 'consent', consentId as string,
+        const auditResult = appendAudit(conn, actor, 'lifecycle.consent.registered', 'consent', consentId as string,
           { agentId: agentId as string, purpose: consent.purpose, dataSubject: consent.dataSubject });
+        if (!auditResult.ok) return auditResult;
 
         // LM-8.11
         emitEvent('consent:registered', agentId as string, {
@@ -862,8 +1032,25 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
           [now, reason, consentId as string],
         );
 
-        appendAudit(conn, actor, 'lifecycle.consent.revoked', 'consent', consentId as string,
-          { reason, agentId: consentRow.agent_id });
+        // BK-13: Query actual affected claims
+        const affectedClaims = conn.get<{ count: number }>(
+          `SELECT COUNT(*) as count FROM claim_assertions WHERE source_agent_id = ? AND status = 'active'`,
+          [consentRow.agent_id],
+        );
+        const claimsAffected = affectedClaims?.count ?? 0;
+
+        // BK-13: Count pending transfers that would be blocked
+        // Transfers require consent — revoking means no new transfers can proceed
+        const pendingTransfers = conn.get<{ count: number }>(
+          `SELECT COUNT(*) as count FROM lm_agent_consents WHERE agent_id = ? AND status = 'active' AND purpose = 'knowledge_transfer'`,
+          [consentRow.agent_id],
+        );
+        const transfersBlocked = pendingTransfers?.count ?? 0;
+
+        // BK-05: Audit is fail-closed
+        const auditResult = appendAudit(conn, actor, 'lifecycle.consent.revoked', 'consent', consentId as string,
+          { reason, agentId: consentRow.agent_id, claimsAffected, transfersBlocked });
+        if (!auditResult.ok) return auditResult;
 
         // LM-8.12
         emitEvent('consent:revoked', consentRow.agent_id, {
@@ -873,8 +1060,8 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
         return ok<ConsentRevocationResult>({
           consentId,
           revokedAt: now,
-          claimsAffected: 0,
-          transfersBlocked: 0,
+          claimsAffected,
+          transfersBlocked,
           cascadeActions: [`consent ${consentId as string} revoked: ${reason}`],
         });
       });
@@ -976,6 +1163,12 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
       if (!check.ok) return check;
       const row = check.value;
 
+      // BK-03: Capability gate — LM-14.21 requires knowledge_export
+      const caps = buildCapabilitySet(conn, agentId as string);
+      if (!caps.granted.includes('knowledge_export')) {
+        return capabilityDenied('knowledge_export', 'agent lacks knowledge_export capability');
+      }
+
       const trustLevel = row.trust_level as AgentTrustLevel;
       const agentClearance = TRUST_TO_CLEARANCE[trustLevel] ?? 0;
 
@@ -991,19 +1184,107 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
       const pkgId = randomUUID() as unknown as KnowledgePackageId;
       const actor = ctx.agentId as string ?? ctx.userId ?? 'system';
 
-      // Build the package (simplified -- queries claim_assertions for agent's claims)
       const maxClassification = options.classification ?? (['unrestricted', 'internal', 'confidential', 'restricted', 'critical'][agentClearance] as ClassificationLevel) ?? 'unrestricted';
+
+      // BK-07: Query actual claims from claim_assertions table
+      const claimRows = conn.query<{
+        id: string; subject: string; predicate: string; object_value: string;
+        confidence: number; valid_at: string; reasoning: string | null;
+        object_type: string;
+      }>(
+        `SELECT id, subject, predicate, object_value, confidence, valid_at, reasoning, object_type
+         FROM claim_assertions
+         WHERE source_agent_id = ? AND status = 'active' AND archived = 0`,
+        [agentId as string],
+      );
+
       const claims: ExportedClaim[] = [];
-      const techniques: ExportedTechnique[] = [];
-      const relationships: ExportedRelationship[] = [];
       const domains = new Set<string>();
+
+      for (const cr of claimRows) {
+        // Filter by domain if specified
+        const domain = cr.predicate.split('.')[0] ?? '';
+        if (options.domains && options.domains.length > 0 && !options.domains.includes(domain)) continue;
+        // Filter by min confidence
+        if (options.minConfidence !== undefined && cr.confidence < options.minConfidence) continue;
+
+        domains.add(domain);
+        // Determine claim classification based on clearance (conservative: unrestricted default)
+        const claimClassification: ClassificationLevel = 'unrestricted';
+
+        claims.push({
+          originalId: cr.id as ClaimId,
+          subject: cr.subject,
+          predicate: cr.predicate,
+          value: cr.object_value,
+          confidence: cr.confidence,
+          classification: claimClassification,
+          reasoning: cr.reasoning,
+          createdAt: cr.valid_at,
+        });
+      }
+
+      // BK-07: Query techniques if requested
+      const techniques: ExportedTechnique[] = [];
+      if (options.includeTechniques !== false) {
+        try {
+          const techRows = conn.query<{
+            id: string; description: string; domain: string; status: string;
+            success_rate: number; evaluation_count: number;
+          }>(
+            `SELECT id, description, domain, status, success_rate, evaluation_count
+             FROM tgp_techniques WHERE source_agent_id = ?`,
+            [agentId as string],
+          );
+          for (const tr of techRows) {
+            techniques.push({
+              originalId: tr.id as ClaimId,
+              description: tr.description,
+              domain: tr.domain,
+              status: tr.status as 'candidate' | 'active' | 'suspended' | 'retired',
+              successRate: tr.success_rate ?? 0,
+              evaluationCount: tr.evaluation_count ?? 0,
+            });
+          }
+        } catch {
+          // tgp_techniques table may not exist
+        }
+      }
+
+      // BK-07: Query relationships if requested
+      const relationships: ExportedRelationship[] = [];
+      if (options.includeRelationships !== false && claims.length > 0) {
+        try {
+          const claimIds = claims.map(c => c.originalId as string);
+          // Query relationships where either side is one of the agent's claims
+          const placeholders = claimIds.map(() => '?').join(',');
+          const relRows = conn.query<{
+            from_claim_id: string; to_claim_id: string; type: string;
+          }>(
+            `SELECT from_claim_id, to_claim_id, type FROM claim_relationships
+             WHERE from_claim_id IN (${placeholders}) OR to_claim_id IN (${placeholders})`,
+            [...claimIds, ...claimIds],
+          );
+          for (const rr of relRows) {
+            relationships.push({
+              fromClaimOriginalId: rr.from_claim_id as ClaimId,
+              toClaimOriginalId: rr.to_claim_id as ClaimId,
+              type: rr.type as import('../adapters/shared/types.js').RelationshipType,
+            });
+          }
+        } catch {
+          // claim_relationships table may not exist
+        }
+      }
 
       // Serialize and compute checksum (LM-7.16)
       const serialized = JSON.stringify({ claims, techniques, relationships });
       const checksum = createHash('sha256').update(serialized).digest('hex');
 
-      appendAudit(conn, actor, 'lifecycle.knowledge.exported', 'agent', agentId as string,
+      // BK-05: Audit is fail-closed
+      const auditResult = appendAudit(conn, actor, 'lifecycle.knowledge.exported', 'agent', agentId as string,
         { packageId: pkgId as string, format: options.format, claimCount: claims.length });
+      if (!auditResult.ok) return auditResult;
 
       // LM-8.14
       emitEvent('knowledge:exported', agentId as string, { packageId: pkgId as string });
@@ -1033,6 +1314,12 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
       if (!check.ok) return check;
       const row = check.value;
 
+      // BK-03: Capability gate — LM-14.04 requires knowledge_import
+      const caps = buildCapabilitySet(conn, agentId as string);
+      if (!caps.granted.includes('knowledge_import')) {
+        return capabilityDenied('knowledge_import', 'agent lacks knowledge_import capability');
+      }
+
       const startMs = Date.now();
       const trustLevel = row.trust_level as AgentTrustLevel;
       const agentClearance = TRUST_TO_CLEARANCE[trustLevel] ?? 0;
@@ -1055,30 +1342,69 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
       }
 
       // LM-13.10, LM-13.11: Cap confidence at 0.5 by default
-      // confidenceCap would be applied to each imported claim's confidence
+      const confidenceCap = options?.confidenceCap ?? 0.5;
       const conflictStrategy = options?.conflictStrategy ?? 'skip';
 
-      // Simplified import -- in production would iterate claims and apply conflict strategy
-      const imported = pkg.claims.length;
-      const skipped = 0;
-      const conflicts = 0;
+      // BK-08: Real import — write imported claims to the database
+      let imported = 0;
+      let skipped = 0;
+      let conflicts = 0;
+      const newClaimIds: ClaimId[] = [];
+      const now = time.nowISO();
 
-      const duration = Date.now() - startMs;
+      return conn.transaction(() => {
+        for (const claim of pkg.claims) {
+          // Check for conflicts — existing claim with same subject+predicate
+          const existing = conn.get<{ id: string }>(
+            `SELECT id FROM claim_assertions WHERE subject = ? AND predicate = ? AND source_agent_id = ? AND status = 'active'`,
+            [claim.subject, claim.predicate, agentId as string],
+          );
 
-      appendAudit(conn, actor, 'lifecycle.knowledge.imported', 'agent', agentId as string,
-        { packageId: pkg.id as string, imported, skipped, conflicts, format: pkg.format });
+          if (existing) {
+            if (conflictStrategy === 'skip') {
+              skipped++;
+              continue;
+            } else if (conflictStrategy === 'override') {
+              // Retract the existing claim
+              conn.run(
+                `UPDATE claim_assertions SET status = 'retracted' WHERE id = ?`,
+                [existing.id],
+              );
+            }
+            conflicts++;
+          }
 
-      // LM-8.15
-      emitEvent('knowledge:imported', agentId as string, { packageId: pkg.id as string, imported });
+          // Insert the imported claim with capped confidence
+          const newId = randomUUID() as ClaimId;
+          const cappedConfidence = Math.min(claim.confidence, confidenceCap);
+          conn.run(
+            `INSERT INTO claim_assertions (id, tenant_id, subject, predicate, object_type, object_value, confidence, valid_at, source_agent_id, grounding_mode, status, archived)
+             VALUES (?, NULL, ?, ?, 'string', ?, ?, ?, ?, 'evidence_path', 'active', 0)`,
+            [newId as string, claim.subject, claim.predicate, typeof claim.value === 'string' ? claim.value : JSON.stringify(claim.value), cappedConfidence, now, agentId as string],
+          );
+          newClaimIds.push(newId);
+          imported++;
+        }
 
-      return ok<KnowledgeImportResult>({
-        imported,
-        skipped,
-        conflicts,
-        branchCreated: conflictStrategy === 'branch' && conflicts > 0,
-        branchId: null,
-        newClaimIds: [],
-        duration,
+        const duration = Date.now() - startMs;
+
+        // BK-05: Audit is fail-closed
+        const auditResult = appendAudit(conn, actor, 'lifecycle.knowledge.imported', 'agent', agentId as string,
+          { packageId: pkg.id as string, imported, skipped, conflicts, format: pkg.format });
+        if (!auditResult.ok) return auditResult;
+
+        // LM-8.15
+        emitEvent('knowledge:imported', agentId as string, { packageId: pkg.id as string, imported });
+
+        return ok<KnowledgeImportResult>({
+          imported,
+          skipped,
+          conflicts,
+          branchCreated: conflictStrategy === 'branch' && conflicts > 0,
+          branchId: null,
+          newClaimIds,
+          duration,
+        });
       });
     },
 
@@ -1129,8 +1455,9 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
 
       if (!importResult.ok) return importResult;
 
-      appendAudit(conn, actor, 'lifecycle.knowledge.transferred', 'agent', fromAgentId as string,
+      const auditResult = appendAudit(conn, actor, 'lifecycle.knowledge.transferred', 'agent', fromAgentId as string,
         { fromAgentId: fromAgentId as string, toAgentId: toAgentId as string, transferred: importResult.value.imported });
+      if (!auditResult.ok) return auditResult;
 
       // LM-14.28
       emitEvent('knowledge:exported', fromAgentId as string, { toAgentId: toAgentId as string });
@@ -1167,7 +1494,11 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
           data: evt.payload as Readonly<Record<string, unknown>>,
         });
       });
-      const subId = result.ok ? result.value : randomUUID();
+      // BK-02: Propagate subscription failure instead of silently swallowing
+      if (!result.ok) {
+        throw new Error(`Event subscription failed for pattern '${pattern}': ${result.error.message}`);
+      }
+      const subId = result.value;
       subscriptions.set(subId, { pattern });
       return subId;
     },

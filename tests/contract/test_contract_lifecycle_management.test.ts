@@ -82,6 +82,27 @@ function validSpec(overrides?: Partial<AgentRegistrationSpec>): AgentRegistratio
   };
 }
 
+/**
+ * BK-03: Helper to promote agent to medium trust (grants knowledge_export/knowledge_import)
+ */
+async function promoteToMedium(client: AgentLifecycleClient, ctx: OperationContext, agentId: AgentId): Promise<void> {
+  await client.promoteAgent(ctx, agentId, {
+    targetLevel: 'low', justification: 'test', evidence: [],
+  });
+  await client.promoteAgent(ctx, agentId, {
+    targetLevel: 'medium', justification: 'test',
+    evidence: [
+      { type: 'session_count', value: 10, description: '10 sessions' },
+      { type: 'governance_compliance', value: 0, description: '0 refusals' },
+    ],
+  });
+  // Grant knowledge capabilities at medium trust
+  await client.requestCapabilityUpgrade(ctx, agentId, {
+    capabilities: ['knowledge_export', 'knowledge_import'] as AgentCapability[],
+    justification: 'test setup',
+  });
+}
+
 // ============================================================================
 // 1. Registration & Identity (LM-2.01 through LM-2.05)
 // ============================================================================
@@ -469,11 +490,14 @@ describe('AgentLifecycleClient — Trust Promotion', () => {
     });
     assert.ok(!noEvidence.ok);
 
-    // Try medium with sufficient evidence
+    // Try medium with sufficient evidence (BK-11: governance_compliance is now REQUIRED)
     const withEvidence = await h.client.promoteAgent(h.ctx, reg.value.id, {
       targetLevel: 'medium',
       justification: 'proven track record',
-      evidence: [{ type: 'session_count', value: 15, description: '15 sessions' }],
+      evidence: [
+        { type: 'session_count', value: 15, description: '15 sessions' },
+        { type: 'governance_compliance', value: 0, description: '0 refusals in 24h' },
+      ],
     });
     assert.ok(withEvidence.ok);
     assert.equal(withEvidence.value.newLevel, 'medium');
@@ -489,7 +513,10 @@ describe('AgentLifecycleClient — Trust Promotion', () => {
     });
     await h.client.promoteAgent(h.ctx, reg.value.id, {
       targetLevel: 'medium', justification: 'r',
-      evidence: [{ type: 'session_count', value: 20, description: '20' }],
+      evidence: [
+        { type: 'session_count', value: 20, description: '20' },
+        { type: 'governance_compliance', value: 0, description: '0 refusals' },
+      ],
     });
 
     // Try high without human endorsement
@@ -730,6 +757,8 @@ describe('AgentLifecycleClient — Knowledge Exchange', () => {
   it('LM-2.17: exportKnowledge returns a KnowledgePackage with checksum', async () => {
     const reg = await h.client.registerAgent(h.ctx, validSpec({ name: 'export-test' }));
     assert.ok(reg.ok);
+    // BK-03: promote to medium to get knowledge_export capability
+    await promoteToMedium(h.client, h.ctx, reg.value.id);
 
     const options: KnowledgeExportOptions = { format: 'limen_native' };
     const result = await h.client.exportKnowledge(h.ctx, reg.value.id, options);
@@ -744,10 +773,12 @@ describe('AgentLifecycleClient — Knowledge Exchange', () => {
   it('LM-13.12: export respects classification ceiling', async () => {
     const reg = await h.client.registerAgent(h.ctx, validSpec({ name: 'export-class' }));
     assert.ok(reg.ok);
-    // untrusted has clearance 0 (unrestricted only)
+    // BK-03: promote to medium (clearance 2) and grant knowledge_export
+    await promoteToMedium(h.client, h.ctx, reg.value.id);
+    // medium has clearance 2 — cannot access restricted (clearance 3)
     const options: KnowledgeExportOptions = {
       format: 'limen_native',
-      classification: 'restricted', // clearance 3, agent has 0
+      classification: 'restricted', // clearance 3, agent has 2
     };
     const result = await h.client.exportKnowledge(h.ctx, reg.value.id, options);
     assert.ok(!result.ok);
@@ -757,6 +788,8 @@ describe('AgentLifecycleClient — Knowledge Exchange', () => {
   it('LM-2.18: importKnowledge validates checksum integrity', async () => {
     const reg = await h.client.registerAgent(h.ctx, validSpec({ name: 'import-test' }));
     assert.ok(reg.ok);
+    // BK-03: promote to medium to get knowledge_export/import capabilities
+    await promoteToMedium(h.client, h.ctx, reg.value.id);
 
     // Export first to get a valid package
     const exp = await h.client.exportKnowledge(h.ctx, reg.value.id, { format: 'limen_native' });
@@ -771,6 +804,8 @@ describe('AgentLifecycleClient — Knowledge Exchange', () => {
   it('LM-9.12: import with tampered checksum fails', async () => {
     const reg = await h.client.registerAgent(h.ctx, validSpec({ name: 'import-tamper' }));
     assert.ok(reg.ok);
+    // BK-03: promote to medium to get knowledge capabilities
+    await promoteToMedium(h.client, h.ctx, reg.value.id);
 
     const exp = await h.client.exportKnowledge(h.ctx, reg.value.id, { format: 'limen_native' });
     assert.ok(exp.ok);
@@ -1141,10 +1176,13 @@ describe('Trust Promotion — State Machine', () => {
     });
     assert.ok(toLow.ok);
 
-    // low -> medium
+    // low -> medium (BK-11: governance_compliance now required)
     const toMedium = await h.client.promoteAgent(h.ctx, reg.value.id, {
       targetLevel: 'medium', justification: 'proven',
-      evidence: [{ type: 'session_count', value: 50, description: '50 sessions' }],
+      evidence: [
+        { type: 'session_count', value: 50, description: '50 sessions' },
+        { type: 'governance_compliance', value: 0, description: '0 refusals' },
+      ],
     });
     assert.ok(toMedium.ok);
 

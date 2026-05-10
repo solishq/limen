@@ -189,11 +189,22 @@ export function validatePromotion(
   // LM-11.04: medium requires 10+ ops, 0 governance refusals in 24h
   if (targetLevel === 'medium') {
     const sessionEvidence = evidence.find(e => e.type === 'session_count');
-    if (!sessionEvidence || (typeof sessionEvidence.value === 'number' && sessionEvidence.value < 10)) {
+    // BK-11: Validate sessionEvidence.value is actually a number before comparison
+    const sessionCount = sessionEvidence
+      ? (typeof sessionEvidence.value === 'number' ? sessionEvidence.value : Number(sessionEvidence.value))
+      : 0;
+    if (!sessionEvidence || isNaN(sessionCount) || sessionCount < 10) {
       return rejected('medium trust requires 10+ successful operations');
     }
+    // BK-11: governance_compliance is REQUIRED for medium promotion (fail-closed)
     const complianceEvidence = evidence.find(e => e.type === 'governance_compliance');
-    if (complianceEvidence && typeof complianceEvidence.value === 'number' && complianceEvidence.value > 0) {
+    if (!complianceEvidence) {
+      return rejected('medium trust requires governance_compliance evidence (fail-closed)');
+    }
+    const complianceValue = typeof complianceEvidence.value === 'number'
+      ? complianceEvidence.value
+      : Number(complianceEvidence.value);
+    if (isNaN(complianceValue) || complianceValue > 0) {
       return rejected('medium trust requires 0 governance refusals in last 24h');
     }
   }

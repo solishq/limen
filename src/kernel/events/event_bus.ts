@@ -41,7 +41,7 @@ interface Subscription {
  * Rejects regex metacharacters to prevent ReDoS and unintended matching.
  * S ref: RDD-4 (pattern-based subscription)
  */
-const SAFE_GLOB_PATTERN = /^[a-zA-Z0-9.*_-]+$/;
+const SAFE_GLOB_PATTERN = /^[a-zA-Z0-9.*_:/-]+$/;
 
 /**
  * Check if an event type matches a subscription pattern.

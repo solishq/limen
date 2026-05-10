@@ -131,6 +131,8 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'lifecycle.listAgents': { permission: 'view_telemetry' },
   'lifecycle.updateAgent': { permission: 'modify_agent' },
   'lifecycle.decommissionAgent': { permission: 'delete_agent' },
+  'lifecycle.suspendAgent': { permission: 'modify_agent' },        // BK-04: suspension
+  'lifecycle.reactivateAgent': { permission: 'modify_agent' },     // BK-04: reactivation
   'lifecycle.requestCapabilityUpgrade': { permission: 'modify_agent' },
   'lifecycle.revokeCapability': { permission: 'modify_agent' },
   'lifecycle.getCapabilities': { permission: 'view_telemetry' },

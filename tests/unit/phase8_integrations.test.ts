@@ -941,8 +941,8 @@ describe('Phase 8: Dependency Boundary', () => {
     const files = fs.readdirSync(migrationDir).filter(f => f.endsWith('.ts')).sort();
     const lastMig = files[files.length - 1]!;
     assert.ok(
-      lastMig.includes('048') || lastMig.includes('047') || lastMig.includes('046') || lastMig.includes('036') || lastMig.includes('035') || lastMig.includes('034') || lastMig.includes('033') || lastMig.includes('032'),
-      `Last migration should be 032-048 (Phase 5 through Phase 12 + fixes + lifecycle). Got: ${lastMig}`,
+      lastMig.includes('049') || lastMig.includes('048') || lastMig.includes('047') || lastMig.includes('046') || lastMig.includes('036') || lastMig.includes('035') || lastMig.includes('034') || lastMig.includes('033') || lastMig.includes('032'),
+      `Last migration should be 032-049 (Phase 5 through Phase 12 + fixes + lifecycle + remediation). Got: ${lastMig}`,
     );
   });
 });

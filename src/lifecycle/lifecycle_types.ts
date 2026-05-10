@@ -15,12 +15,15 @@
  */
 
 import type {
-  AgentId, TenantId, ConsentId, ClaimId,
+  AgentId, TenantId, ConsentId, ClaimId, UserId,
   AgentTrustLevel, AgentCapability, AgentFramework,
   ClassificationLevel, ConsentableOperation, ConsentPurpose,
   OperationContext, Result, AgentEventHandler,
   AgentEvent, RelationshipType,
 } from '../adapters/shared/types.js';
+
+// BK-18: Import canonical technique status type
+import type { TGPTechniqueStatus } from '../techniques/interfaces/tgp_types.js';
 
 // ============================================================================
 // Branded ID Types (AD-2)
@@ -45,7 +48,7 @@ export interface AgentRegistrationSpec {
   readonly capabilities: readonly AgentCapability[];          // LM-3.05
   readonly requestedTrustLevel?: AgentTrustLevel;             // LM-3.06: defaults to 'untrusted'
   readonly metadata?: Readonly<Record<string, unknown>>;      // LM-3.07
-  readonly owner: string;                                     // LM-3.08: UserId | AgentId (string at this layer)
+  readonly owner: UserId | AgentId;                           // LM-3.08: BK-14 fix — proper branded types
 }
 
 /** LM-3.42 through LM-3.50: Agent statistics (computed on read, LM-13.22) */
@@ -76,7 +79,7 @@ export interface RegisteredAgent {
   readonly trustLevel: AgentTrustLevel;                       // LM-3.16
   readonly coreTrustLevel: CoreTrustLevel;                    // LM-3.17: derived via S5 mapping
   readonly clearanceLevel: number;                            // LM-3.18: derived via TRUST_TO_CLEARANCE
-  readonly owner: string;                                     // LM-3.19
+  readonly owner: UserId | AgentId;                           // LM-3.19: BK-14 fix — proper branded types
   readonly metadata: Readonly<Record<string, unknown>>;       // LM-3.20
   readonly statistics: AgentStatistics;                        // LM-3.21
   readonly registeredAt: string;                              // LM-3.22 (ISO-8601)
@@ -120,6 +123,25 @@ export interface DecommissionResult {
 }
 
 // ============================================================================
+// Section 3b: Suspension & Reactivation (BK-04, LM-10.04, LM-10.06)
+// ============================================================================
+
+/** LM-10.04: Suspension result */
+export interface SuspensionResult {
+  readonly agentId: AgentId;
+  readonly suspendedAt: string;
+  readonly reason: string;
+  readonly previousState: AgentState;
+}
+
+/** LM-10.06: Reactivation result */
+export interface ReactivationResult {
+  readonly agentId: AgentId;
+  readonly reactivatedAt: string;
+  readonly previousState: AgentState;
+}
+
+// ============================================================================
 // Section 4: Capability Management Data Models (LM-4)
 // ============================================================================
 
@@ -148,7 +170,7 @@ export interface CapabilityDecision {
   readonly requestedCapabilities: readonly AgentCapability[];  // LM-4.09
   readonly granted: readonly AgentCapability[];                // LM-4.10
   readonly denied: readonly CapabilityDenial[];                // LM-4.11
-  readonly decidedBy: string;                                  // LM-4.12: UserId | 'system'
+  readonly decidedBy: UserId | AgentId | 'system';              // LM-4.12: BK-15 fix — proper typed union
   readonly decidedAt: string;                                  // LM-4.13 (ISO-8601)
 }
 
@@ -157,7 +179,7 @@ export interface CapabilityHistoryEntry {
   readonly capability: AgentCapability;                        // LM-4.16
   readonly action: 'granted' | 'revoked' | 'requested' | 'denied';  // LM-4.17
   readonly reason: string;                                     // LM-4.18
-  readonly decidedBy: string;                                  // LM-4.19: UserId | 'system'
+  readonly decidedBy: UserId | AgentId | 'system';              // LM-4.19: BK-15 fix — proper typed union
   readonly timestamp: string;                                  // LM-4.20 (ISO-8601)
 }
 
@@ -193,7 +215,7 @@ export interface TrustPromotionResult {
   readonly previousLevel: AgentTrustLevel;                     // LM-5.10
   readonly newLevel: AgentTrustLevel;                          // LM-5.11
   readonly capabilitiesUnlocked: readonly AgentCapability[];   // LM-5.12
-  readonly decidedBy: string;                                  // LM-5.13: UserId | 'system'
+  readonly decidedBy: UserId | AgentId | 'system';              // LM-5.13: BK-15 fix — proper typed union
   readonly decidedAt: string;                                  // LM-5.14 (ISO-8601)
 }
 
@@ -204,7 +226,7 @@ export interface DemotionResult {
   readonly newLevel: AgentTrustLevel;                          // LM-5.17
   readonly capabilitiesRevoked: readonly AgentCapability[];    // LM-5.18
   readonly reason: string;                                     // LM-5.19
-  readonly decidedBy: string;                                  // LM-5.20: UserId | 'system'
+  readonly decidedBy: UserId | AgentId | 'system';              // LM-5.20: BK-15 fix — proper typed union
   readonly decidedAt: string;                                  // LM-5.21 (ISO-8601)
 }
 
@@ -297,7 +319,7 @@ export interface ExportedTechnique {
   readonly originalId: ClaimId;                    // LM-7.30
   readonly description: string;                    // LM-7.31
   readonly domain: string;                         // LM-7.32
-  readonly status: 'candidate' | 'active' | 'suspended' | 'retired'; // LM-7.33
+  readonly status: TGPTechniqueStatus;                        // LM-7.33: BK-18 fix — canonical type
   readonly successRate: number;                    // LM-7.34
   readonly evaluationCount: number;                // LM-7.35
 }
@@ -373,6 +395,10 @@ export interface AgentLifecycleClient {
   listAgents(filter?: AgentFilter): Promise<Result<readonly RegisteredAgent[]>>;
   updateAgent(ctx: OperationContext, agentId: AgentId, update: AgentUpdate): Promise<Result<RegisteredAgent>>;
   decommissionAgent(ctx: OperationContext, agentId: AgentId, reason: string): Promise<Result<DecommissionResult>>;
+
+  // Suspension & Reactivation (BK-04: LM-10.04, LM-10.06, LM-8.04, LM-8.05)
+  suspendAgent(ctx: OperationContext, agentId: AgentId, reason: string): Promise<Result<SuspensionResult>>;
+  reactivateAgent(ctx: OperationContext, agentId: AgentId): Promise<Result<ReactivationResult>>;
 
   // Capability Management (LM-2.06 through LM-2.09)
   requestCapabilityUpgrade(ctx: OperationContext, agentId: AgentId, request: CapabilityRequest): Promise<Result<CapabilityDecision>>;

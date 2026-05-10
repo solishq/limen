@@ -78,8 +78,9 @@ export type ClassificationLevel = 'unrestricted' | 'internal' | 'confidential' |
 // ── SHARED_TYPES.md S21 -- AgentFramework ──
 
 /** SHARED_TYPES.md S21 -- 10-value framework enum */
+/** SHARED_TYPES.md S21 -- 10-value framework enum (AgentFramework type) */
 export type AgentFramework =
-  | 'claude' | 'agents_sdk' | 'openclaw' | 'hermes' | 'gemma'
+  | 'claude' | 'codex' | 'openclaw' | 'hermes' | 'gemma' // framework enum values
   | 'crew_ai' | 'auto_gen' | 'semantic_kernel' | 'llama_index' | 'custom';
 
 // ── SHARED_TYPES.md S1.2, S1.3 ──

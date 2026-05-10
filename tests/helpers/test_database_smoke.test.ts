@@ -29,7 +29,7 @@ describe('Test Database Harness', () => {
       `SELECT MAX(version) as version FROM core_migrations WHERE status = 'applied'`
     );
     assert.ok(version, 'core_migrations table must exist');
-    assert.equal(version.version, 48, 'All 48 migrations must be applied');
+    assert.equal(version.version, 49, 'All 49 migrations must be applied');
 
     conn.close();
   });
@@ -165,7 +165,7 @@ describe('Test Database Harness', () => {
     const version = deps.conn.get<{ version: number }>(
       `SELECT MAX(version) as version FROM core_migrations WHERE status = 'applied'`
     );
-    assert.equal(version?.version, 48);
+    assert.equal(version?.version, 49);
 
     conn.close();
   });
