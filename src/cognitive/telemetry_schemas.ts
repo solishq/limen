@@ -1,78 +1,146 @@
 // @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
 // @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1
 /**
- * FR-004: Telemetry Schemas — Zod validation for operational telemetry data.
+ * FR-004: Telemetry Schemas — Hand-written validation for operational telemetry data.
  *
- * Defines 3 Zod schemas for telemetry data standardization:
+ * Defines 3 validators for telemetry data standardization:
  * - telemetry.cost: Cost ledger entries (model, tokens, cost, purpose)
  * - telemetry.vital: Operational vital signals (contextPct, quality, costRate)
  * - telemetry.audit: Audit trail entries (action, target, authorized)
  *
  * Design decisions:
- * - Zod `.strict()` on all schemas: unknown fields are rejected, not silently dropped.
+ * - Strict validation on all schemas: unknown fields are rejected, not silently dropped.
  *   This prevents schema evolution accidents where an agent sends v2 fields to a v1 engine.
  * - `validateTelemetry()` returns Result<void> to match Limen's error model.
  * - The VALID_TELEMETRY_PREDICATES set is the source of truth for namespace membership.
  * - Follows the FR-001 output_primitives pattern for consistency.
+ * - Zero external dependencies: hand-written validators replace Zod (1-dependency promise).
  *
  * Spec ref: v4.0.0 Phase 7 FR-004
  * QAL: 3 (Knowledge integrity. Failure = corrupted telemetry data.)
  */
 
-import { z } from 'zod';
 import type { Result } from '../kernel/interfaces/index.js';
 
 // ============================================================================
-// Telemetry Schemas
+// Validation Internals
 // ============================================================================
 
-/**
- * telemetry.cost — A cost ledger entry recording LLM/API consumption.
- */
-export const TelemetryCostSchema = z.object({
-  model: z.string().min(1),
-  tokens: z.number().int().min(0),
-  cost: z.number().min(0),
-  purpose: z.enum(['primary', 'fallback', 'routing']),
-}).strict();
+/** Internal validation result for composing validators. */
+type ValidationResult<T> =
+  | { success: true; data: T }
+  | { success: false; errors: string[] };
 
-/**
- * telemetry.vital — An operational vital signal snapshot.
- */
-export const TelemetryVitalSchema = z.object({
-  contextPct: z.number().min(0).max(100),
-  quality: z.enum(['OK', 'DEGRADED', 'CRITICAL']),
-  costRate: z.number().min(0),
-}).strict();
+function assertObject(value: unknown): ValidationResult<Record<string, unknown>> {
+  if (value === null || value === undefined || typeof value !== 'object' || Array.isArray(value)) {
+    return { success: false, errors: ['Expected an object'] };
+  }
+  return { success: true, data: value as Record<string, unknown> };
+}
 
-/**
- * telemetry.audit — An audit trail entry recording an action.
- */
-export const TelemetryAuditSchema = z.object({
-  action: z.string().min(1),
-  target: z.string().min(1),
-  authorized: z.boolean(),
-}).strict();
+function unknownKeys(obj: Record<string, unknown>, allowed: ReadonlySet<string>): string[] {
+  const extra: string[] = [];
+  for (const key of Object.keys(obj)) {
+    if (!allowed.has(key)) extra.push(key);
+  }
+  return extra;
+}
+
+function requireString(obj: Record<string, unknown>, field: string, minLen = 1): string | null {
+  const v = obj[field];
+  if (typeof v !== 'string') return `${field} must be a string`;
+  if (v.length < minLen) return `${field} must be at least ${minLen} character(s)`;
+  return null;
+}
+
+function requireNumber(obj: Record<string, unknown>, field: string, opts?: { min?: number; max?: number; int?: boolean }): string | null {
+  const v = obj[field];
+  if (typeof v !== 'number' || Number.isNaN(v)) return `${field} must be a number`;
+  if (opts?.int && !Number.isInteger(v)) return `${field} must be an integer`;
+  if (opts?.min !== undefined && v < opts.min) return `${field} must be >= ${opts.min}`;
+  if (opts?.max !== undefined && v > opts.max) return `${field} must be <= ${opts.max}`;
+  return null;
+}
+
+function requireBoolean(obj: Record<string, unknown>, field: string): string | null {
+  if (typeof obj[field] !== 'boolean') return `${field} must be a boolean`;
+  return null;
+}
+
+function requireEnum(obj: Record<string, unknown>, field: string, values: readonly string[]): string | null {
+  const v = obj[field];
+  if (typeof v !== 'string' || !values.includes(v)) return `${field} must be one of: ${values.join(', ')}`;
+  return null;
+}
+
+// ============================================================================
+// Per-Schema Validators
+// ============================================================================
+
+type ValidatorFn = (value: unknown) => ValidationResult<unknown>;
+
+const COST_KEYS = new Set(['model', 'tokens', 'cost', 'purpose']);
+function validateCost(value: unknown): ValidationResult<unknown> {
+  const objResult = assertObject(value);
+  if (!objResult.success) return objResult;
+  const obj = objResult.data;
+  const errors: string[] = [];
+  const extra = unknownKeys(obj, COST_KEYS);
+  if (extra.length) errors.push(`Unrecognized key(s): ${extra.join(', ')}`);
+  const e1 = requireString(obj, 'model'); if (e1) errors.push(e1);
+  const e2 = requireNumber(obj, 'tokens', { int: true, min: 0 }); if (e2) errors.push(e2);
+  const e3 = requireNumber(obj, 'cost', { min: 0 }); if (e3) errors.push(e3);
+  const e4 = requireEnum(obj, 'purpose', ['primary', 'fallback', 'routing'] as const); if (e4) errors.push(e4);
+  return errors.length ? { success: false, errors } : { success: true, data: obj };
+}
+
+const VITAL_KEYS = new Set(['contextPct', 'quality', 'costRate']);
+function validateVital(value: unknown): ValidationResult<unknown> {
+  const objResult = assertObject(value);
+  if (!objResult.success) return objResult;
+  const obj = objResult.data;
+  const errors: string[] = [];
+  const extra = unknownKeys(obj, VITAL_KEYS);
+  if (extra.length) errors.push(`Unrecognized key(s): ${extra.join(', ')}`);
+  const e1 = requireNumber(obj, 'contextPct', { min: 0, max: 100 }); if (e1) errors.push(e1);
+  const e2 = requireEnum(obj, 'quality', ['OK', 'DEGRADED', 'CRITICAL'] as const); if (e2) errors.push(e2);
+  const e3 = requireNumber(obj, 'costRate', { min: 0 }); if (e3) errors.push(e3);
+  return errors.length ? { success: false, errors } : { success: true, data: obj };
+}
+
+const AUDIT_KEYS = new Set(['action', 'target', 'authorized']);
+function validateAudit(value: unknown): ValidationResult<unknown> {
+  const objResult = assertObject(value);
+  if (!objResult.success) return objResult;
+  const obj = objResult.data;
+  const errors: string[] = [];
+  const extra = unknownKeys(obj, AUDIT_KEYS);
+  if (extra.length) errors.push(`Unrecognized key(s): ${extra.join(', ')}`);
+  const e1 = requireString(obj, 'action'); if (e1) errors.push(e1);
+  const e2 = requireString(obj, 'target'); if (e2) errors.push(e2);
+  const e3 = requireBoolean(obj, 'authorized'); if (e3) errors.push(e3);
+  return errors.length ? { success: false, errors } : { success: true, data: obj };
+}
 
 // ============================================================================
 // Schema Registry
 // ============================================================================
 
 /**
- * Map from telemetry.* predicate to its Zod schema.
+ * Map from telemetry.* predicate to its validator function.
  * This is the single source of truth for which predicates are valid telemetry types
  * and what shape they require.
  */
-export const TELEMETRY_SCHEMAS: Readonly<Record<string, z.ZodTypeAny>> = {
-  'telemetry.cost': TelemetryCostSchema,
-  'telemetry.vital': TelemetryVitalSchema,
-  'telemetry.audit': TelemetryAuditSchema,
+const TELEMETRY_VALIDATORS: Readonly<Record<string, ValidatorFn>> = {
+  'telemetry.cost': validateCost,
+  'telemetry.vital': validateVital,
+  'telemetry.audit': validateAudit,
 };
 
 /**
  * Set of valid telemetry.* predicates for fast membership checks.
  */
-export const VALID_TELEMETRY_PREDICATES = new Set(Object.keys(TELEMETRY_SCHEMAS));
+export const VALID_TELEMETRY_PREDICATES = new Set(Object.keys(TELEMETRY_VALIDATORS));
 
 /**
  * Check if a predicate belongs to the telemetry.* namespace.
@@ -112,8 +180,8 @@ export function validateTelemetry(predicate: string, value: unknown): Result<voi
   }
 
   // Check if known telemetry type
-  const schema = TELEMETRY_SCHEMAS[predicate];
-  if (!schema) {
+  const validator = TELEMETRY_VALIDATORS[predicate];
+  if (!validator) {
     return {
       ok: false,
       error: {
@@ -125,11 +193,9 @@ export function validateTelemetry(predicate: string, value: unknown): Result<voi
   }
 
   // Validate against schema
-  const parseResult = schema.safeParse(value);
-  if (!parseResult.success) {
-    const issues = parseResult.error.issues
-      .map(i => `${i.path.join('.')}: ${i.message}`)
-      .join('; ');
+  const result = validator(value);
+  if (!result.success) {
+    const issues = result.errors.join('; ');
     return {
       ok: false,
       error: {

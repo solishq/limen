@@ -3,121 +3,234 @@
 /**
  * FR-001: Semantic Output Primitives for AAS Agent Output.
  *
- * Defines Zod validation schemas for 7 output primitive types that agents
+ * Defines hand-written validation for 7 output primitive types that agents
  * produce as structured claims in Limen. Each primitive maps to an `output.*`
  * predicate namespace and enforces strict schema validation.
  *
  * Design decisions:
- * - Zod `.strict()` on all schemas: unknown fields are rejected, not silently dropped.
+ * - Strict validation on all schemas: unknown fields are rejected, not silently dropped.
  *   This prevents schema evolution accidents where an agent sends v2 fields to a v1 engine.
  * - `validateOutputPrimitive()` returns Result<void> to match Limen's error model.
  * - The VALID_OUTPUT_PREDICATES set is the source of truth for namespace membership.
+ * - Zero external dependencies: hand-written validators replace Zod (1-dependency promise).
  *
  * Spec ref: v4.0.0 Phase 4 FR-001
  * QAL: 3 (Knowledge integrity. Failure = corrupted intelligence.)
  */
 
-import { z } from 'zod';
 import type { Result } from '../kernel/interfaces/index.js';
 
 // ============================================================================
-// Output Primitive Schemas
+// Validation Internals
 // ============================================================================
 
-/**
- * output.assertion — A factual claim an agent asserts to be true.
- */
-export const AssertionPrimitiveSchema = z.object({
-  content: z.string().min(1),
-  confidence: z.number().min(0).max(1),
-  verifiable: z.boolean(),
-}).strict();
+/** Internal validation result for composing validators. */
+type ValidationResult<T> =
+  | { success: true; data: T }
+  | { success: false; errors: string[] };
 
 /**
- * output.judgment — An evaluative assessment of a subject.
+ * Assert `value` is a non-null object. Returns its keys for strict-mode checking.
  */
-export const JudgmentPrimitiveSchema = z.object({
-  subject: z.string().min(1),
-  assessment: z.string().min(1),
-  rationale: z.string().min(1),
-  score: z.number().optional(),
-}).strict();
+function assertObject(value: unknown): ValidationResult<Record<string, unknown>> {
+  if (value === null || value === undefined || typeof value !== 'object' || Array.isArray(value)) {
+    return { success: false, errors: ['Expected an object'] };
+  }
+  return { success: true, data: value as Record<string, unknown> };
+}
 
 /**
- * output.evidence — Supporting data for another claim.
+ * Collect unknown keys that are not in `allowed`.
  */
-export const EvidencePrimitiveSchema = z.object({
-  supports: z.string().min(1),     // claimId reference
-  data: z.string().min(1),
-  source: z.string().min(1),
-  freshness: z.enum(['live', 'cached', 'historical']),
-}).strict();
+function unknownKeys(obj: Record<string, unknown>, allowed: ReadonlySet<string>): string[] {
+  const extra: string[] = [];
+  for (const key of Object.keys(obj)) {
+    if (!allowed.has(key)) extra.push(key);
+  }
+  return extra;
+}
 
-/**
- * output.action — A proposed or executed action.
- */
-export const ActionPrimitiveSchema = z.object({
-  description: z.string().min(1),
-  rationale: z.string().min(1),
-  urgency: z.enum(['immediate', 'soon', 'background']),
-  reversible: z.boolean(),
-  requires_approval: z.boolean(),
-}).strict();
+function requireString(obj: Record<string, unknown>, field: string, minLen = 1): string | null {
+  const v = obj[field];
+  if (typeof v !== 'string') return `${field} must be a string`;
+  if (v.length < minLen) return `${field} must be at least ${minLen} character(s)`;
+  return null;
+}
 
-/**
- * output.question — A question requiring human or agent input.
- */
-export const QuestionPrimitiveSchema = z.object({
-  question: z.string().min(1),
-  context: z.string().min(1),
-  blocking: z.boolean(),
-  options: z.array(z.string()).optional(),
-  default: z.string().optional(),
-}).strict();
+function requireNumber(obj: Record<string, unknown>, field: string, opts?: { min?: number; max?: number; int?: boolean }): string | null {
+  const v = obj[field];
+  if (typeof v !== 'number' || Number.isNaN(v)) return `${field} must be a number`;
+  if (opts?.int && !Number.isInteger(v)) return `${field} must be an integer`;
+  if (opts?.min !== undefined && v < opts.min) return `${field} must be >= ${opts.min}`;
+  if (opts?.max !== undefined && v > opts.max) return `${field} must be <= ${opts.max}`;
+  return null;
+}
 
-/**
- * output.alert — A notification about a condition requiring attention.
- */
-export const AlertPrimitiveSchema = z.object({
-  severity: z.enum(['info', 'warning', 'critical']),
-  subject: z.string().min(1),
-  details: z.string().min(1),
-  action_required: z.boolean(),
-}).strict();
+function requireBoolean(obj: Record<string, unknown>, field: string): string | null {
+  if (typeof obj[field] !== 'boolean') return `${field} must be a boolean`;
+  return null;
+}
 
-/**
- * output.narrative — Structured content for communication.
- */
-export const NarrativePrimitiveSchema = z.object({
-  topic: z.string().min(1),
-  content: z.string().min(1),
-  audience: z.enum(['technical', 'business', 'general']),
-  depth: z.enum(['brief', 'moderate', 'detailed']),
-}).strict();
+function requireEnum(obj: Record<string, unknown>, field: string, values: readonly string[]): string | null {
+  const v = obj[field];
+  if (typeof v !== 'string' || !values.includes(v)) return `${field} must be one of: ${values.join(', ')}`;
+  return null;
+}
+
+function optionalNumber(obj: Record<string, unknown>, field: string): string | null {
+  if (obj[field] === undefined) return null;
+  return requireNumber(obj, field);
+}
+
+function optionalString(obj: Record<string, unknown>, field: string): string | null {
+  if (obj[field] === undefined) return null;
+  return requireString(obj, field, 1);
+}
+
+function optionalStringArray(obj: Record<string, unknown>, field: string): string | null {
+  if (obj[field] === undefined) return null;
+  if (!Array.isArray(obj[field])) return `${field} must be an array`;
+  for (let i = 0; i < (obj[field] as unknown[]).length; i++) {
+    if (typeof (obj[field] as unknown[])[i] !== 'string') return `${field}[${i}] must be a string`;
+  }
+  return null;
+}
+
+// ============================================================================
+// Per-Schema Validators
+// ============================================================================
+
+type ValidatorFn = (value: unknown) => ValidationResult<unknown>;
+
+const ASSERTION_KEYS = new Set(['content', 'confidence', 'verifiable']);
+function validateAssertion(value: unknown): ValidationResult<unknown> {
+  const objResult = assertObject(value);
+  if (!objResult.success) return objResult;
+  const obj = objResult.data;
+  const errors: string[] = [];
+  const extra = unknownKeys(obj, ASSERTION_KEYS);
+  if (extra.length) errors.push(`Unrecognized key(s): ${extra.join(', ')}`);
+  const e1 = requireString(obj, 'content'); if (e1) errors.push(e1);
+  const e2 = requireNumber(obj, 'confidence', { min: 0, max: 1 }); if (e2) errors.push(e2);
+  const e3 = requireBoolean(obj, 'verifiable'); if (e3) errors.push(e3);
+  return errors.length ? { success: false, errors } : { success: true, data: obj };
+}
+
+const JUDGMENT_KEYS = new Set(['subject', 'assessment', 'rationale', 'score']);
+function validateJudgment(value: unknown): ValidationResult<unknown> {
+  const objResult = assertObject(value);
+  if (!objResult.success) return objResult;
+  const obj = objResult.data;
+  const errors: string[] = [];
+  const extra = unknownKeys(obj, JUDGMENT_KEYS);
+  if (extra.length) errors.push(`Unrecognized key(s): ${extra.join(', ')}`);
+  const e1 = requireString(obj, 'subject'); if (e1) errors.push(e1);
+  const e2 = requireString(obj, 'assessment'); if (e2) errors.push(e2);
+  const e3 = requireString(obj, 'rationale'); if (e3) errors.push(e3);
+  const e4 = optionalNumber(obj, 'score'); if (e4) errors.push(e4);
+  return errors.length ? { success: false, errors } : { success: true, data: obj };
+}
+
+const EVIDENCE_KEYS = new Set(['supports', 'data', 'source', 'freshness']);
+function validateEvidence(value: unknown): ValidationResult<unknown> {
+  const objResult = assertObject(value);
+  if (!objResult.success) return objResult;
+  const obj = objResult.data;
+  const errors: string[] = [];
+  const extra = unknownKeys(obj, EVIDENCE_KEYS);
+  if (extra.length) errors.push(`Unrecognized key(s): ${extra.join(', ')}`);
+  const e1 = requireString(obj, 'supports'); if (e1) errors.push(e1);
+  const e2 = requireString(obj, 'data'); if (e2) errors.push(e2);
+  const e3 = requireString(obj, 'source'); if (e3) errors.push(e3);
+  const e4 = requireEnum(obj, 'freshness', ['live', 'cached', 'historical'] as const); if (e4) errors.push(e4);
+  return errors.length ? { success: false, errors } : { success: true, data: obj };
+}
+
+const ACTION_KEYS = new Set(['description', 'rationale', 'urgency', 'reversible', 'requires_approval']);
+function validateAction(value: unknown): ValidationResult<unknown> {
+  const objResult = assertObject(value);
+  if (!objResult.success) return objResult;
+  const obj = objResult.data;
+  const errors: string[] = [];
+  const extra = unknownKeys(obj, ACTION_KEYS);
+  if (extra.length) errors.push(`Unrecognized key(s): ${extra.join(', ')}`);
+  const e1 = requireString(obj, 'description'); if (e1) errors.push(e1);
+  const e2 = requireString(obj, 'rationale'); if (e2) errors.push(e2);
+  const e3 = requireEnum(obj, 'urgency', ['immediate', 'soon', 'background'] as const); if (e3) errors.push(e3);
+  const e4 = requireBoolean(obj, 'reversible'); if (e4) errors.push(e4);
+  const e5 = requireBoolean(obj, 'requires_approval'); if (e5) errors.push(e5);
+  return errors.length ? { success: false, errors } : { success: true, data: obj };
+}
+
+const QUESTION_KEYS = new Set(['question', 'context', 'blocking', 'options', 'default']);
+function validateQuestion(value: unknown): ValidationResult<unknown> {
+  const objResult = assertObject(value);
+  if (!objResult.success) return objResult;
+  const obj = objResult.data;
+  const errors: string[] = [];
+  const extra = unknownKeys(obj, QUESTION_KEYS);
+  if (extra.length) errors.push(`Unrecognized key(s): ${extra.join(', ')}`);
+  const e1 = requireString(obj, 'question'); if (e1) errors.push(e1);
+  const e2 = requireString(obj, 'context'); if (e2) errors.push(e2);
+  const e3 = requireBoolean(obj, 'blocking'); if (e3) errors.push(e3);
+  const e4 = optionalStringArray(obj, 'options'); if (e4) errors.push(e4);
+  const e5 = optionalString(obj, 'default'); if (e5) errors.push(e5);
+  return errors.length ? { success: false, errors } : { success: true, data: obj };
+}
+
+const ALERT_KEYS = new Set(['severity', 'subject', 'details', 'action_required']);
+function validateAlert(value: unknown): ValidationResult<unknown> {
+  const objResult = assertObject(value);
+  if (!objResult.success) return objResult;
+  const obj = objResult.data;
+  const errors: string[] = [];
+  const extra = unknownKeys(obj, ALERT_KEYS);
+  if (extra.length) errors.push(`Unrecognized key(s): ${extra.join(', ')}`);
+  const e1 = requireEnum(obj, 'severity', ['info', 'warning', 'critical'] as const); if (e1) errors.push(e1);
+  const e2 = requireString(obj, 'subject'); if (e2) errors.push(e2);
+  const e3 = requireString(obj, 'details'); if (e3) errors.push(e3);
+  const e4 = requireBoolean(obj, 'action_required'); if (e4) errors.push(e4);
+  return errors.length ? { success: false, errors } : { success: true, data: obj };
+}
+
+const NARRATIVE_KEYS = new Set(['topic', 'content', 'audience', 'depth']);
+function validateNarrative(value: unknown): ValidationResult<unknown> {
+  const objResult = assertObject(value);
+  if (!objResult.success) return objResult;
+  const obj = objResult.data;
+  const errors: string[] = [];
+  const extra = unknownKeys(obj, NARRATIVE_KEYS);
+  if (extra.length) errors.push(`Unrecognized key(s): ${extra.join(', ')}`);
+  const e1 = requireString(obj, 'topic'); if (e1) errors.push(e1);
+  const e2 = requireString(obj, 'content'); if (e2) errors.push(e2);
+  const e3 = requireEnum(obj, 'audience', ['technical', 'business', 'general'] as const); if (e3) errors.push(e3);
+  const e4 = requireEnum(obj, 'depth', ['brief', 'moderate', 'detailed'] as const); if (e4) errors.push(e4);
+  return errors.length ? { success: false, errors } : { success: true, data: obj };
+}
 
 // ============================================================================
 // Schema Registry
 // ============================================================================
 
 /**
- * Map from output.* predicate to its Zod schema.
+ * Map from output.* predicate to its validator function.
  * This is the single source of truth for which predicates are valid output types
  * and what shape they require.
  */
-export const OUTPUT_PRIMITIVE_SCHEMAS: Readonly<Record<string, z.ZodTypeAny>> = {
-  'output.assertion': AssertionPrimitiveSchema,
-  'output.judgment': JudgmentPrimitiveSchema,
-  'output.evidence': EvidencePrimitiveSchema,
-  'output.action': ActionPrimitiveSchema,
-  'output.question': QuestionPrimitiveSchema,
-  'output.alert': AlertPrimitiveSchema,
-  'output.narrative': NarrativePrimitiveSchema,
+const OUTPUT_PRIMITIVE_VALIDATORS: Readonly<Record<string, ValidatorFn>> = {
+  'output.assertion': validateAssertion,
+  'output.judgment': validateJudgment,
+  'output.evidence': validateEvidence,
+  'output.action': validateAction,
+  'output.question': validateQuestion,
+  'output.alert': validateAlert,
+  'output.narrative': validateNarrative,
 };
 
 /**
  * Set of valid output.* predicates for fast membership checks.
  */
-export const VALID_OUTPUT_PREDICATES = new Set(Object.keys(OUTPUT_PRIMITIVE_SCHEMAS));
+export const VALID_OUTPUT_PREDICATES = new Set(Object.keys(OUTPUT_PRIMITIVE_VALIDATORS));
 
 /**
  * Check if a predicate belongs to the output.* namespace.
@@ -157,8 +270,8 @@ export function validateOutputPrimitive(predicate: string, value: unknown): Resu
   }
 
   // Check if known output type
-  const schema = OUTPUT_PRIMITIVE_SCHEMAS[predicate];
-  if (!schema) {
+  const validator = OUTPUT_PRIMITIVE_VALIDATORS[predicate];
+  if (!validator) {
     return {
       ok: false,
       error: {
@@ -170,11 +283,9 @@ export function validateOutputPrimitive(predicate: string, value: unknown): Resu
   }
 
   // Validate against schema
-  const parseResult = schema.safeParse(value);
-  if (!parseResult.success) {
-    const issues = parseResult.error.issues
-      .map(i => `${i.path.join('.')}: ${i.message}`)
-      .join('; ');
+  const result = validator(value);
+  if (!result.success) {
+    const issues = result.errors.join('; ');
     return {
       ok: false,
       error: {
