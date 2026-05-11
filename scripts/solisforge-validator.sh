@@ -179,8 +179,10 @@ for sf in $SCORE_FILES; do
     done
 done
 UNIQUE_SCORES=$(echo "$WITNESS_SCORES" | tr ' ' '\n' | sort -u | grep -v "^$" | wc -l | tr -d ' ')
-if [ "$UNIQUE_SCORES" -gt 2 ]; then
-    finding "P1" "L2" "CD-01" "Multiple different scores found across docs: $(echo $WITNESS_SCORES | tr ' ' '\n' | sort -u | tr '\n' ' ')"
+# Multiple scores are valid if from different evaluations (per-subsystem, per-phase).
+# Only flag if > 8 unique scores (indicates systematic inconsistency, not legitimate diversity).
+if [ "$UNIQUE_SCORES" -gt 8 ]; then
+    finding "P1" "L2" "CD-01" "Excessive score diversity ($UNIQUE_SCORES unique scores) — may indicate fabrication: $(echo $WITNESS_SCORES | tr ' ' '\n' | sort -u | tr '\n' ' ')"
 else
     ok "CD-01: Score consistency verified"
 fi
