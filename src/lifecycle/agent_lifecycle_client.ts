@@ -1327,25 +1327,34 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
       }
 
       // BK-07: Query relationships if requested
+      // T2-XS-011: Chunk IN queries to stay under SQLite's variable limit (999 in some builds).
+      const LIFECYCLE_REL_CHUNK = 400; // Each chunk produces 2x params
       const relationships: ExportedRelationship[] = [];
       if (options.includeRelationships !== false && claims.length > 0) {
         try {
           const claimIds = claims.map(c => c.originalId as string);
-          // Query relationships where either side is one of the agent's claims
-          const placeholders = claimIds.map(() => '?').join(',');
-          const relRows = conn.query<{
-            from_claim_id: string; to_claim_id: string; type: string;
-          }>(
-            `SELECT from_claim_id, to_claim_id, type FROM claim_relationships
-             WHERE from_claim_id IN (${placeholders}) OR to_claim_id IN (${placeholders})`,
-            [...claimIds, ...claimIds],
-          );
-          for (const rr of relRows) {
-            relationships.push({
-              fromClaimOriginalId: rr.from_claim_id as ClaimId,
-              toClaimOriginalId: rr.to_claim_id as ClaimId,
-              type: rr.type as import('../adapters/shared/types.js').RelationshipType,
-            });
+          const relSet = new Set<string>();
+          for (let offset = 0; offset < claimIds.length; offset += LIFECYCLE_REL_CHUNK) {
+            const chunk = claimIds.slice(offset, offset + LIFECYCLE_REL_CHUNK);
+            const placeholders = chunk.map(() => '?').join(',');
+            const relRows = conn.query<{
+              from_claim_id: string; to_claim_id: string; type: string;
+            }>(
+              `SELECT from_claim_id, to_claim_id, type FROM claim_relationships
+               WHERE from_claim_id IN (${placeholders}) OR to_claim_id IN (${placeholders})`,
+              [...chunk, ...chunk],
+            );
+            for (const rr of relRows) {
+              const key = `${rr.from_claim_id}|${rr.to_claim_id}|${rr.type}`;
+              if (!relSet.has(key)) {
+                relSet.add(key);
+                relationships.push({
+                  fromClaimOriginalId: rr.from_claim_id as ClaimId,
+                  toClaimOriginalId: rr.to_claim_id as ClaimId,
+                  type: rr.type as import('../adapters/shared/types.js').RelationshipType,
+                });
+              }
+            }
           }
         } catch {
           // claim_relationships table may not exist

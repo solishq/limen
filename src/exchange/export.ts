@@ -163,11 +163,16 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
       return exported;
     });
 
+    // T2-XS-011: Chunk size for IN queries to stay under SQLite's variable limit.
+    // SQLite's SQLITE_MAX_VARIABLE_NUMBER is 999 in some builds (32766 in others).
+    // Use 500 as a safe ceiling. For relationship queries (2x params per chunk), use 400.
+    const SQL_CHUNK_SIZE = 500;
+    const SQL_REL_CHUNK_SIZE = 400; // Each chunk produces 2x params (from + to)
+
     // Optionally include evidence refs
     const includeEvidence = options.includeEvidence ?? (format === 'json');
     if (includeEvidence && claims.length > 0) {
       const claimIds = claims.map(c => c.id);
-      const placeholders = claimIds.map(() => '?').join(',');
 
       interface EvidenceRow {
         claim_id: string;
@@ -178,17 +183,24 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
 
       // SYSTEM_SCOPE: claim_evidence has no tenant_id column.
       // Tenant isolation achieved via claim_id join (claims already tenant-filtered).
-      const evidenceRows = conn.raw.query<EvidenceRow>(
-        `SELECT ce.claim_id, ce.evidence_type, ce.evidence_id, ce.source_state
-         FROM claim_evidence ce
-         WHERE ce.claim_id IN (${placeholders})
-         ORDER BY ce.claim_id, ce.created_at ASC`,
-        claimIds,
-      );
+      // T2-XS-011: Query in chunks to avoid exceeding SQLite variable limit.
+      const allEvidenceRows: EvidenceRow[] = [];
+      for (let offset = 0; offset < claimIds.length; offset += SQL_CHUNK_SIZE) {
+        const chunk = claimIds.slice(offset, offset + SQL_CHUNK_SIZE);
+        const placeholders = chunk.map(() => '?').join(',');
+        const rows = conn.raw.query<EvidenceRow>(
+          `SELECT ce.claim_id, ce.evidence_type, ce.evidence_id, ce.source_state
+           FROM claim_evidence ce
+           WHERE ce.claim_id IN (${placeholders})
+           ORDER BY ce.claim_id, ce.created_at ASC`,
+          chunk,
+        );
+        allEvidenceRows.push(...rows);
+      }
 
       // Group evidence by claim ID
       const evidenceMap = new Map<string, ExportedEvidenceRef[]>();
-      for (const row of evidenceRows) {
+      for (const row of allEvidenceRows) {
         if (!evidenceMap.has(row.claim_id)) {
           evidenceMap.set(row.claim_id, []);
         }
@@ -213,7 +225,6 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
     const includeRelationships = options.includeRelationships ?? (format === 'json');
     if (includeRelationships && claims.length > 0) {
       const claimIds = claims.map(c => c.id);
-      const placeholders = claimIds.map(() => '?').join(',');
 
       interface RelRow {
         from_claim_id: string;
@@ -224,20 +235,38 @@ export function exportKnowledge(deps: ExportDeps, options: ExportOptions): Resul
 
       // SYSTEM_SCOPE: OR clause makes auto-injection unsafe (binds to last condition only).
       // Use .raw with manual tenant scoping via IN clause (claims already tenant-filtered).
-      const relRows = conn.raw.query<RelRow>(
-        `SELECT cr.from_claim_id, cr.to_claim_id, cr.type, cr.created_at
-         FROM claim_relationships cr
-         WHERE (cr.from_claim_id IN (${placeholders}) OR cr.to_claim_id IN (${placeholders}))
-         ORDER BY cr.created_at ASC`,
-        [...claimIds, ...claimIds],
-      );
+      // T2-XS-011: Query in chunks to avoid exceeding SQLite variable limit.
+      // Each chunk produces 2x params (from_claim_id + to_claim_id), so use smaller chunks.
+      const allRelRows: RelRow[] = [];
+      for (let offset = 0; offset < claimIds.length; offset += SQL_REL_CHUNK_SIZE) {
+        const chunk = claimIds.slice(offset, offset + SQL_REL_CHUNK_SIZE);
+        const placeholders = chunk.map(() => '?').join(',');
+        const rows = conn.raw.query<RelRow>(
+          `SELECT cr.from_claim_id, cr.to_claim_id, cr.type, cr.created_at
+           FROM claim_relationships cr
+           WHERE (cr.from_claim_id IN (${placeholders}) OR cr.to_claim_id IN (${placeholders}))
+           ORDER BY cr.created_at ASC`,
+          [...chunk, ...chunk],
+        );
+        allRelRows.push(...rows);
+      }
 
-      relationships = relRows.map(row => ({
-        fromClaimId: row.from_claim_id,
-        toClaimId: row.to_claim_id,
-        type: row.type,
-        createdAt: row.created_at,
-      }));
+      // Deduplicate relationships that may appear in multiple chunks
+      // (a relationship connecting claims from different chunks would appear in both).
+      const relSet = new Set<string>();
+      relationships = [];
+      for (const row of allRelRows) {
+        const key = `${row.from_claim_id}|${row.to_claim_id}|${row.type}`;
+        if (!relSet.has(key)) {
+          relSet.add(key);
+          relationships.push({
+            fromClaimId: row.from_claim_id,
+            toClaimId: row.to_claim_id,
+            type: row.type,
+            createdAt: row.created_at,
+          });
+        }
+      }
     }
 
     // Serialize

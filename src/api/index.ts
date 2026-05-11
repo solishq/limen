@@ -2069,12 +2069,16 @@ export async function createLimen(
       protectPredicate(rule: Omit<ProtectedPredicateRule, 'id' | 'createdAt'>) {
         const conn = getConnection();
         const ctx = getContext();
+        // T2-GC-014: Default action to 'both' when not provided.
+        // The DB column is NOT NULL DEFAULT 'both', but explicit INSERT
+        // with undefined becomes NULL, violating the constraint.
+        const action = rule.action ?? 'both';
         return conn.transaction(() => {
           const id = randomUUID();
           const now = kernel.time.nowISO();
           conn.run(
             `INSERT INTO governance_protected_predicates (id, tenant_id, predicate_pattern, required_permission, action, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-            [id, ctx.tenantId, rule.predicatePattern, rule.requiredPermission, rule.action, now],
+            [id, ctx.tenantId, rule.predicatePattern, rule.requiredPermission, action, now],
           );
           kernel.audit.append(conn, {
             tenantId: ctx.tenantId,
@@ -2083,9 +2087,9 @@ export async function createLimen(
             operation: 'governance.predicate.protect',
             resourceType: 'protected_predicate',
             resourceId: id,
-            detail: { predicatePattern: rule.predicatePattern, requiredPermission: rule.requiredPermission, action: rule.action },
+            detail: { predicatePattern: rule.predicatePattern, requiredPermission: rule.requiredPermission, action },
           });
-          const result: ProtectedPredicateRule = { id, predicatePattern: rule.predicatePattern, requiredPermission: rule.requiredPermission, action: rule.action, createdAt: now };
+          const result: ProtectedPredicateRule = { id, predicatePattern: rule.predicatePattern, requiredPermission: rule.requiredPermission, action, createdAt: now };
           return { ok: true as const, value: result };
         });
       },
