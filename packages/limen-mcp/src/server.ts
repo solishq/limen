@@ -100,7 +100,7 @@ async function main(): Promise<void> {
   registerAgentTools(server, limen);
   registerMissionTools(server, limen);
   registerClaimTools(server, limen, adapter);
-  registerWmTools(server, limen);
+  registerWmTools(server, limen, adapter);
 
   // Register Phase 7 enhancement tools (convenience API wrappers)
   registerContextTools(server, limen);

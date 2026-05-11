@@ -59,15 +59,35 @@ export async function bootstrapEngine(): Promise<{
   shutdown: () => Promise<void>;
 }> {
   const config = loadConfig();
-  const masterKey = readFileSync(config.masterKeyPath);
+  const masterKeyBuffer = readFileSync(config.masterKeyPath);
+
+  // F-SEC-002: Support LIMEN_RBAC_ACTIVE=true to force RBAC enforcement.
+  // When set, passes forceActive: true so that RBAC permission checks are
+  // enforced even in single-user mode. Required for multi-agent deployments.
+  const forceRbac = process.env.LIMEN_RBAC_ACTIVE === 'true';
 
   const limenConfig: LimenConfig = {
     dataDir: config.dataDir,
-    masterKey,
+    masterKey: masterKeyBuffer,
     providers: [],
+    ...(forceRbac ? { requireRbac: true } : {}),
   };
 
   const limen = await createLimen(limenConfig);
+
+  // F-SEC-006: Zero the master key Buffer after engine initialization.
+  // createLimen() copies the key internally — the original Buffer can be scrubbed
+  // to prevent it from persisting in the Node.js heap.
+  masterKeyBuffer.fill(0);
+
+  // F-SEC-003: Emit warning when RBAC is dormant in single-user mode.
+  // This makes the security posture explicit at startup.
+  if (!forceRbac) {
+    process.stderr.write(
+      'WARNING: RBAC dormant — all operations permitted. ' +
+      'Set LIMEN_RBAC_ACTIVE=true for multi-agent deployments.\n',
+    );
+  }
 
   return {
     limen,

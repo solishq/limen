@@ -18,7 +18,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen, MissionId, TaskId } from 'limen-ai';
 import type { SessionAdapter } from '../adapter.js';
 import { z } from 'zod';
-import { isPiiPredicate, containsControlChars } from './validation.js';
+import { isPiiPredicate, containsPiiValue, containsControlChars } from './validation.js';
 
 /** MCP error response helper. */
 function mcpError(code: string, message: string) {
@@ -68,33 +68,61 @@ export function registerClaimTools(server: McpServer, limen: Limen, adapter: Ses
       // Parse evidence refs if provided. EvidenceType is a string union:
       // 'memory' | 'artifact' | 'claim' | 'capability_result'
       type EvidenceType = 'memory' | 'artifact' | 'claim' | 'capability_result';
+      const VALID_EVIDENCE_TYPES = new Set<string>(['memory', 'artifact', 'claim', 'capability_result']);
       let evidenceRefs: ReadonlyArray<{ type: EvidenceType; id: string }> = [];
       if (args.evidenceRefs) {
+        let raw: unknown;
         try {
-          evidenceRefs = JSON.parse(args.evidenceRefs) as ReadonlyArray<{ type: EvidenceType; id: string }>;
+          raw = JSON.parse(args.evidenceRefs);
         } catch {
           return {
             content: [{ type: 'text' as const, text: JSON.stringify({ error: 'INVALID_INPUT', message: `evidenceRefs is not valid JSON: ${args.evidenceRefs}` }) }],
             isError: true,
           };
         }
+        // F-SEC-008: Runtime structure validation after JSON.parse
+        if (!Array.isArray(raw)) {
+          return mcpError('INVALID_INPUT', 'evidenceRefs must be a JSON array');
+        }
+        for (let i = 0; i < raw.length; i++) {
+          const ref = raw[i] as Record<string, unknown>;
+          if (typeof ref !== 'object' || ref === null || typeof ref.type !== 'string' || typeof ref.id !== 'string') {
+            return mcpError('INVALID_INPUT', `evidenceRefs[${i}] must have string "type" and "id" fields`);
+          }
+          if (!VALID_EVIDENCE_TYPES.has(ref.type)) {
+            return mcpError('INVALID_INPUT', `evidenceRefs[${i}].type must be one of: ${[...VALID_EVIDENCE_TYPES].join(', ')}`);
+          }
+        }
+        evidenceRefs = raw as ReadonlyArray<{ type: EvidenceType; id: string }>;
       }
 
       // Parse runtime witness if provided
       let runtimeWitness: { witnessType: string; witnessedValues: Record<string, unknown>; witnessTimestamp: string } | undefined;
       if (args.runtimeWitness) {
+        let raw: unknown;
         try {
-          runtimeWitness = JSON.parse(args.runtimeWitness) as {
-            witnessType: string;
-            witnessedValues: Record<string, unknown>;
-            witnessTimestamp: string;
-          };
+          raw = JSON.parse(args.runtimeWitness);
         } catch {
           return {
             content: [{ type: 'text' as const, text: JSON.stringify({ error: 'INVALID_INPUT', message: `runtimeWitness is not valid JSON: ${args.runtimeWitness}` }) }],
             isError: true,
           };
         }
+        // F-SEC-008: Runtime structure validation after JSON.parse
+        const rw = raw as Record<string, unknown>;
+        if (typeof rw !== 'object' || rw === null || Array.isArray(rw)) {
+          return mcpError('INVALID_INPUT', 'runtimeWitness must be a JSON object');
+        }
+        if (typeof rw.witnessType !== 'string') {
+          return mcpError('INVALID_INPUT', 'runtimeWitness.witnessType must be a string');
+        }
+        if (typeof rw.witnessTimestamp !== 'string') {
+          return mcpError('INVALID_INPUT', 'runtimeWitness.witnessTimestamp must be a string');
+        }
+        if (typeof rw.witnessedValues !== 'object' || rw.witnessedValues === null || Array.isArray(rw.witnessedValues)) {
+          return mcpError('INVALID_INPUT', 'runtimeWitness.witnessedValues must be a JSON object');
+        }
+        runtimeWitness = rw as { witnessType: string; witnessedValues: Record<string, unknown>; witnessTimestamp: string };
       }
 
       // R4-01 + NEW-01: Control character rejection on all user-supplied string fields
@@ -152,8 +180,11 @@ export function registerClaimTools(server: McpServer, limen: Limen, adapter: Ses
         }
       }
 
-      // NEW-01: Consent gate for PII predicates (same as limen_remember)
-      if (isPiiPredicate(args.predicate)) {
+      // NEW-01 + F-SEC-005: Consent gate for PII predicates AND PII values.
+      const hasPiiPredicate = isPiiPredicate(args.predicate);
+      const hasPiiValue = typeof args.objectValue === 'string' && containsPiiValue(args.objectValue);
+
+      if (hasPiiPredicate || hasPiiValue) {
         const parts = args.subject.split(':');
         const dataSubjectId = parts.length >= 3 ? parts.slice(1).join(':') : args.subject;
 
@@ -162,7 +193,10 @@ export function registerClaimTools(server: McpServer, limen: Limen, adapter: Ses
           return mcpError('CONSENT_CHECK_FAILED', `Failed to check consent: ${consentResult.error.message}`);
         }
         if (consentResult.value === null) {
-          return mcpError('CONSENT_REQUIRED', `Consent required for PII predicate "${args.predicate}" on data subject "${dataSubjectId}". Register consent first via limen_consent_register.`);
+          const reason = hasPiiPredicate
+            ? `PII predicate "${args.predicate}"`
+            : 'PII pattern detected in value';
+          return mcpError('CONSENT_REQUIRED', `Consent required: ${reason} on data subject "${dataSubjectId}". Register consent first via limen_consent_register.`);
         }
       }
 

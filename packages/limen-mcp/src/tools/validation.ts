@@ -30,6 +30,31 @@ export function isPiiPredicate(predicate: string): boolean {
   return PII_PREDICATE_PREFIXES.some(prefix => lower.startsWith(prefix));
 }
 
+// ── PII Value Detection (F-SEC-005) ──
+
+/**
+ * F-SEC-005: Detect PII patterns in claim values.
+ *
+ * Scans text for common PII patterns: email addresses, SSN-like numbers,
+ * and phone numbers. This catches cases where PII is stored under
+ * non-PII predicates (bypassing the predicate-prefix check).
+ *
+ * Returns true if any PII pattern is detected in the value.
+ */
+
+/** Email: simplified RFC 5322 local@domain pattern. */
+const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+
+/** SSN: XXX-XX-XXXX or XXXXXXXXX (US Social Security Number format). */
+const SSN_REGEX = /\b\d{3}-\d{2}-\d{4}\b|\b\d{9}\b/;
+
+/** Phone: international format (+1...) or US format ((xxx) xxx-xxxx, xxx-xxx-xxxx). */
+const PHONE_REGEX = /\+\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{1,4}[\s.-]?\d{1,9}|\(\d{3}\)\s?\d{3}[.-]?\d{4}|\b\d{3}[.-]\d{3}[.-]\d{4}\b/;
+
+export function containsPiiValue(value: string): boolean {
+  return EMAIL_REGEX.test(value) || SSN_REGEX.test(value) || PHONE_REGEX.test(value);
+}
+
 // ── Control Character Detection (NEW-02, NEW-03) ──
 
 /**

@@ -164,12 +164,14 @@ describe('T2-GC-014: protectPredicate constraint check', () => {
 describe('T2-XS-011: exportData chunking', () => {
   it('exportData with >999 claims does not throw too many SQL variables', async () => {
     // Create engine with raised burst limit so we can insert >999 claims
+    // F-SEC-004: Convenience API now has rate limits — raise apiCallsPerMinute for bulk insert test
     const dir = makeTempDir();
     dirsToClean.push(dir);
     const limen = await createLimen({
       dataDir: dir,
       masterKey: randomBytes(32),
       providers: [],
+      rateLimiting: { apiCallsPerMinute: 5000 },
       security: {
         pii: { mode: 'tag', categories: ['email'] },
         injection: { enabled: true },
@@ -199,10 +201,12 @@ describe('T2-XS-011: exportData chunking', () => {
   it('exportData with includeEvidence and includeRelationships handles chunking', async () => {
     const dir = makeTempDir();
     dirsToClean.push(dir);
+    // F-SEC-004: Convenience API now has rate limits — raise apiCallsPerMinute for bulk insert test
     const limen = await createLimen({
       dataDir: dir,
       masterKey: randomBytes(32),
       providers: [],
+      rateLimiting: { apiCallsPerMinute: 5000 },
       security: {
         pii: { mode: 'tag', categories: ['email'] },
         injection: { enabled: true },

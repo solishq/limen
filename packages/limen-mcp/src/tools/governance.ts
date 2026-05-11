@@ -12,7 +12,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen } from 'limen-ai';
 import { z } from 'zod';
-import { containsControlChars } from './validation.js';
+import { containsControlChars, isPiiPredicate } from './validation.js';
 
 /** MCP error response helper. */
 function mcpError(code: string, message: string) {
@@ -101,10 +101,26 @@ export function registerGovernanceTools(server: McpServer, limen: Limen): void {
         return mcpError(result.error.code, result.error.message);
       }
 
+      // F-SEC-007: Redact PII predicates from audit export evidence entries.
+      // Any evidence entry whose predicate matches a PII prefix has its value
+      // replaced with "[REDACTED — PII]" to prevent PII leakage via audit export.
+      const pkg = result.value;
+      if (pkg.controls) {
+        for (const control of Object.values(pkg.controls)) {
+          const ctrl = control as { evidenceEntries?: Array<{ predicate?: string; value?: unknown }> };
+          if (ctrl.evidenceEntries && Array.isArray(ctrl.evidenceEntries)) {
+            for (const entry of ctrl.evidenceEntries) {
+              if (entry.predicate && isPiiPredicate(entry.predicate)) {
+                entry.value = '[REDACTED — PII]';
+              }
+            }
+          }
+        }
+      }
+
       // BK-02: Check total entry count across all control categories.
       // If above threshold, return summary only with a hasMore indicator.
       const MAX_ENTRIES = 10_000;
-      const pkg = result.value;
       const totalEntries = pkg.statistics?.totalAuditEntries ?? 0;
 
       if (totalEntries > MAX_ENTRIES) {

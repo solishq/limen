@@ -42,6 +42,16 @@ export interface AdapterConfig {
  *
  * One adapter per MCP server process. At most one active session at a time.
  * The adapter registers itself as agent "limen-mcp" on init.
+ *
+ * KNOWN LIMITATION (F-SEC-011): Governance supersession tracking only covers
+ * claims created in the CURRENT session. The `_claimSubjects` map is an
+ * in-memory cache populated by `trackClaim()` during remember/reflect calls.
+ * Claims from previous sessions are NOT tracked, so the governance check on
+ * `limen_connect` with `supersedes` will NOT block supersession of cross-session
+ * claims even if they have protected subjects.
+ *
+ * Cross-session governance requires persistent claim tracking (querying the
+ * engine's claim store for subject lookups), which is a v2 enhancement.
  */
 export class SessionAdapter {
   private readonly _limen: Limen;

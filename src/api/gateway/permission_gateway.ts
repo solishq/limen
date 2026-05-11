@@ -55,17 +55,16 @@ export interface MethodPermission {
  */
 export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> = {
   // ── Convenience API ──
-  // v5.0.0 FINDING-001: Convenience methods have NO rate limit at the gateway level.
-  // Rate limiting belongs at the TRANSPORT boundary (MCP, HTTP), not inside the library.
-  // Library consumers calling remember() 100+ times in batch/test scenarios is normal.
-  // The kernel rate limiter protects transport-facing APIs (chat, infer, missions).
-  'remember': { permission: 'assert_claim' },
-  'recall': { permission: 'query_claims' },
-  'forget': { permission: 'retract_claim' },
-  'connect': { permission: 'relate_claims' },
-  'search': { permission: 'query_claims' },
-  'reflect': { permission: 'assert_claim' },
-  'semanticSearch': { permission: 'query_claims' },
+  // F-SEC-004: Convenience methods now have rate limits at the gateway level.
+  // Previously exempt (v5.0.0 FINDING-001), but MCP transport exposes these
+  // directly to external callers — rate limiting is required to prevent abuse.
+  'remember': { permission: 'assert_claim', rateLimit: 'api_calls' },
+  'recall': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'forget': { permission: 'retract_claim', rateLimit: 'api_calls' },
+  'connect': { permission: 'relate_claims', rateLimit: 'api_calls' },
+  'search': { permission: 'query_claims', rateLimit: 'api_calls' },
+  'reflect': { permission: 'assert_claim', rateLimit: 'api_calls' },
+  'semanticSearch': { permission: 'query_claims', rateLimit: 'api_calls' },
 
   // ── Chat/Infer ──
   'chat': { permission: 'chat', rateLimit: 'api_calls' },
@@ -193,7 +192,10 @@ export const PERMISSION_MAP: Readonly<Record<string, MethodPermission | null>> =
   'lifecycle.revokeConsent': { permission: 'manage_consent' },
   'lifecycle.checkConsent': { permission: 'view_consent' },
   'lifecycle.listConsents': { permission: 'view_consent' },
-  'lifecycle.exportKnowledge': { permission: 'query_claims' },
+  // F-SEC-010: Knowledge export requires export_compliance permission (elevated from
+  // query_claims) to enforce clearance-level gating at the gateway. The lifecycle
+  // client also enforces agent-level clearance checks internally (LM-13.12).
+  'lifecycle.exportKnowledge': { permission: 'export_compliance', rateLimit: 'api_calls' },
   'lifecycle.importKnowledge': { permission: 'assert_claim' },
   'lifecycle.transferKnowledge': { permission: 'assert_claim' },
   'lifecycle.on': null,  // event subscription, no permission needed

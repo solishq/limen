@@ -58,15 +58,19 @@ export function registerOutputTools(server: McpServer, limen: Limen): void {
       }
 
       // Parse primitive JSON
-      let parsed: object;
+      let parsed: unknown;
       try {
-        parsed = JSON.parse(args.primitive) as object;
+        parsed = JSON.parse(args.primitive);
       } catch {
         return mcpError('INVALID_INPUT', `primitive is not valid JSON: ${args.primitive}`);
       }
+      // F-SEC-008: Runtime structure validation — primitive must be a non-null object
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return mcpError('INVALID_INPUT', 'primitive must be a JSON object (not array, null, or primitive)');
+      }
 
       const result = safeCall(() =>
-        limen.output.assert(args.predicate, parsed, {
+        limen.output.assert(args.predicate, parsed as object, {
           subject: args.subject,
           confidence: args.confidence,
         }),

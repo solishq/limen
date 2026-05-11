@@ -28,7 +28,7 @@ import type { SessionAdapter } from '../adapter.js';
 import { z } from 'zod';
 
 // ── Shared validation (NEW-04: case-insensitive PII, NEW-02: control chars) ──
-import { isPiiPredicate, containsControlChars } from './validation.js';
+import { isPiiPredicate, containsPiiValue, containsControlChars } from './validation.js';
 
 /**
  * BK-07: Predicate format validation — must be domain.property format
@@ -110,8 +110,12 @@ export function registerLearningTools(
         return mcpError('INVALID_INPUT', 'Reasoning contains prohibited control characters.');
       }
 
-      // BK-01: Consent gate for PII predicates
-      if (isPiiPredicate(args.predicate)) {
+      // BK-01 + F-SEC-005: Consent gate for PII predicates AND PII values.
+      // Check both predicate prefix and value content for PII patterns.
+      const hasPiiPredicate = isPiiPredicate(args.predicate);
+      const hasPiiValue = containsPiiValue(args.value);
+
+      if (hasPiiPredicate || hasPiiValue) {
         // Extract data subject from the subject URN (entity:type:id → type:id)
         const parts = args.subject.split(':');
         const dataSubjectId = parts.length >= 3 ? parts.slice(1).join(':') : args.subject;
@@ -123,7 +127,10 @@ export function registerLearningTools(
         // consent.check returns { ok: true, value: consent_record | null }
         // If value is null, no active consent exists
         if (consentResult.value === null) {
-          return mcpError('CONSENT_REQUIRED', `Consent required for PII predicate "${args.predicate}" on data subject "${dataSubjectId}". Register consent first via limen_consent_register.`);
+          const reason = hasPiiPredicate
+            ? `PII predicate "${args.predicate}"`
+            : 'PII pattern detected in value';
+          return mcpError('CONSENT_REQUIRED', `Consent required: ${reason} on data subject "${dataSubjectId}". Register consent first via limen_consent_register.`);
         }
       }
 

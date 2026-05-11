@@ -48,15 +48,19 @@ export function registerA2AGovernanceTools(server: McpServer, limen: Limen): voi
         return mcpError('INVALID_INPUT', 'block contains control characters');
       }
 
-      let parsed: object;
+      let parsed: unknown;
       try {
-        parsed = JSON.parse(args.block) as object;
+        parsed = JSON.parse(args.block);
       } catch {
         return mcpError('INVALID_INPUT', `block is not valid JSON: ${args.block}`);
       }
+      // F-SEC-008: Runtime structure validation — governance block must be a non-null object
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return mcpError('INVALID_INPUT', 'governance block must be a JSON object (not array, null, or primitive)');
+      }
 
       const result = safeCall(() =>
-        limen.a2aGovernance.setGovernanceBlock(parsed),
+        limen.a2aGovernance.setGovernanceBlock(parsed as object),
       );
 
       if (result && typeof result === 'object' && 'ok' in result && !result.ok) {
@@ -107,15 +111,19 @@ export function registerA2AGovernanceTools(server: McpServer, limen: Limen): voi
         return mcpError('INVALID_INPUT', 'rule contains control characters');
       }
 
-      let parsed: object;
+      let parsed: unknown;
       try {
-        parsed = JSON.parse(args.rule) as object;
+        parsed = JSON.parse(args.rule);
       } catch {
         return mcpError('INVALID_INPUT', `rule is not valid JSON: ${args.rule}`);
       }
+      // F-SEC-008: Runtime structure validation — proactive rule must be a non-null object
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return mcpError('INVALID_INPUT', 'proactive rule must be a JSON object (not array, null, or primitive)');
+      }
 
       const result = safeCall(() =>
-        limen.a2aGovernance.registerProactiveRule(parsed),
+        limen.a2aGovernance.registerProactiveRule(parsed as object),
       );
 
       if (result && typeof result === 'object' && 'ok' in result && !result.ok) {

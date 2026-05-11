@@ -173,7 +173,7 @@ export function registerA2AChatTools(
       // Build metadata (F-2: include transport origin for audit)
       const metadata = JSON.stringify({
         sender: args.sender,
-        timestamp: new Date().toISOString(),
+        timestamp: new Date(Date.now()).toISOString(), // F-SEC-009: use Date.now() for consistent time source
         transport,
         target: args.channel ? { type: 'channel', name: args.channel } : { type: 'dm', to: args.to },
         ...(mentions.length > 0 ? { mentions } : {}),

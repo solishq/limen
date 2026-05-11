@@ -16,6 +16,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Limen, TaskId } from 'limen-ai';
+import type { SessionAdapter } from '../adapter.js';
 import { z } from 'zod';
 import { containsControlChars } from './validation.js';
 
@@ -27,7 +28,27 @@ function mcpError(code: string, message: string) {
   };
 }
 
-export function registerWmTools(server: McpServer, limen: Limen): void {
+/**
+ * F-SEC-001: Validate that the requested taskId belongs to the current session.
+ * The adapter's taskId is the only task the MCP caller should access.
+ * Returns an error response if validation fails, or null if valid.
+ */
+function validateTaskOwnership(adapter: SessionAdapter, taskId: string): ReturnType<typeof mcpError> | null {
+  if (!adapter.active) {
+    return mcpError('NO_SESSION', 'No active session. Call limen_session_open first.');
+  }
+  // The adapter's taskId is the canonical session task. Only allow access to that task.
+  const sessionTaskId = adapter.taskId as string;
+  if (taskId !== sessionTaskId) {
+    return mcpError(
+      'TASK_OWNERSHIP_VIOLATION',
+      `taskId "${taskId}" does not belong to the current session. Expected: "${sessionTaskId}".`,
+    );
+  }
+  return null;
+}
+
+export function registerWmTools(server: McpServer, limen: Limen, adapter: SessionAdapter): void {
 
   // ── limen_wm_write ──
   server.tool(
@@ -49,6 +70,10 @@ export function registerWmTools(server: McpServer, limen: Limen): void {
       if (containsControlChars(args.value)) {
         return mcpError('INVALID_INPUT', 'value contains control characters');
       }
+
+      // F-SEC-001: Verify taskId belongs to the current session
+      const ownershipError = validateTaskOwnership(adapter, args.taskId);
+      if (ownershipError) return ownershipError;
 
       const result = limen.workingMemory.write({
         taskId: args.taskId as TaskId,
@@ -84,6 +109,11 @@ export function registerWmTools(server: McpServer, limen: Limen): void {
       if (args.key && containsControlChars(args.key)) {
         return mcpError('INVALID_INPUT', 'key contains control characters');
       }
+
+      // F-SEC-001: Verify taskId belongs to the current session
+      const ownershipError = validateTaskOwnership(adapter, args.taskId);
+      if (ownershipError) return ownershipError;
+
       const result = limen.workingMemory.read({
         taskId: args.taskId as TaskId,
         key: args.key ?? null,
@@ -117,6 +147,11 @@ export function registerWmTools(server: McpServer, limen: Limen): void {
       if (args.key && containsControlChars(args.key)) {
         return mcpError('INVALID_INPUT', 'key contains control characters');
       }
+
+      // F-SEC-001: Verify taskId belongs to the current session
+      const ownershipError = validateTaskOwnership(adapter, args.taskId);
+      if (ownershipError) return ownershipError;
+
       const result = limen.workingMemory.discard({
         taskId: args.taskId as TaskId,
         key: args.key ?? null,

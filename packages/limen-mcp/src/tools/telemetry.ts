@@ -55,15 +55,19 @@ export function registerTelemetryTools(server: McpServer, limen: Limen): void {
       }
 
       // Parse data JSON
-      let parsed: object;
+      let parsed: unknown;
       try {
-        parsed = JSON.parse(args.data) as object;
+        parsed = JSON.parse(args.data);
       } catch {
         return mcpError('INVALID_INPUT', `data is not valid JSON: ${args.data}`);
       }
+      // F-SEC-008: Runtime structure validation — telemetry data must be a non-null object
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return mcpError('INVALID_INPUT', 'telemetry data must be a JSON object (not array, null, or primitive)');
+      }
 
       const result = safeCall(() =>
-        limen.telemetry.record(args.type, parsed, {
+        limen.telemetry.record(args.type, parsed as object, {
           subject: args.subject,
           confidence: args.confidence,
         }),
