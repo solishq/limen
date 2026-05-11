@@ -126,6 +126,13 @@ export interface CoordinationGovernanceDeps {
   readonly audit: AuditTrail;
   readonly time: TimeProvider;
   readonly nodeId?: string;
+  /**
+   * FINDING-027: Tenancy mode determines whether null tenantId is acceptable.
+   * In single-tenant mode, tenantId is always null — this is valid.
+   * In multi-tenant mode, null tenantId is rejected (CO-12.1).
+   * Defaults to 'single' for backward compatibility.
+   */
+  readonly tenancyMode?: 'single' | 'multi';
 }
 
 // ============================================================================
@@ -141,6 +148,7 @@ export function createAgentCoordinationClient(
 ): AgentCoordinationClient {
   const { getConnection, audit, time } = deps;
   const nodeId = deps.nodeId ?? randomUUID();
+  const tenancyMode = deps.tenancyMode ?? 'single';
 
   // Event subscriptions — stored in closure (survives Object.freeze)
   const subscriptions = new Map<string, { event: CoordinationEvent; handler: AgentEventHandler }>();
@@ -159,8 +167,44 @@ export function createAgentCoordinationClient(
     return { conn: getConnection(), audit, time };
   }
 
+  /**
+   * FINDING-027: In single-tenant mode, tenantId is null. The coordination tables
+   * have `tenant_id NOT NULL`, so we use a sentinel value '__DEFAULT__' to represent
+   * the single-tenant scope. This sentinel is applied transparently — callers
+   * continue to pass ctx.tenantId=null and the coordination layer handles it.
+   */
+  const SINGLE_TENANT_SENTINEL = '__DEFAULT__';
+
+  /**
+   * Resolve the effective tenantId for DB operations.
+   * In single-tenant mode: null -> '__DEFAULT__'.
+   * In multi-tenant mode: pass through as-is.
+   */
+  function effectiveTenantId(ctx: OperationContext): TenantId | null {
+    if (tenancyMode === 'single' && (ctx.tenantId === null || ctx.tenantId === undefined)) {
+      return SINGLE_TENANT_SENTINEL as unknown as TenantId;
+    }
+    return ctx.tenantId;
+  }
+
+  /**
+   * Create a context with the effective tenant ID for delegated functions.
+   * In single-tenant mode, replaces null tenantId with the sentinel value.
+   */
+  function withEffectiveTenant(ctx: OperationContext): OperationContext {
+    const eTid = effectiveTenantId(ctx);
+    if (eTid === ctx.tenantId) return ctx;
+    return { ...ctx, tenantId: eTid as TenantId };
+  }
+
   function ensureTenant(ctx: OperationContext, operation: string): Result<void> | null {
-    // CO-12.1: All operations are tenant-scoped
+    // FINDING-027: In single-tenant mode, tenantId is always null — this is valid.
+    // CO-12.1 tenant-scoping only applies in multi-tenant mode.
+    if (tenancyMode === 'single') {
+      return null; // Accept null tenantId in single-tenant mode
+    }
+
+    // CO-12.1: In multi-tenant mode, all operations require a non-null tenantId
     if (ctx.tenantId === null || ctx.tenantId === undefined) {
       // BRK-CO-005: Audit failed operations before returning error
       try {
@@ -276,13 +320,13 @@ export function createAgentCoordinationClient(
           `INSERT INTO coordination_a2a_rules
            (id, tenant_id, source_agent, target_agent, skill, action, conditions, priority, enabled, created_at, created_by)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-          [ruleId, ctx.tenantId, rule.sourceAgent, rule.targetAgent, rule.skill,
+          [ruleId, effectiveTenantId(ctx), rule.sourceAgent, rule.targetAgent, rule.skill,
            rule.action, JSON.stringify(rule.conditions ?? []), priority, now,
            ctx.agentId ?? 'system'],
         );
 
         audit.append(conn, {
-          tenantId: ctx.tenantId,
+          tenantId: effectiveTenantId(ctx),
           actorType: 'agent',
           actorId: ctx.agentId ?? 'system',
           operation: 'register_a2a_rule',
@@ -306,7 +350,7 @@ export function createAgentCoordinationClient(
       const conn = getConnection();
       const existing = conn.get<{ id: string }>(
         `SELECT id FROM coordination_a2a_rules WHERE id = ? AND tenant_id = ?`,
-        [ruleId, ctx.tenantId],
+        [ruleId, effectiveTenantId(ctx)],
       );
       if (!existing) return err(a2aRuleNotFound(ruleId));
 
@@ -315,11 +359,11 @@ export function createAgentCoordinationClient(
         // BRK-CO-014: Add tenant_id to WHERE clause for tenant isolation
         conn.run(
           `UPDATE coordination_a2a_rules SET enabled = 0 WHERE id = ? AND tenant_id = ?`,
-          [ruleId, ctx.tenantId],
+          [ruleId, effectiveTenantId(ctx)],
         );
 
         audit.append(conn, {
-          tenantId: ctx.tenantId,
+          tenantId: effectiveTenantId(ctx),
           actorType: 'agent',
           actorId: ctx.agentId ?? 'system',
           operation: 'remove_a2a_rule',
@@ -342,7 +386,7 @@ export function createAgentCoordinationClient(
 
       const conn = getConnection();
       let sql = `SELECT * FROM coordination_a2a_rules WHERE tenant_id = ?`;
-      const params: unknown[] = [ctx.tenantId];
+      const params: unknown[] = [effectiveTenantId(ctx)];
 
       if (filter?.sourceAgent) { sql += ' AND source_agent = ?'; params.push(filter.sourceAgent); }
       if (filter?.targetAgent) { sql += ' AND target_agent = ?'; params.push(filter.targetAgent); }
@@ -389,7 +433,7 @@ export function createAgentCoordinationClient(
         enabled: number; created_at: string; created_by: string;
       }>(
         `SELECT * FROM coordination_a2a_rules WHERE tenant_id = ? AND enabled = 1 ORDER BY priority ASC, created_at ASC`,
-        [ctx.tenantId],
+        [effectiveTenantId(ctx)],
       );
 
       const rules: A2AGovernanceRule[] = rows.map(r => ({
@@ -410,7 +454,7 @@ export function createAgentCoordinationClient(
 
       // CO-12.9: Audit the validation
       audit.append(conn, {
-        tenantId: ctx.tenantId,
+        tenantId: effectiveTenantId(ctx),
         actorType: 'agent',
         actorId: ctx.agentId ?? 'system',
         operation: 'validate_a2a_action',
@@ -443,7 +487,7 @@ export function createAgentCoordinationClient(
       // Look up agent trust level
       const agentRow = conn.get<{ trust_level: string }>(
         `SELECT trust_level FROM core_agents WHERE id = ? AND tenant_id = ?`,
-        [agentId, ctx.tenantId],
+        [agentId, effectiveTenantId(ctx)],
       );
       const trustLevel: AgentTrustLevel = (agentRow?.trust_level as AgentTrustLevel) ?? 'untrusted';
 
@@ -454,7 +498,7 @@ export function createAgentCoordinationClient(
         enabled: number; created_at: string; created_by: string;
       }>(
         `SELECT * FROM coordination_a2a_rules WHERE tenant_id = ? AND enabled = 1`,
-        [ctx.tenantId],
+        [effectiveTenantId(ctx)],
       );
 
       const rules: A2AGovernanceRule[] = ruleRows.map(r => ({
@@ -483,8 +527,9 @@ export function createAgentCoordinationClient(
       const govCheck = evaluateGovernance(ctx, 'assert_claim', 'low');
       if (!govCheck.ok) return govCheck as Result<ForkedSession>;
 
+      const eCtx = withEffectiveTenant(ctx);
       const sessionId = (ctx as { sessionId?: SessionId }).sessionId ?? (randomUUID() as SessionId);
-      const result = doForkSession(getForkDeps(), ctx, sessionId, atTurn, options);
+      const result = doForkSession(getForkDeps(), eCtx, sessionId, atTurn, options);
       // BRK-CO-009: Emit event on successful fork
       if (result.ok) {
         emitCoordinationEvent('fork:created', { forkId: result.value.forkId, sessionId: sessionId as string, atTurn });
@@ -498,7 +543,7 @@ export function createAgentCoordinationClient(
       const govCheck = evaluateGovernance(ctx, 'query_claims', 'low');
       if (!govCheck.ok) return govCheck as Result<ForkedSession[]>;
 
-      return doListForks(getForkDeps(), ctx, sessionId);
+      return doListForks(getForkDeps(), withEffectiveTenant(ctx), sessionId);
     },
 
     async mergeFork(ctx: OperationContext, forkId: string, strategy: MergeStrategy): Promise<Result<ForkMergeResult>> {
@@ -507,7 +552,7 @@ export function createAgentCoordinationClient(
       const govCheck = evaluateGovernance(ctx, 'assert_claim', 'low');
       if (!govCheck.ok) return govCheck as Result<ForkMergeResult>;
 
-      const result = doMergeFork(getForkDeps(), ctx, forkId, strategy);
+      const result = doMergeFork(getForkDeps(), withEffectiveTenant(ctx), forkId, strategy);
       // BRK-CO-009: Emit event on successful merge (or conflict_detected)
       if (result.ok) {
         if (result.value.unresolvedConflicts.length > 0) {
@@ -525,7 +570,7 @@ export function createAgentCoordinationClient(
       const govCheck = evaluateGovernance(ctx, 'assert_claim', 'low');
       if (!govCheck.ok) return govCheck as Result<void>;
 
-      const result = doDiscardFork(getForkDeps(), ctx, forkId);
+      const result = doDiscardFork(getForkDeps(), withEffectiveTenant(ctx), forkId);
       // BRK-CO-009: Emit event on successful discard
       if (result.ok) {
         emitCoordinationEvent('fork:discarded', { forkId });
@@ -541,7 +586,7 @@ export function createAgentCoordinationClient(
       const govCheck = evaluateGovernance(ctx, 'query_claims', 'low');
       if (!govCheck.ok) return govCheck as Result<SyncState>;
 
-      return doGetSyncState(getSyncDeps(), ctx);
+      return doGetSyncState(getSyncDeps(), withEffectiveTenant(ctx));
     },
 
     async registerPeer(ctx: OperationContext, peer: PeerRegistration): Promise<Result<string>> {
@@ -550,7 +595,7 @@ export function createAgentCoordinationClient(
       const govCheck = evaluateGovernance(ctx, 'manage_agents', 'medium');
       if (!govCheck.ok) return govCheck as Result<string>;
 
-      const result = doRegisterPeer(getSyncDeps(), ctx, peer);
+      const result = doRegisterPeer(getSyncDeps(), withEffectiveTenant(ctx), peer);
       if (result.ok) {
         emitCoordinationEvent('sync:peer_registered', { peerId: result.value, nodeId: peer.nodeId });
       }
@@ -563,7 +608,7 @@ export function createAgentCoordinationClient(
       const govCheck = evaluateGovernance(ctx, 'manage_agents', 'medium');
       if (!govCheck.ok) return govCheck as Result<void>;
 
-      const result = doRemovePeer(getSyncDeps(), ctx, peerId);
+      const result = doRemovePeer(getSyncDeps(), withEffectiveTenant(ctx), peerId);
       if (result.ok) {
         emitCoordinationEvent('sync:peer_removed', { peerId });
       }
@@ -576,7 +621,7 @@ export function createAgentCoordinationClient(
       const govCheck = evaluateGovernance(ctx, 'manage_agents', 'medium');
       if (!govCheck.ok) return govCheck as Result<SyncResult>;
 
-      const result = doTriggerSync(getSyncDeps(), ctx, options);
+      const result = doTriggerSync(getSyncDeps(), withEffectiveTenant(ctx), options);
       if (result.ok) {
         emitCoordinationEvent('sync:completed', { syncId: result.value.syncId, peersContacted: result.value.peersContacted });
       }
@@ -589,7 +634,7 @@ export function createAgentCoordinationClient(
       const govCheck = evaluateGovernance(ctx, 'query_claims', 'low');
       if (!govCheck.ok) return govCheck as Result<SyncEvent[]>;
 
-      return doGetSyncLog(getSyncDeps(), ctx, options);
+      return doGetSyncLog(getSyncDeps(), withEffectiveTenant(ctx), options);
     },
 
     // ── Deterministic Replay (CO-3.15 through CO-3.18) ──
@@ -600,7 +645,7 @@ export function createAgentCoordinationClient(
       const govCheck = evaluateGovernance(ctx, 'assert_claim', 'low');
       if (!govCheck.ok) return govCheck as Result<StateSnapshot>;
 
-      const result = doCaptureSnapshot(getReplayDeps(), ctx, missionId, trigger);
+      const result = doCaptureSnapshot(getReplayDeps(), withEffectiveTenant(ctx), missionId, trigger);
       if (result.ok) {
         emitCoordinationEvent('replay:snapshot_captured', { snapshotId: result.value.id, missionId: missionId as string });
       }
@@ -613,7 +658,7 @@ export function createAgentCoordinationClient(
       const govCheck = evaluateGovernance(ctx, 'query_claims', 'low');
       if (!govCheck.ok) return govCheck as Result<ReplayVerification>;
 
-      const result = doVerifyReplay(getReplayDeps(), ctx, missionId, options);
+      const result = doVerifyReplay(getReplayDeps(), withEffectiveTenant(ctx), missionId, options);
       if (result.ok) {
         if (result.value.verified) {
           emitCoordinationEvent('replay:verification_complete', { missionId: missionId as string, verified: true });
@@ -630,7 +675,7 @@ export function createAgentCoordinationClient(
       const govCheck = evaluateGovernance(ctx, 'query_claims', 'low');
       if (!govCheck.ok) return govCheck as Result<StateSnapshot[]>;
 
-      return doGetSnapshots(getReplayDeps(), ctx, missionId);
+      return doGetSnapshots(getReplayDeps(), withEffectiveTenant(ctx), missionId);
     },
 
     async detectDivergence(ctx: OperationContext, snapshotA: string, snapshotB: string): Promise<Result<DivergenceReport>> {
@@ -639,7 +684,7 @@ export function createAgentCoordinationClient(
       const govCheck = evaluateGovernance(ctx, 'query_claims', 'low');
       if (!govCheck.ok) return govCheck as Result<DivergenceReport>;
 
-      const result = doDetectDivergence(getReplayDeps(), ctx, snapshotA, snapshotB);
+      const result = doDetectDivergence(getReplayDeps(), withEffectiveTenant(ctx), snapshotA, snapshotB);
       if (result.ok && result.value.divergences.length > 0) {
         emitCoordinationEvent('replay:divergence_detected', { snapshotA, snapshotB, divergenceCount: result.value.divergences.length });
       }

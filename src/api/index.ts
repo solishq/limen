@@ -197,6 +197,9 @@ import { getOutputGovernanceMigrations } from './migration/050_output_governance
 // Subsystem 4: Coordination Governance migration (v51)
 import { getCoordinationGovernanceMigrations } from './migration/051_coordination_governance.js';
 
+// FINDING-024: Agent name uniqueness tightening (v52)
+import { getAgentNameUniquenessMigrations } from './migration/052_agent_name_uniqueness.js';
+
 // Phase 5 Subsystem 3: Output Governance Client
 import { createAgentOutputClient, type AgentOutputClient } from '../output/output_governance.js';
 
@@ -578,6 +581,7 @@ function buildOrchestrationAdapter(
       ...getLifecycleRemediationMigrations(),                        // v49: BK-12, BK-16, BK-17 remediation
       ...getOutputGovernanceMigrations(),                              // v50: Phase 5 output governance
       ...getCoordinationGovernanceMigrations(),                          // v51: Subsystem 4 coordination governance
+      ...getAgentNameUniquenessMigrations(),                              // v52: FINDING-024 agent name uniqueness
     ]);
     if (!phase4Governance.ok) {
       conn.close();
@@ -1389,11 +1393,13 @@ export async function createLimen(
   }
 
   // Subsystem 4: Coordination Governance Client
+  // FINDING-027: Pass tenancyMode so ensureTenant() accepts null in single-tenant mode
   const coordinationClient: AgentCoordinationClient = createAgentCoordinationClient({
     getConnection,
     getContext,
     audit: kernel.audit,
     time: kernel.time,
+    tenancyMode: tenancyMode,
   });
   log({ level: 'info', category: 'init', message: 'Coordination Governance Client initialized' });
 

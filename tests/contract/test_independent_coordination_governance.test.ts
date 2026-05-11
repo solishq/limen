@@ -864,13 +864,26 @@ describe('Coordination Governance — Events (CO-3.19, CO-3.20, CO-8.x)', () => 
 // ============================================================================
 
 describe('Coordination Governance — Tenant Isolation (CO-1.3, CO-12.1)', () => {
-  // CO-12.1: operations require a tenant — null tenant returns error
-  it('CO-12.1: null tenantId returns COORDINATION_TENANT_MISMATCH', async () => {
-    const setup = createTestCoordinationClient();
+  // CO-12.1: operations require a tenant in multi-tenant mode — null tenant returns error
+  // FINDING-027: In single-tenant mode, null tenantId is valid and accepted.
+  it('CO-12.1: null tenantId returns COORDINATION_TENANT_MISMATCH in multi-tenant mode', async () => {
+    const conn = createTestDatabase();
+    const audit = createTestAuditTrail();
     const ctxNoTenant = createTestOperationContext({ tenantId: null });
 
-    const result = await setup.client.registerA2ARule(ctxNoTenant, makeRuleInput());
-    assert.equal(result.ok, false, 'null tenant must fail');
+    // Explicitly create a multi-tenant client
+    const deps: CoordinationGovernanceDeps = {
+      getConnection: () => conn,
+      getContext: () => ctxNoTenant,
+      audit,
+      time: { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() },
+      nodeId: 'test-node-mt',
+      tenancyMode: 'multi',
+    };
+    const client = createAgentCoordinationClient(deps);
+
+    const result = await client.registerA2ARule(ctxNoTenant, makeRuleInput());
+    assert.equal(result.ok, false, 'null tenant must fail in multi-tenant mode');
     if (!result.ok) {
       assert.ok(
         result.error.code === 'COORDINATION_TENANT_MISMATCH' ||
@@ -878,6 +891,26 @@ describe('Coordination Governance — Tenant Isolation (CO-1.3, CO-12.1)', () =>
         'error must indicate tenant mismatch'
       );
     }
+  });
+
+  // FINDING-027: In single-tenant mode, null tenantId should succeed
+  it('FINDING-027: null tenantId succeeds in single-tenant mode', async () => {
+    const conn = createTestDatabase();
+    const audit = createTestAuditTrail();
+    const ctxNoTenant = createTestOperationContext({ tenantId: null });
+
+    const deps: CoordinationGovernanceDeps = {
+      getConnection: () => conn,
+      getContext: () => ctxNoTenant,
+      audit,
+      time: { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() },
+      nodeId: 'test-node-st',
+      tenancyMode: 'single',
+    };
+    const client = createAgentCoordinationClient(deps);
+
+    const result = await client.registerA2ARule(ctxNoTenant, makeRuleInput());
+    assert.equal(result.ok, true, 'null tenant must succeed in single-tenant mode');
   });
 
   // CO-12.1: rules from tenant A do not appear in tenant B listing
@@ -957,24 +990,38 @@ describe('Coordination Governance — Error Types (CO-9.x)', () => {
     }
   });
 
-  // CO-9.13: errors returned via Result, never thrown
+  // CO-9.13: errors returned via Result, never thrown (multi-tenant mode)
+  // FINDING-027: Test with explicit multi-tenant mode so null tenantId is rejected
   it('CO-9.13: all error paths return Result, never throw', async () => {
     // This test verifies that operations with bad inputs return {ok: false} instead of throwing
     const badCtx = createTestOperationContext({ tenantId: null });
 
+    // Create a multi-tenant client so null tenantId is rejected
+    const conn = createTestDatabase();
+    const audit = createTestAuditTrail();
+    const mtDeps: CoordinationGovernanceDeps = {
+      getConnection: () => conn,
+      getContext: () => badCtx,
+      audit,
+      time: { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() },
+      nodeId: 'test-node-mt-errors',
+      tenancyMode: 'multi',
+    };
+    const mtClient = createAgentCoordinationClient(mtDeps);
+
     // Each of these should return Result, not throw
     const results = await Promise.all([
-      client.registerA2ARule(badCtx, makeRuleInput()),
-      client.removeA2ARule(badCtx, 'bad-id'),
-      client.listA2ARules(badCtx),
-      client.forkSession(badCtx, 1),
-      client.getSyncState(badCtx),
-      client.captureSnapshot(badCtx, missionId('m1'), 'manual'),
+      mtClient.registerA2ARule(badCtx, makeRuleInput()),
+      mtClient.removeA2ARule(badCtx, 'bad-id'),
+      mtClient.listA2ARules(badCtx),
+      mtClient.forkSession(badCtx, 1),
+      mtClient.getSyncState(badCtx),
+      mtClient.captureSnapshot(badCtx, missionId('m1'), 'manual'),
     ]);
 
     for (const r of results) {
       assert.equal(typeof r.ok, 'boolean', 'every result must have ok property');
-      assert.equal(r.ok, false, 'null-tenant operations must return error result');
+      assert.equal(r.ok, false, 'null-tenant operations must return error result in multi-tenant mode');
     }
   });
 });
@@ -1000,14 +1047,25 @@ describe('Coordination Governance — Audit Production (CO-1.5, CO-12.9)', () =>
 
   // BRK-CO-005 REMEDIATION: CO-12.9 requires "Failed operations produce audit entries with error context"
   // Previously ensureTenant() early-returned without audit. Now fixed — audit entry IS produced.
+  // FINDING-027: Test with explicit multi-tenant mode so null tenantId triggers rejection path
   it('CO-12.9: failed operations with null tenant produce audit entries (BRK-CO-005 fix)', async () => {
-    const setup = createTestCoordinationClient();
-    const { client, conn } = setup;
+    const conn = createTestDatabase();
+    const audit = createTestAuditTrail();
     const badCtx = createTestOperationContext({ tenantId: null });
+
+    const mtDeps: CoordinationGovernanceDeps = {
+      getConnection: () => conn,
+      getContext: () => badCtx,
+      audit,
+      time: { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() },
+      nodeId: 'test-node-mt-audit',
+      tenancyMode: 'multi',
+    };
+    const mtClient = createAgentCoordinationClient(mtDeps);
 
     const countBefore = conn.get<{ cnt: number }>('SELECT COUNT(*) as cnt FROM core_audit_log')?.cnt ?? 0;
 
-    await client.registerA2ARule(badCtx, makeRuleInput());
+    await mtClient.registerA2ARule(badCtx, makeRuleInput());
 
     const countAfter = conn.get<{ cnt: number }>('SELECT COUNT(*) as cnt FROM core_audit_log')?.cnt ?? 0;
     // CO-12.9: Failed operations MUST produce audit entries.
@@ -1324,9 +1382,22 @@ describe('Coordination Governance — Result Envelope (AD-11)', () => {
       assert.ok('value' in regResult, 'success result must have value property');
     }
 
-    // Error path
+    // Error path — use multi-tenant client to trigger tenant rejection
+    // FINDING-027: single-tenant mode accepts null tenantId
+    const conn2 = createTestDatabase();
+    const audit2 = createTestAuditTrail();
     const badCtx = createTestOperationContext({ tenantId: null });
-    const errResult = await client.registerA2ARule(badCtx, makeRuleInput());
+    const mtDeps: CoordinationGovernanceDeps = {
+      getConnection: () => conn2,
+      getContext: () => badCtx,
+      audit: audit2,
+      time: { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() },
+      nodeId: 'test-node-ad11',
+      tenancyMode: 'multi',
+    };
+    const mtClient = createAgentCoordinationClient(mtDeps);
+
+    const errResult = await mtClient.registerA2ARule(badCtx, makeRuleInput());
     assert.equal(errResult.ok, false);
     if (!errResult.ok) {
       assert.ok('error' in errResult, 'error result must have error property');

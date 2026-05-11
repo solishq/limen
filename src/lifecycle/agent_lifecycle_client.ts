@@ -442,10 +442,11 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
       const now = time.nowISO();
       const tenantId = spec.tenantId ?? null;
 
-      // LM-13.02: Check uniqueness (name + framework + tenant)
+      // FINDING-024: Check uniqueness by (name + tenant) only — names must be unique per tenant
+      // regardless of framework. Migration v52 enforces this at the DB level.
       const existing = conn.get<{ id: string }>(
-        `SELECT id FROM lm_agents WHERE name = ? AND framework = ? AND COALESCE(tenant_id, '__NULL__') = ?`,
-        [spec.name, spec.framework, tenantId ?? '__NULL__'],
+        `SELECT id FROM lm_agents WHERE name = ? AND COALESCE(tenant_id, '__NULL__') = ?`,
+        [spec.name, tenantId ?? '__NULL__'],
       );
       if (existing) return agentAlreadyExists(spec.name, spec.framework);
 

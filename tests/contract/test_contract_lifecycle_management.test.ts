@@ -925,14 +925,15 @@ describe('AgentLifecycleClient — Invariants', () => {
     assert.equal(get.value.id, id);
   });
 
-  it('LM-13.02: name+framework uniqueness within tenant', async () => {
+  it('LM-13.02: name uniqueness within tenant (FINDING-024)', async () => {
     await h.client.registerAgent(h.ctx, validSpec({ name: 'unique-test', framework: 'claude' }));
     // Same name+framework should fail
     const dup = await h.client.registerAgent(h.ctx, validSpec({ name: 'unique-test', framework: 'claude' }));
     assert.ok(!dup.ok);
-    // Different framework should succeed
+    // FINDING-024: Different framework with same name should ALSO fail
+    // Names must be unique per tenant regardless of framework
     const diff = await h.client.registerAgent(h.ctx, validSpec({ name: 'unique-test', framework: 'gemma' }));
-    assert.ok(diff.ok);
+    assert.ok(!diff.ok, 'FINDING-024: same name with different framework must be rejected');
   });
 
   it('LM-13.17: capability revocation is immediate', async () => {
