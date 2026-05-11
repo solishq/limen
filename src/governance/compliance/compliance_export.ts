@@ -94,6 +94,15 @@ export function generateComplianceExport(
   ctx: OperationContext,
   options: ComplianceExportOptions,
 ): Result<Soc2AuditPackage> {
+  // CC-P2-06: Reject non-string dates — numeric values silently coerce via new Date(number)
+  // which accepts millisecond timestamps, bypassing the ISO 8601 contract.
+  if (typeof options.from !== 'string') {
+    return err('EXPORT_PERIOD_INVALID', 'from must be an ISO 8601 date string', 'I-P10-30');
+  }
+  if (typeof options.to !== 'string') {
+    return err('EXPORT_PERIOD_INVALID', 'to must be an ISO 8601 date string', 'I-P10-30');
+  }
+
   // Validate period
   const fromMs = new Date(options.from).getTime();
   const toMs = new Date(options.to).getTime();

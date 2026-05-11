@@ -55,7 +55,15 @@ export function executeExport(
   request: ExportRequest,
 ): Result<ExportResult> {
   const { conn, timeProvider, clearanceLevel } = deps;
-  const { format, filters, options } = request;
+  const { format, filters } = request;
+  // CC-25 (P1): Guard against undefined options — callers may omit the optional-at-runtime field.
+  const options: ExportOptions = request.options ?? {
+    includeProvenance: false,
+    includeBeliefGraph: false,
+    includeTimeline: false,
+    includeHeatmap: false,
+    redactClassified: false,
+  };
 
   // Validate format support
   if (format === 'pdf' || format === 'svg') {

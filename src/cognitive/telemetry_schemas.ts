@@ -94,17 +94,39 @@ function validateCost(value: unknown): ValidationResult<unknown> {
   return errors.length ? { success: false, errors } : { success: true, data: obj };
 }
 
-const VITAL_KEYS = new Set(['contextPct', 'quality', 'costRate']);
+// CC-17a (P1): Vital schema accepts TWO formats:
+// 1. Contract format (AGENT_OUTPUT_GOVERNANCE §5.2): { metric, value, unit } with optional tags
+// 2. Legacy/MCP format: { contextPct, quality, costRate }
+// Discriminated by presence of 'metric' key.
+const VITAL_CONTRACT_KEYS = new Set(['metric', 'value', 'unit', 'tags']);
+const VITAL_LEGACY_KEYS = new Set(['contextPct', 'quality', 'costRate']);
 function validateVital(value: unknown): ValidationResult<unknown> {
   const objResult = assertObject(value);
   if (!objResult.success) return objResult;
   const obj = objResult.data;
   const errors: string[] = [];
-  const extra = unknownKeys(obj, VITAL_KEYS);
-  if (extra.length) errors.push(`Unrecognized key(s): ${extra.join(', ')}`);
-  const e1 = requireNumber(obj, 'contextPct', { min: 0, max: 100 }); if (e1) errors.push(e1);
-  const e2 = requireEnum(obj, 'quality', ['OK', 'DEGRADED', 'CRITICAL'] as const); if (e2) errors.push(e2);
-  const e3 = requireNumber(obj, 'costRate', { min: 0 }); if (e3) errors.push(e3);
+
+  // Discriminate: if 'metric' key exists, validate as contract format
+  if ('metric' in obj) {
+    const extra = unknownKeys(obj, VITAL_CONTRACT_KEYS);
+    if (extra.length) errors.push(`Unrecognized key(s): ${extra.join(', ')}`);
+    const e1 = requireString(obj, 'metric'); if (e1) errors.push(e1);
+    const e2 = requireNumber(obj, 'value'); if (e2) errors.push(e2);
+    const e3 = requireString(obj, 'unit'); if (e3) errors.push(e3);
+    // tags is optional — validate as object if present
+    if ('tags' in obj && obj.tags !== undefined) {
+      if (typeof obj.tags !== 'object' || obj.tags === null || Array.isArray(obj.tags)) {
+        errors.push('tags must be an object');
+      }
+    }
+  } else {
+    // Legacy format validation
+    const extra = unknownKeys(obj, VITAL_LEGACY_KEYS);
+    if (extra.length) errors.push(`Unrecognized key(s): ${extra.join(', ')}`);
+    const e1 = requireNumber(obj, 'contextPct', { min: 0, max: 100 }); if (e1) errors.push(e1);
+    const e2 = requireEnum(obj, 'quality', ['OK', 'DEGRADED', 'CRITICAL'] as const); if (e2) errors.push(e2);
+    const e3 = requireNumber(obj, 'costRate', { min: 0 }); if (e3) errors.push(e3);
+  }
   return errors.length ? { success: false, errors } : { success: true, data: obj };
 }
 

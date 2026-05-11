@@ -93,20 +93,22 @@ export class MissionApiImpl implements MissionApi {
     const agentId = options.agent as AgentId;
 
     // Map consumer options to SC-1 input (ProposeMissionInput)
+    // P1-FIX: Guard against undefined constraints — runtime callers may omit it
+    const constraints = options.constraints ?? { tokenBudget: 0, deadline: new Date().toISOString() };
     const input: ProposeMissionInput = {
       parentMissionId: options.parentMissionId ?? null,
       agentId,
       objective: options.objective,
       successCriteria: options.successCriteria ? [...options.successCriteria] : [],
       scopeBoundaries: options.scopeBoundaries ? [...options.scopeBoundaries] : [],
-      capabilities: options.constraints.capabilities ? [...options.constraints.capabilities] : [],
+      capabilities: constraints.capabilities ? [...constraints.capabilities] : [],
       constraints: {
-        budget: options.constraints.tokenBudget,
-        deadline: options.constraints.deadline,
+        budget: constraints.tokenBudget,
+        deadline: constraints.deadline,
         // exactOptionalPropertyTypes: only include optional fields when they have values
-        ...(options.constraints.maxTasks !== undefined ? { maxTasks: options.constraints.maxTasks } : {}),
-        ...(options.constraints.maxDepth !== undefined ? { maxDepth: options.constraints.maxDepth } : {}),
-        ...(options.constraints.maxChildren !== undefined ? { maxChildren: options.constraints.maxChildren } : {}),
+        ...(constraints.maxTasks !== undefined ? { maxTasks: constraints.maxTasks } : {}),
+        ...(constraints.maxDepth !== undefined ? { maxDepth: constraints.maxDepth } : {}),
+        ...(constraints.maxChildren !== undefined ? { maxChildren: constraints.maxChildren } : {}),
       },
     };
 

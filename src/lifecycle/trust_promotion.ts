@@ -161,6 +161,13 @@ export function validatePromotion(
     valid: false, reason, capabilitiesUnlocked: [],
   });
 
+  // CC-12 (P0): LM-5.04 — evidence is mandatory for promotions to medium and above.
+  // untrusted->low requires only registration (implicit), but higher levels need proof.
+  // Empty evidence array rejected fail-closed for medium, high, verified.
+  if (targetLevel !== 'low' && (!evidence || evidence.length === 0)) {
+    return rejected('Promotion requires at least one evidence item (LM-5.04)');
+  }
+
   // Cannot promote to same level
   if (currentLevel === targetLevel) {
     return rejected(`Already at trust level '${currentLevel}'`);
