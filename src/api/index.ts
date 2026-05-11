@@ -620,6 +620,13 @@ export function createDefaultDeps(): LimenDeps {
 // ============================================================================
 
 /**
+ * FINDING-022: Utility type — drop the first element from a tuple type.
+ * Used to strip the OperationContext parameter from v5 subsystem method signatures,
+ * enabling ctx auto-injection at the API surface while preserving type safety.
+ */
+type DropFirst<T extends readonly unknown[]> = T extends [unknown, ...infer R] ? R : never;
+
+/**
  * S3.3, C-07, C-06: Create an independent Limen engine instance.
  *
  * This is the SOLE entry point to the Limen engine. It:
@@ -1719,7 +1726,61 @@ export async function createLimen(
     agents: agentsApi,
 
     // Phase 5 Subsystem 2: Agent Lifecycle Management (LM-2.01 through LM-2.22)
-    lifecycle: lifecycleClient,
+    // FINDING-022: ctx-injecting adapter. The raw lifecycleClient methods expect
+    // (ctx: OperationContext, ...args) as the first parameter, but the permission
+    // gateway's wrapMethod does NOT prepend ctx — it only uses ctx for RBAC checks.
+    // This adapter auto-injects getContext() for methods that require it, and
+    // passes through methods that don't (read-only queries, event subscriptions).
+    lifecycle: {
+      // Methods WITH ctx parameter — ctx auto-injected from factory closure:
+      registerAgent: (...args: DropFirst<Parameters<typeof lifecycleClient.registerAgent>>) =>
+        lifecycleClient.registerAgent(getContext(), ...args),
+      updateAgent: (...args: DropFirst<Parameters<typeof lifecycleClient.updateAgent>>) =>
+        lifecycleClient.updateAgent(getContext(), ...args),
+      decommissionAgent: (...args: DropFirst<Parameters<typeof lifecycleClient.decommissionAgent>>) =>
+        lifecycleClient.decommissionAgent(getContext(), ...args),
+      suspendAgent: (...args: DropFirst<Parameters<typeof lifecycleClient.suspendAgent>>) =>
+        lifecycleClient.suspendAgent(getContext(), ...args),
+      reactivateAgent: (...args: DropFirst<Parameters<typeof lifecycleClient.reactivateAgent>>) =>
+        lifecycleClient.reactivateAgent(getContext(), ...args),
+      requestCapabilityUpgrade: (...args: DropFirst<Parameters<typeof lifecycleClient.requestCapabilityUpgrade>>) =>
+        lifecycleClient.requestCapabilityUpgrade(getContext(), ...args),
+      revokeCapability: (...args: DropFirst<Parameters<typeof lifecycleClient.revokeCapability>>) =>
+        lifecycleClient.revokeCapability(getContext(), ...args),
+      promoteAgent: (...args: DropFirst<Parameters<typeof lifecycleClient.promoteAgent>>) =>
+        lifecycleClient.promoteAgent(getContext(), ...args),
+      demoteAgent: (...args: DropFirst<Parameters<typeof lifecycleClient.demoteAgent>>) =>
+        lifecycleClient.demoteAgent(getContext(), ...args),
+      registerConsent: (...args: DropFirst<Parameters<typeof lifecycleClient.registerConsent>>) =>
+        lifecycleClient.registerConsent(getContext(), ...args),
+      revokeConsent: (...args: DropFirst<Parameters<typeof lifecycleClient.revokeConsent>>) =>
+        lifecycleClient.revokeConsent(getContext(), ...args),
+      exportKnowledge: (...args: DropFirst<Parameters<typeof lifecycleClient.exportKnowledge>>) =>
+        lifecycleClient.exportKnowledge(getContext(), ...args),
+      importKnowledge: (...args: DropFirst<Parameters<typeof lifecycleClient.importKnowledge>>) =>
+        lifecycleClient.importKnowledge(getContext(), ...args),
+      transferKnowledge: (...args: DropFirst<Parameters<typeof lifecycleClient.transferKnowledge>>) =>
+        lifecycleClient.transferKnowledge(getContext(), ...args),
+      // Methods WITHOUT ctx parameter (read-only queries + event subscriptions):
+      getAgent: (...args: Parameters<typeof lifecycleClient.getAgent>) =>
+        lifecycleClient.getAgent(...args),
+      listAgents: (...args: Parameters<typeof lifecycleClient.listAgents>) =>
+        lifecycleClient.listAgents(...args),
+      getCapabilities: (...args: Parameters<typeof lifecycleClient.getCapabilities>) =>
+        lifecycleClient.getCapabilities(...args),
+      getCapabilityHistory: (...args: Parameters<typeof lifecycleClient.getCapabilityHistory>) =>
+        lifecycleClient.getCapabilityHistory(...args),
+      getTrustLevel: (...args: Parameters<typeof lifecycleClient.getTrustLevel>) =>
+        lifecycleClient.getTrustLevel(...args),
+      checkConsent: (...args: Parameters<typeof lifecycleClient.checkConsent>) =>
+        lifecycleClient.checkConsent(...args),
+      listConsents: (...args: Parameters<typeof lifecycleClient.listConsents>) =>
+        lifecycleClient.listConsents(...args),
+      on: (...args: Parameters<typeof lifecycleClient.on>) =>
+        lifecycleClient.on(...args),
+      off: (...args: Parameters<typeof lifecycleClient.off>) =>
+        lifecycleClient.off(...args),
+    },
 
     // S14-S24: Mission management
     missions: missionsApi,
@@ -1774,10 +1835,88 @@ export async function createLimen(
     },
 
     // Phase 5 Subsystem 3: Full Output Governance Client (BRK-001: wired, not voided)
-    outputGovernance: outputGovernanceClient,
+    // FINDING-022: ctx-injecting adapter — ALL outputGovernance methods take ctx as first param.
+    outputGovernance: outputGovernanceClient ? {
+      produce: (...args: DropFirst<Parameters<typeof outputGovernanceClient.produce>>) =>
+        outputGovernanceClient!.produce(getContext(), ...args),
+      queryOutputs: (...args: DropFirst<Parameters<typeof outputGovernanceClient.queryOutputs>>) =>
+        outputGovernanceClient!.queryOutputs(getContext(), ...args),
+      retractOutput: (...args: DropFirst<Parameters<typeof outputGovernanceClient.retractOutput>>) =>
+        outputGovernanceClient!.retractOutput(getContext(), ...args),
+      recordCost: (...args: DropFirst<Parameters<typeof outputGovernanceClient.recordCost>>) =>
+        outputGovernanceClient!.recordCost(getContext(), ...args),
+      recordVital: (...args: DropFirst<Parameters<typeof outputGovernanceClient.recordVital>>) =>
+        outputGovernanceClient!.recordVital(getContext(), ...args),
+      queryCosts: (...args: DropFirst<Parameters<typeof outputGovernanceClient.queryCosts>>) =>
+        outputGovernanceClient!.queryCosts(getContext(), ...args),
+      queryVitals: (...args: DropFirst<Parameters<typeof outputGovernanceClient.queryVitals>>) =>
+        outputGovernanceClient!.queryVitals(getContext(), ...args),
+      getBudgetConsumption: (...args: DropFirst<Parameters<typeof outputGovernanceClient.getBudgetConsumption>>) =>
+        outputGovernanceClient!.getBudgetConsumption(getContext(), ...args),
+      infer: (...args: DropFirst<Parameters<typeof outputGovernanceClient.infer>>) =>
+        outputGovernanceClient!.infer(getContext(), ...args),
+      installPlugin: (...args: DropFirst<Parameters<typeof outputGovernanceClient.installPlugin>>) =>
+        outputGovernanceClient!.installPlugin(getContext(), ...args),
+      uninstallPlugin: (...args: DropFirst<Parameters<typeof outputGovernanceClient.uninstallPlugin>>) =>
+        outputGovernanceClient!.uninstallPlugin(getContext(), ...args),
+      listPlugins: (...args: DropFirst<Parameters<typeof outputGovernanceClient.listPlugins>>) =>
+        outputGovernanceClient!.listPlugins(getContext(), ...args),
+      registerHook: (...args: DropFirst<Parameters<typeof outputGovernanceClient.registerHook>>) =>
+        outputGovernanceClient!.registerHook(getContext(), ...args),
+      unregisterHook: (...args: DropFirst<Parameters<typeof outputGovernanceClient.unregisterHook>>) =>
+        outputGovernanceClient!.unregisterHook(getContext(), ...args),
+      listHooks: (...args: DropFirst<Parameters<typeof outputGovernanceClient.listHooks>>) =>
+        outputGovernanceClient!.listHooks(getContext(), ...args),
+      on: (...args: DropFirst<Parameters<typeof outputGovernanceClient.on>>) =>
+        outputGovernanceClient!.on(getContext(), ...args),
+      off: (...args: DropFirst<Parameters<typeof outputGovernanceClient.off>>) =>
+        outputGovernanceClient!.off(getContext(), ...args),
+    } : null,
 
     // Subsystem 4: Coordination Governance Client
-    coordination: coordinationClient,
+    // FINDING-022: ctx-injecting adapter — ALL coordination methods take ctx as first param.
+    coordination: {
+      registerA2ARule: (...args: DropFirst<Parameters<typeof coordinationClient.registerA2ARule>>) =>
+        coordinationClient.registerA2ARule(getContext(), ...args),
+      removeA2ARule: (...args: DropFirst<Parameters<typeof coordinationClient.removeA2ARule>>) =>
+        coordinationClient.removeA2ARule(getContext(), ...args),
+      listA2ARules: (...args: DropFirst<Parameters<typeof coordinationClient.listA2ARules>>) =>
+        coordinationClient.listA2ARules(getContext(), ...args),
+      validateA2AAction: (...args: DropFirst<Parameters<typeof coordinationClient.validateA2AAction>>) =>
+        coordinationClient.validateA2AAction(getContext(), ...args),
+      getCapabilityBoundary: (...args: DropFirst<Parameters<typeof coordinationClient.getCapabilityBoundary>>) =>
+        coordinationClient.getCapabilityBoundary(getContext(), ...args),
+      forkSession: (...args: DropFirst<Parameters<typeof coordinationClient.forkSession>>) =>
+        coordinationClient.forkSession(getContext(), ...args),
+      listForks: (...args: DropFirst<Parameters<typeof coordinationClient.listForks>>) =>
+        coordinationClient.listForks(getContext(), ...args),
+      mergeFork: (...args: DropFirst<Parameters<typeof coordinationClient.mergeFork>>) =>
+        coordinationClient.mergeFork(getContext(), ...args),
+      discardFork: (...args: DropFirst<Parameters<typeof coordinationClient.discardFork>>) =>
+        coordinationClient.discardFork(getContext(), ...args),
+      getSyncState: (...args: DropFirst<Parameters<typeof coordinationClient.getSyncState>>) =>
+        coordinationClient.getSyncState(getContext(), ...args),
+      registerPeer: (...args: DropFirst<Parameters<typeof coordinationClient.registerPeer>>) =>
+        coordinationClient.registerPeer(getContext(), ...args),
+      removePeer: (...args: DropFirst<Parameters<typeof coordinationClient.removePeer>>) =>
+        coordinationClient.removePeer(getContext(), ...args),
+      triggerSync: (...args: DropFirst<Parameters<typeof coordinationClient.triggerSync>>) =>
+        coordinationClient.triggerSync(getContext(), ...args),
+      getSyncLog: (...args: DropFirst<Parameters<typeof coordinationClient.getSyncLog>>) =>
+        coordinationClient.getSyncLog(getContext(), ...args),
+      captureSnapshot: (...args: DropFirst<Parameters<typeof coordinationClient.captureSnapshot>>) =>
+        coordinationClient.captureSnapshot(getContext(), ...args),
+      verifyReplay: (...args: DropFirst<Parameters<typeof coordinationClient.verifyReplay>>) =>
+        coordinationClient.verifyReplay(getContext(), ...args),
+      getSnapshots: (...args: DropFirst<Parameters<typeof coordinationClient.getSnapshots>>) =>
+        coordinationClient.getSnapshots(getContext(), ...args),
+      detectDivergence: (...args: DropFirst<Parameters<typeof coordinationClient.detectDivergence>>) =>
+        coordinationClient.detectDivergence(getContext(), ...args),
+      on: (...args: DropFirst<Parameters<typeof coordinationClient.on>>) =>
+        coordinationClient.on(getContext(), ...args),
+      off: (...args: DropFirst<Parameters<typeof coordinationClient.off>>) =>
+        coordinationClient.off(getContext(), ...args),
+    },
 
     // Phase 7 FR-002: A2A Governance namespace
     a2aGovernance: a2aGovernanceApi ?? {

@@ -101,6 +101,50 @@ import type { AgentOutputClient } from '../../output/output_governance.js';
 // Subsystem 4: Coordination Governance Client
 import type { AgentCoordinationClient } from '../../coordination/coordination_governance.js';
 
+import type { OperationContext } from '../../kernel/interfaces/common.js';
+
+// ============================================================================
+// FINDING-022: Public API surface types that strip OperationContext from
+// v5 subsystem method signatures. The API factory auto-injects ctx via
+// closure, so consumers never pass it explicitly.
+// ============================================================================
+
+/**
+ * Strip the first parameter from a function type if it extends OperationContext.
+ * If the first param is not OperationContext, the function type is returned unchanged.
+ */
+type StripCtx<F> = F extends (ctx: OperationContext, ...rest: infer R) => infer Ret
+  ? (...args: R) => Ret
+  : F;
+
+/**
+ * Apply StripCtx to every method in an interface.
+ * Uses `(...args: any[]) => any` for the function guard to avoid contravariance issues.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type StripCtxFromClient<T> = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [K in keyof T]: T[K] extends (...args: any[]) => any ? StripCtx<T[K]> : T[K];
+};
+
+/**
+ * Public-facing lifecycle client — OperationContext auto-injected by factory.
+ * Methods that already lack ctx (getAgent, listAgents, etc.) pass through unchanged.
+ */
+export type PublicAgentLifecycleClient = StripCtxFromClient<AgentLifecycleClient>;
+
+/**
+ * Public-facing output governance client — OperationContext auto-injected by factory.
+ * All 17 methods have ctx stripped.
+ */
+export type PublicAgentOutputClient = StripCtxFromClient<AgentOutputClient>;
+
+/**
+ * Public-facing coordination client — OperationContext auto-injected by factory.
+ * All 20 methods have ctx stripped.
+ */
+export type PublicAgentCoordinationClient = StripCtxFromClient<AgentCoordinationClient>;
+
 // Re-export CCP/WMP types so consumers can construct inputs
 export type {
   ClaimCreateInput, AssertClaimOutput,
@@ -639,8 +683,9 @@ export interface Limen {
    * Registration, capability management, trust promotion, consent governance,
    * knowledge exchange, and decommission cascade.
    * 22 interface methods per AGENT_LIFECYCLE_MANAGEMENT contract.
+   * FINDING-022: Public surface uses PublicAgentLifecycleClient — ctx auto-injected.
    */
-  readonly lifecycle: AgentLifecycleClient;
+  readonly lifecycle: PublicAgentLifecycleClient;
 
   // -- Phase 5: Cognitive Intelligence Namespace --
 
@@ -678,16 +723,18 @@ export interface Limen {
    * plugin/hook lifecycle, and event management.
    * OG-3.1 through OG-3.17, Appendix A governance checks.
    * null when convenience init failed (no mission/agent context).
+   * FINDING-022: Public surface uses PublicAgentOutputClient — ctx auto-injected.
    */
-  readonly outputGovernance: AgentOutputClient | null;
+  readonly outputGovernance: PublicAgentOutputClient | null;
 
   /**
    * Subsystem 4: Coordination governance client.
    * Provides A2A governance, session forking, distributed sync,
    * and deterministic replay verification.
    * CO-3.1 through CO-3.20, 20 interface methods across 4 domains.
+   * FINDING-022: Public surface uses PublicAgentCoordinationClient — ctx auto-injected.
    */
-  readonly coordination: AgentCoordinationClient;
+  readonly coordination: PublicAgentCoordinationClient;
 
   // -- Phase 7 FR-002: A2A Governance --
 
