@@ -1,138 +1,189 @@
-<!-- @governance SolisForge Protocol v1.4 — Sole Governing Doctrine -->
-<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §5.1 -->
+<!-- @governance SolisForge Protocol v1.4 -- Sole Governing Doctrine -->
+<!-- @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md S5.1 -->
 
-# Deployment Guide
+# Limen v5 Deployment Strategy
 
-Limen runs as an embedded library in your Node.js application. There is no separate server to deploy, no external database to manage, and no container orchestration required.
+## 1. CI/CD Pipeline
 
----
+The release pipeline is `scripts/release-pipeline.sh`. It is a single script executing 5 sequential stages with fail-fast semantics:
 
-## Requirements
+| Stage | Gate | What It Does | Failure = |
+|-------|------|-------------|-----------|
+| 1. VALIDATE | SolisForge compliance | Runs `solisforge-traceability-scanner.sh --ci` + contract hash verification | Non-compliant artifact |
+| 2. BUILD | TypeScript compilation | `npx tsc --noEmit` with zero errors | Type-system violation |
+| 3. TEST | Full test suite | `npm test` with 0 failures across 4,678+ tests | Behavioral regression |
+| 4. PACK | Artifact production | `npm pack` produces versioned `.tgz` tarball | Packaging defect |
+| 5. VERIFY | Smoke test | Installs tarball in clean temp project, runs `createLimen() -> remember -> recall -> health` | Integration failure |
 
-- Node.js >= 22
-- Writable filesystem for SQLite database
-- C++ build tools for `better-sqlite3` native compilation:
-  - **macOS**: `xcode-select --install`
-  - **Ubuntu/Debian**: `sudo apt install build-essential python3`
-  - **Alpine**: `apk add build-base python3`
-  - **Windows**: Visual Studio Build Tools
-
----
-
-## Data Directory
-
-All engine state is stored in the `dataDir` you specify:
-
-```typescript
-const limen = await createLimen({
-  dataDir: '/var/lib/myapp/limen',
-  masterKey: Buffer.from(process.env.LIMEN_MASTER_KEY!, 'hex'),
-  // ...
-});
-```
-
-The directory contains:
-- `limen.db` — Main SQLite database (WAL mode)
-- `limen.db-wal` — Write-ahead log (auto-managed)
-- `limen.db-shm` — Shared memory (auto-managed)
-
-**Backup**: Copy `limen.db` while the engine is shut down, or use SQLite's online backup API. WAL mode checkpoints periodically (every 5 minutes, passive mode).
-
----
-
-## Master Key
-
-The master key encrypts sensitive data at rest (AES-256-GCM). You must provide the same key on every startup or encrypted data becomes unreadable.
+**Invocation:**
 
 ```bash
-# Generate once
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" > /etc/myapp/master.key
-chmod 600 /etc/myapp/master.key
+bash scripts/release-pipeline.sh [--version 5.0.0-rc.1]
 ```
 
-**Storage options**:
-- Environment variable: `LIMEN_MASTER_KEY=<hex>`
-- File with restricted permissions (0600)
-- Secret manager (AWS Secrets Manager, Vault, etc.)
+**Output:** `dist/limen-ai-{version}.tgz` -- a locally installable npm package artifact.
 
-Never commit the key to version control.
+The pipeline does NOT publish to npm. Publication is a separate, explicit step requiring PA (Principal Authority) approval and OTP.
 
 ---
 
-## Docker
+## 2. Progressive Rollout
 
-```dockerfile
-FROM node:22-slim
+Limen is a library, not a service. Rollout is progressive through artifact distribution channels:
 
-# Build tools for better-sqlite3
-RUN apt-get update && apt-get install -y build-essential python3 && rm -rf /var/lib/apt/lists/*
+### Stage 1: Local Link (Development)
 
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --production
-COPY . .
+```bash
+# In the Limen repo
+npm link
 
-# Data directory
-VOLUME /data
-
-ENV LIMEN_DATA_DIR=/data
-ENV LIMEN_MASTER_KEY=""
-
-CMD ["node", "dist/server.js"]
+# In the consuming project
+npm link limen-ai
 ```
 
-Mount the data volume to persist the SQLite database across container restarts.
+Use for active development. Changes are reflected immediately. No version pinning.
+
+### Stage 2: Tarball (Integration Testing)
+
+```bash
+# Produce the artifact
+bash scripts/release-pipeline.sh
+
+# Install in test project
+npm install /path/to/dist/limen-ai-5.0.0.tgz
+```
+
+Use for integration testing across projects. The tarball is the exact artifact that would be published. This is the current distribution method for all SolisHQ projects.
+
+### Stage 3: npm Publish (Distribution)
+
+```bash
+# Only after PA approval
+npm publish dist/limen-ai-5.0.0.tgz --tag canary
+```
+
+- **canary tag**: First publish goes to `canary` tag, not `latest`. Consumers must explicitly opt in: `npm install limen-ai@canary`.
+- **latest tag**: After canary validation period, promote: `npm dist-tag add limen-ai@5.0.0 latest`.
+- **OTP required**: npm publish requires one-time password from authenticator.
 
 ---
 
-## Environment Variables
+## 3. Feature Flags
 
-| Variable | Required | Description |
-|---|---|---|
-| `LIMEN_MASTER_KEY` | Yes | Hex-encoded 32-byte encryption key |
-| `ANTHROPIC_API_KEY` | If using Anthropic | API key |
-| `OPENAI_API_KEY` | If using OpenAI | API key |
-| `GEMINI_API_KEY` | If using Gemini | API key |
-| `GROQ_API_KEY` | If using Groq | API key |
-| `MISTRAL_API_KEY` | If using Mistral | API key |
+**Not applicable.** Limen is an embedded library, not a running service. There is no runtime feature flag infrastructure because:
+
+- All capabilities are available at compile time through the TypeScript API surface.
+- Consumers control which features they use by calling (or not calling) specific API methods.
+- The engine configuration object (`createLimen(config)`) is the feature control mechanism -- PII detection, injection protection, rate limiting, and security policies are all config-driven.
+- Version pinning in `package.json` is the rollout control -- consumers choose when to upgrade.
 
 ---
 
-## Graceful Shutdown
+## 4. One-Click Rollback
 
-Always call `shutdown()` before process exit to flush WAL and close the database cleanly.
+Rollback to the previous stable version:
 
-```typescript
-process.on('SIGTERM', async () => {
-  await limen.shutdown();
-  process.exit(0);
-});
+```bash
+git checkout main && npm ci && npm run build
+```
+
+**Full procedure** (documented in `docs/CONTINUITY-ARTIFACT.md` Section 6):
+
+1. **Stop** the running Limen MCP server process.
+2. **Checkout** the stable branch: `git checkout main` (main tracks the latest stable release).
+3. **Reinstall** dependencies: `npm ci` (deterministic install from lockfile).
+4. **Rebuild**: `npm run build`.
+5. **Verify**: `npm test` -- confirm all tests pass.
+6. **Restart** the MCP server with the previous configuration.
+
+**Maximum rollback time:** Under 5 minutes (checkout + install + build + verify).
+
+**Data preservation:** The SQLite database is backward-compatible. v5 adds new tables and columns but does not alter or remove v4 schema elements. A v4 server ignores v5-only tables. No data migration is required for rollback.
+
+**Consumer rollback** (for npm-installed consumers):
+
+```bash
+npm install limen-ai@4.0.0  # Pin to previous version
 ```
 
 ---
 
-## Monitoring
+## 5. Environment Parity
 
-Use the health endpoint to build readiness and liveness checks:
+Limen achieves environment parity through architectural simplicity:
 
-```typescript
-const health = await limen.health();
-// health.status: 'healthy' | 'degraded' | 'unhealthy'
-// health.subsystems: per-subsystem breakdown
-// health.uptime_ms: time since initialization
-```
+**Single artifact, single dependency:** The entire engine state lives in one SQLite database file. There is no external database, no message queue, no cache layer, no configuration service. The same `.tgz` artifact runs identically on:
 
-- **Readiness**: `health.status !== 'unhealthy'`
-- **Liveness**: `health.status === 'healthy'`
+| Environment | Database | Behavior |
+|-------------|----------|----------|
+| Developer laptop (macOS) | `./limen.db` | Identical |
+| CI runner (Linux) | `/tmp/test-limen.db` | Identical |
+| Production server (Linux) | `/var/lib/app/limen.db` | Identical |
+| Docker container | `/data/limen.db` | Identical |
+
+**What varies between environments:**
+
+- `dataDir` path -- where the SQLite file lives
+- `masterKey` -- encryption key (must match per database)
+- LLM provider API keys -- optional, only for verification features
+
+**What does NOT vary:**
+
+- Schema (created on first run, migrated automatically)
+- Query behavior (SQLite WAL mode, same engine)
+- Security policies (configured in code, not environment)
+- Test suite (runs against same engine with same assertions)
 
 ---
 
-## Scaling Considerations
+## 6. Automated Gates
 
-Limen uses SQLite in WAL mode, which supports concurrent reads with a single writer. This is appropriate for:
+Three automated gates prevent defective artifacts from reaching any distribution channel:
 
-- Single-server deployments
-- Applications with moderate write throughput
-- Horizontal scaling via tenant-level database isolation (one SQLite file per tenant)
+### Gate 1: SolisForge Validator
 
-For high-write-throughput scenarios, use `database` isolation mode to give each tenant its own SQLite file, eliminating write contention across tenants.
+```bash
+bash scripts/solisforge-traceability-scanner.sh --ci
+```
+
+Verifies:
+- All source files have `@governance` and `@traceability` markers
+- Contract references resolve to ratified documents
+- No orphan code (code without governance traceability)
+
+**Failure mode:** `NON-COMPLIANT` exit code blocks Stage 1 of the release pipeline.
+
+### Gate 2: Contract Hash Verification
+
+```bash
+bash scripts/verify-contract-hashes.sh
+```
+
+Verifies:
+- All 14 ratified contracts match their recorded SHA-256 hashes
+- The machine-readable manifest (`contracts/phase-x.contracts.json`) is consistent
+- No unauthorized contract modifications
+
+**Failure mode:** Hash mismatch blocks the pipeline and requires investigation (potential tampering or unauthorized amendment).
+
+### Gate 3: Test Suite
+
+```bash
+npm test
+```
+
+Verifies:
+- 4,678+ tests pass with 0 failures
+- Behavioral contracts enforced (not just code coverage)
+- Mutation testing baseline maintained (Stryker, when run)
+
+**Failure mode:** Any test failure blocks Stage 3 of the release pipeline. No partial passes.
+
+### Pre-Merge Workflow
+
+Before any merge to `release/v5` or `main`:
+
+1. Run all three gates locally
+2. Verify contract hashes (guards against local contract drift)
+3. Run the full release pipeline as a dry-run validation
+4. Peer review (or Breaker/Certifier pipeline for governed phases)
