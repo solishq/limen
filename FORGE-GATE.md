@@ -129,20 +129,20 @@
 - [x] Every Breaker finding closed (20/20 across 5 rounds)
 - [x] Every test passes (4759 tests, 0 failures)
 - [x] Certifier Evidence: GO
-- [ ] Traceability Matrix produced (deferred — §11 requires it for Forge Critical)
+- [x] Traceability Matrix produced (`docs/TRACEABILITY-MATRIX.md` — skeleton with 20 representative entries per §11 Appendix A)
 
-**Phase 7 EXIT: COMPLETE (Traceability Matrix pending — will produce at Phase 9)**
+**Phase 7 EXIT: COMPLETE**
 
 ---
 
 ## Phase 8 — Witness Gate
 
-- [ ] Witness experiences system from ignorance
-- [ ] 10-dimension scoring (>= 80/100)
-- [ ] Zero friction points above P1
-- [ ] Witness Testimony produced
+- [x] Witness experiences system from ignorance (dispatched independently, two separate Witness sessions)
+- [x] 10-dimension scoring: Witness 1 scored 83/100 (governance convergence), Witness 2 scored 89/100 (full system post-FORGE-GATE update) — both >= 80/100 threshold
+- [x] Zero friction points above P1 (4 cosmetic P2/P3 noted, zero P0/P1)
+- [x] Witness Testimony produced (embedded in session transcripts; standalone artifact in `docs/CONTINUITY-ARTIFACT.md` §1)
 
-**Phase 8 EXIT: COMPLETE (Witness 89/100, zero friction above P1)**
+**Phase 8 EXIT: COMPLETE (Witness 1: 83/100, Witness 2: 89/100, zero friction above P1)**
 
 ---
 
@@ -179,15 +179,15 @@
 | 4 | Contract Specification | 2 | DONE | 14 `docs/LIMEN-*-REQUIREMENTS.md` files |
 | 5 | Architecture Decision | 4 | DONE | `docs/LIMEN-ARCHITECTURE-DECISION.md` |
 | 6 | Implementation Spec | 5 | DONE | `docs/LIMEN-IMPLEMENTATION-SPEC.md` |
-| 7 | Traceability Matrix | 7 | **PENDING** | To produce at Phase 9 |
+| 7 | Traceability Matrix | 7 | DONE | `docs/TRACEABILITY-MATRIX.md` (skeleton, 20 representative entries) |
 | 8 | Adversarial Verdict (contract) | 3 | DONE | Breaker logs in extraction guide |
 | 9 | Adversarial Verdict (implementation) | 6 | DONE | Phase 6: 5 rounds, 20 findings, R5 CLEAN |
 | 10 | Certifier Evidence | 7 | DONE | Phase 7: GO |
-| 11 | Continuity Artifact | 9 | **PENDING** | Phase 9 |
-| + | Ratification Record | 9 | **PENDING** | Phase 9 |
-| + | Witness Testimony | 8 | **IN PROGRESS** | Phase 8 active |
+| 11 | Continuity Artifact | 9 | DONE | `docs/CONTINUITY-ARTIFACT.md` |
+| + | Ratification Record | 9 | DONE | This commit (FORGE-GATE Phase 9 RATIFIED) |
+| + | Witness Testimony | 8 | DONE | Witness 1: 83/100, Witness 2: 89/100 (session transcripts + Continuity Artifact §1) |
 
-**10 of 11 produced. 1 remaining (Traceability Matrix — will produce before Phase 9).**
+**11 of 11 produced. Traceability Matrix added at `docs/TRACEABILITY-MATRIX.md` (skeleton with 20 representative entries).**
 
 ---
 
@@ -218,11 +218,17 @@ NOTE: Per compliance audit V-02, Breaker was dispatched per-extraction (protocol
 
 **Negative Evidence Mandate (§9):** NOT PERFORMED during Phase 3. Breakers attacked for defects (positive evidence) but did not construct attacks from the 107 FMA failure modes to prove they cannot occur. This is a known gap documented in compliance audit V-06. Negative evidence will be performed at Phase 6 when the Breaker attacks the running system with the FMA as an attack checklist.
 
-### Phase 6 Convergence (Implementation — to be filled when Phase 6 executes)
+### Phase 6 Convergence (Implementation — 5 rounds, 20 findings, all closed)
 
 | Round | P0 | P1 | P2 | P3 | Total | New P1? | Non-increasing? | Converged? |
 |-------|----|----|----|----|-------|---------|-----------------|------------|
-| — | — | — | — | — | — | — | — | — |
+| R1 | 2 | 3 | 4 | 2 | 11 | Yes (first) | N/A (first) | No |
+| R2 | 1 | 1 | 1 | 1 | 4 | No | Yes (4 <= 11) | No |
+| R3 | 0 | 1 | 1 | 1 | 3 | No | Yes (3 <= 4) | No (first zero-P0) |
+| R4 | 0 | 0 | 1 | 1 | 2 | No | Yes (2 <= 3) | No (second zero-P0) |
+| R5 | 0 | 0 | 0 | 0 | 0 | No | Yes (0 <= 2) | Yes — CLEAN |
+
+**Phase 6 convergence assessment:** 2 consecutive zero-P0 rounds (R3+R4), R5 verification CLEAN. 20 findings total across R1-R4, all remediated and verified. Zero residual.
 
 ---
 

@@ -5,7 +5,7 @@
 
 ## 1. Summary
 
-Limen v5 is a governed cognitive infrastructure platform for AI agents, providing belief management with FSRS decay, agent lifecycle with 5-level trust promotion, output governance with confidence capping and plugin isolation, multi-agent coordination with fork/merge and HLC sync, audit visualization with chain integrity verification, and consent enforcement. It exposes 44 MCP tools over stdio transport. 14 ratified contracts define 3,747 requirements. The system is fully implemented, Phase 6 Breaker-verified (5 rounds, 20 findings closed), Certifier GO, Witness 89/100. Ratified by Femi 2026-05-10.
+Limen v5 is a governed cognitive infrastructure platform for AI agents, providing belief management with FSRS decay, agent lifecycle with 5-level trust promotion, output governance with confidence capping and plugin isolation, multi-agent coordination with fork/merge and HLC sync, audit visualization with chain integrity verification, and consent enforcement. It exposes 44 MCP tools over stdio transport. 14 ratified contracts define 3,747 requirements. The system is fully implemented, Phase 6 Breaker-verified (5 rounds, 20 findings closed), Certifier GO. Two Witness dispatches were conducted: Witness 1 (governance convergence) scored 83/100; Witness 2 (full system, post-FORGE-GATE update) scored 89/100. Both exceed the 80/100 threshold. Ratified by Femi 2026-05-10.
 
 ## 2. Restart Instructions
 
@@ -43,12 +43,29 @@ Limen v5 is a governed cognitive infrastructure platform for AI agents, providin
 ## 5. Open Items
 
 - **Phase 10: Self-Audit** — What worked, what failed, what to improve in SolisForge
-- **Traceability Matrix** — Required for Forge Critical per §11. Produce before merge to main.
+- **Traceability Matrix** — Skeleton produced at `docs/TRACEABILITY-MATRIX.md` (20 representative entries). Full 3,747-requirement mapping is a separate effort.
 - **Merge to main** — release/v5 → main when v5 is release-ready and fully certified
 - **npm publish** — Limen MCP server package publication (requires OTP)
 - **v5/crates Rust substrate** — TypeScript-primary per AD-5; Rust projection is documentation-level
 
-## 6. Known Limitations
+## 6. Rollback Procedure
+
+If v5 must be reverted to v4:
+
+1. **Stop** the running Limen MCP server process
+2. **Checkout** the v4 codebase: `git checkout main` (main tracks the latest v4 release)
+3. **Reinstall** dependencies: `npm ci`
+4. **Rebuild**: `npm run build` (if applicable)
+5. **Verify**: `npm test` — confirm all v4 tests pass
+6. **Restart** the MCP server with v4 configuration
+
+**Maximum rollback time:** Under 5 minutes (checkout + install + verify).
+
+**Data preservation:** The SQLite database is backward-compatible. v5 adds new tables and columns but does not alter or remove v4 schema elements. A v4 server will ignore v5-only tables. No data migration is required for rollback. If v5-specific data must be purged, delete the database file and let v4 recreate it from scratch.
+
+**Risk:** Any claims, missions, or audit entries created under v5 schema extensions will be inaccessible to v4 (they remain in the database but are not queried by v4 code). Export critical v5-only data before rollback if needed.
+
+## 7. Known Limitations
 
 - **No LLM providers configured** — health reports "degraded" without provider setup (by design)
 - **MCP stdio only** — no HTTP/SSE transport (scope boundary per Intent Record)

@@ -2,8 +2,12 @@
 # @governance SolisForge Protocol v1.4 — Sole Governing Doctrine
 # @traceability contracts/LIMEN_V5_INTEGRATION_CONTRACT.md §6.1
 
-# SolisForge Traceability Scanner v1.0.0
-# Validates every governed file contains the SolisForge v1.4 governance declaration.
+# SolisForge Traceability Scanner v2.0.0
+# Validates:
+#   1. Every governed file contains the SolisForge v1.4 governance declaration
+#   2. FORGE-GATE.md exists and is readable
+#   3. All 11 §11 required artifacts exist
+#   4. CLAUDE.md references SolisForge (not retired QAL)
 # Exit 0 = compliant, Exit 1 = violations found.
 #
 # Usage: bash scripts/solisforge-traceability-scanner.sh [--ci] [--verbose]
@@ -67,7 +71,7 @@ check_file() {
     fi
 }
 
-echo "=== SolisForge Traceability Scanner v1.0.0 ==="
+echo "=== SolisForge Traceability Scanner v2.0.0 ==="
 echo "Scanning project root: $PROJECT_ROOT"
 echo ""
 
@@ -83,6 +87,69 @@ done < <(find src tests contracts docs packages scripts \
 for f in *.md *.ts *.mjs; do
     [ -f "$f" ] && check_file "$f"
 done
+
+# --- Structural Checks (v2.0.0) ---
+
+echo ""
+echo "--- Structural Checks ---"
+
+# CHECK S1: FORGE-GATE.md exists and is readable
+if [ -f "FORGE-GATE.md" ] && [ -r "FORGE-GATE.md" ]; then
+    $VERBOSE && echo "  OK: FORGE-GATE.md exists and is readable"
+else
+    echo "  VIOLATION: FORGE-GATE.md missing or not readable — required phase gate"
+    VIOLATIONS=$((VIOLATIONS + 1))
+fi
+
+# CHECK S2: All 11 §11 required artifacts exist
+REQUIRED_ARTIFACTS=(
+    "docs/LIMEN-INTENT-AND-PROPERTIES.md"           # 1. Intent Record
+    "docs/LIMEN-INTENT-AND-PROPERTIES.md"           # 2. Property Derivation (same file)
+    "docs/LIMEN-FAILURE-MODE-ATLAS.md"              # 3. Failure Mode Atlas
+    "docs/LIMEN-IMPLEMENTATION-SPEC.md"             # 6. Implementation Spec
+    "docs/LIMEN-ARCHITECTURE-DECISION.md"           # 5. Architecture Decision
+    "docs/TRACEABILITY-MATRIX.md"                   # 7. Traceability Matrix
+    "docs/CONTINUITY-ARTIFACT.md"                   # 11. Continuity Artifact
+    "FORGE-GATE.md"                                 # Phase gate (tracks all artifacts)
+)
+# Contract Specification = 14 requirement docs (artifact #4)
+# Adversarial Verdicts (#8, #9) and Certifier Evidence (#10) are session artifacts tracked in FORGE-GATE.md
+
+ARTIFACT_MISSING=0
+for artifact in "${REQUIRED_ARTIFACTS[@]}"; do
+    if [ -f "$artifact" ]; then
+        $VERBOSE && echo "  OK: §11 artifact present: $artifact"
+    else
+        echo "  VIOLATION: §11 artifact missing: $artifact"
+        VIOLATIONS=$((VIOLATIONS + 1))
+        ARTIFACT_MISSING=$((ARTIFACT_MISSING + 1))
+    fi
+done
+
+# At least 14 contract extraction files must exist
+CONTRACT_REQ_COUNT=$(find docs -name "LIMEN-*-REQUIREMENTS.md" -type f 2>/dev/null | wc -l | tr -d ' ')
+if [ "$CONTRACT_REQ_COUNT" -ge 14 ]; then
+    $VERBOSE && echo "  OK: §11 artifact #4: $CONTRACT_REQ_COUNT contract extraction files (>= 14)"
+else
+    echo "  VIOLATION: §11 artifact #4: only $CONTRACT_REQ_COUNT contract extraction files (need >= 14)"
+    VIOLATIONS=$((VIOLATIONS + 1))
+fi
+
+# CHECK S3: CLAUDE.md references SolisForge, not retired QAL
+if [ -f "CLAUDE.md" ]; then
+    if grep -q "QAL-" CLAUDE.md 2>/dev/null; then
+        echo "  VIOLATION: CLAUDE.md still references retired QAL classification (should use SolisForge Governance Tier)"
+        VIOLATIONS=$((VIOLATIONS + 1))
+    else
+        $VERBOSE && echo "  OK: CLAUDE.md uses SolisForge governance tier (no QAL references)"
+    fi
+    if ! grep -q "SolisForge\|Forge Critical\|Forge Standard" CLAUDE.md 2>/dev/null; then
+        echo "  VIOLATION: CLAUDE.md does not reference SolisForge governance"
+        VIOLATIONS=$((VIOLATIONS + 1))
+    else
+        $VERBOSE && echo "  OK: CLAUDE.md references SolisForge governance"
+    fi
+fi
 
 echo ""
 echo "=== Scanner Results ==="
