@@ -41,6 +41,58 @@ function err<T>(code: string, message: string, spec: string): Result<T> {
   return { ok: false, error: { code, message, spec } };
 }
 
+// ── F-SEC-007: PII Redaction for Compliance Export ──
+
+/** Email: simplified RFC 5322 local@domain pattern. */
+const PII_EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+
+/** SSN: XXX-XX-XXXX or XXXXXXXXX (US Social Security Number format). */
+const PII_SSN_REGEX = /\b\d{3}-\d{2}-\d{4}\b|\b\d{9}\b/g;
+
+/** Phone: international format (+1...) or US format ((xxx) xxx-xxxx, xxx-xxx-xxxx). */
+const PII_PHONE_REGEX = /\+\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{1,4}[\s.-]?\d{1,9}|\(\d{3}\)\s?\d{3}[.-]?\d{4}|\b\d{3}[.-]\d{3}[.-]\d{4}\b/g;
+
+/**
+ * F-SEC-007: Redact PII patterns (email, SSN, phone) from a string.
+ * Replaces matches with `[REDACTED]`.
+ */
+function redactPii(text: string): string {
+  return text
+    .replace(PII_EMAIL_REGEX, '[REDACTED]')
+    .replace(PII_SSN_REGEX, '[REDACTED]')
+    .replace(PII_PHONE_REGEX, '[REDACTED]');
+}
+
+/**
+ * F-SEC-007: Deep-redact PII from an audit entry's detail object.
+ * Scans all string values in the detail JSON and replaces PII patterns.
+ * Returns a new object — never mutates the original.
+ */
+function redactAuditEntryDetail(detail: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (detail === null) return null;
+  const serialized = JSON.stringify(detail);
+  const redacted = redactPii(serialized);
+  if (redacted === serialized) return detail; // No PII found — return original
+  try {
+    return JSON.parse(redacted) as Record<string, unknown>;
+  } catch {
+    // If JSON structure was broken by redaction (unlikely), return safe fallback
+    return { redacted: true, content: redacted };
+  }
+}
+
+/**
+ * F-SEC-007: Create a PII-redacted copy of an audit entry.
+ * Scans actorId and detail fields for PII patterns.
+ */
+function redactAuditEntry(entry: AuditEntry): AuditEntry {
+  return {
+    ...entry,
+    actorId: redactPii(entry.actorId),
+    detail: redactAuditEntryDetail(entry.detail),
+  };
+}
+
 /**
  * Categorize an audit entry by SOC 2 control.
  * An entry can belong to multiple categories.
@@ -129,7 +181,9 @@ export function generateComplianceExport(
     return err('EXPORT_NO_ENTRIES', `Failed to query audit entries: ${queryResult.error.message}`, 'I-P10-30');
   }
 
-  const entries = queryResult.value;
+  // F-SEC-007: Redact PII from audit entries before including in compliance package.
+  // Scan each entry's detail JSON string and actorId for PII patterns.
+  const entries = queryResult.value.map(redactAuditEntry);
 
   if (entries.length === 0) {
     return err('EXPORT_NO_ENTRIES', 'No audit entries found in the requested period', 'I-P10-30');

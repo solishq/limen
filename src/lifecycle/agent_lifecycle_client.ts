@@ -1405,7 +1405,7 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
         return capabilityDenied('knowledge_import', 'agent lacks knowledge_import capability');
       }
 
-      const startMs = Date.now();
+      const startMs = time.nowMs();
       const trustLevel = row.trust_level as AgentTrustLevel;
       const agentClearance = TRUST_TO_CLEARANCE[trustLevel] ?? 0;
       const actor = ctx.agentId as string ?? ctx.userId ?? 'system';
@@ -1471,7 +1471,7 @@ export function createAgentLifecycleClient(deps: AgentLifecycleClientDeps): Agen
           imported++;
         }
 
-        const duration = Date.now() - startMs;
+        const duration = time.nowMs() - startMs;
 
         // BK-05: Audit is fail-closed
         const auditResult = appendAudit(conn, actor, 'lifecycle.knowledge.imported', 'agent', agentId as string,

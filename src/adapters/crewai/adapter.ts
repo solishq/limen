@@ -107,6 +107,7 @@ import {
   mapNativeEvent as hookMapNativeEvent,
   mapLimenEvent as hookMapLimenEvent,
 } from './hooks.js';
+import type { TimeProvider } from '../../kernel/interfaces/time.js';
 
 // ── Constants for token estimation (F-15) ──
 
@@ -184,9 +185,14 @@ export class LimenCrewAIAdapter {
   // Agent state simulation (for governance)
   private _agentState: 'active' | 'suspended' | 'decommissioned' = 'active';
 
-  constructor(adapterId: AdapterId, capabilities: ReadonlySet<AgentCapability>) {
+  // F-SEC-009: Optional injected TimeProvider for deterministic timestamps.
+  // Falls back to Date.now() when not provided (backward compatible).
+  private readonly _time: TimeProvider | undefined;
+
+  constructor(adapterId: AdapterId, capabilities: ReadonlySet<AgentCapability>, time?: TimeProvider) {
     this.adapterId = adapterId;
     this.capabilities = capabilities;
+    this._time = time;
   }
 
   // ── Public: Lifecycle ──
@@ -260,7 +266,7 @@ export class LimenCrewAIAdapter {
 
       // Transition to READY (only after successful audit)
       this._lifecycle.transition('READY');
-      this._lastActivity = new Date().toISOString();
+      this._lastActivity = this._nowISO();
 
       return { ok: true, value: undefined };
     } catch (err) {
@@ -363,7 +369,7 @@ export class LimenCrewAIAdapter {
     if (this._agentState !== 'active') {
       const refVerdict: GovernanceVerdict = {
         verdict: 'refuse',
-        auditId: `evt-state-${Date.now()}` as EventId,
+        auditId: `evt-state-${this._nowMs()}` as EventId,
         reason: 'agent_state_not_active',
         rule: 'agent_state_check',
       };
@@ -391,7 +397,7 @@ export class LimenCrewAIAdapter {
           config.trustLevel === 'low' ? 'probationary' : 'untrusted',
       clearanceLevel: TRUST_TO_CLEARANCE[config.trustLevel],
       capabilities: config.capabilities,
-      startedAt: new Date().toISOString(),
+      startedAt: this._nowISO(),
       workingMemoryNamespace: `crewai/${nativeSession.crewId}/${nativeSession.agentRole}`,
       activeMissions: [],
       metadata: {
@@ -405,7 +411,7 @@ export class LimenCrewAIAdapter {
     };
 
     this._sessions.set(sessionId as string, session);
-    this._lastActivity = new Date().toISOString();
+    this._lastActivity = this._nowISO();
 
     // Audit session start
     const auditResult = await this._appendAudit(
@@ -435,7 +441,7 @@ export class LimenCrewAIAdapter {
     if (this._agentState !== 'active') {
       const refVerdict: GovernanceVerdict = {
         verdict: 'refuse',
-        auditId: `evt-state-${Date.now()}` as EventId,
+        auditId: `evt-state-${this._nowMs()}` as EventId,
         reason: 'agent_state_not_active',
         rule: 'agent_state_check',
       };
@@ -456,7 +462,7 @@ export class LimenCrewAIAdapter {
     const summary: SessionSummary = {
       sessionId: nativeSession.sessionId,
       agentId: session.agentId,
-      duration: Date.now() - new Date(session.startedAt).getTime(),
+      duration: this._nowMs() - new Date(session.startedAt).getTime(),
       operationCount: 0,
       governanceRefusals: 0,
       branchesCreated: 0,
@@ -467,7 +473,7 @@ export class LimenCrewAIAdapter {
     };
 
     this._sessions.delete(nativeSession.sessionId);
-    this._lastActivity = new Date().toISOString();
+    this._lastActivity = this._nowISO();
 
     await this._appendAudit(
       'onAgentSessionEnd',
@@ -561,7 +567,7 @@ export class LimenCrewAIAdapter {
 
       // Token tracking (INV-10)
       this._consumeTokens(estimatedTokens);
-      this._lastActivity = new Date().toISOString();
+      this._lastActivity = this._nowISO();
 
       return { ok: true, value: claimId };
     } catch (err) {
@@ -650,7 +656,7 @@ export class LimenCrewAIAdapter {
       }
 
       this._consumeTokens(estimatedTokens);
-      this._lastActivity = new Date().toISOString();
+      this._lastActivity = this._nowISO();
 
       return { ok: true, value: recallResult };
     } catch (err) {
@@ -713,7 +719,7 @@ export class LimenCrewAIAdapter {
         return toResultError(auditFailure(this.adapterId, 'createBranch', 'Post-operation audit failed'));
       }
       this._consumeTokens(estimatedTokens);
-      this._lastActivity = new Date().toISOString();
+      this._lastActivity = this._nowISO();
       return { ok: true, value: branchId };
     } catch (err) {
       return toResultError(clientError(this.adapterId, 'LimenAgentClient', String(err)));
@@ -766,7 +772,7 @@ export class LimenCrewAIAdapter {
 
     try {
       const coreResult = await this._client!.mergeBranches(ctx, branchIds, strategy);
-      const auditId = `evt-merge-${Date.now()}` as EventId;
+      const auditId = `evt-merge-${this._nowMs()}` as EventId;
 
       const mergeResult: MergeResult = {
         ...coreResult,
@@ -776,7 +782,7 @@ export class LimenCrewAIAdapter {
       this._auditCallCount = 1;
       await this._appendAudit('mergeBranches', 'allowed', estimatedTokens, { branchIds: branchIds as unknown as string[] });
       this._consumeTokens(estimatedTokens);
-      this._lastActivity = new Date().toISOString();
+      this._lastActivity = this._nowISO();
 
       return { ok: true, value: mergeResult };
     } catch (err) {
@@ -836,14 +842,14 @@ export class LimenCrewAIAdapter {
 
     try {
       const coreResult = await this._client!.resolveConflict(ctx, resolution);
-      const auditId = `evt-resolve-${Date.now()}` as EventId;
+      const auditId = `evt-resolve-${this._nowMs()}` as EventId;
 
       const result: MergeResult = { ...coreResult, auditId };
 
       this._auditCallCount = 1;
       await this._appendAudit('resolveConflict', 'allowed', estimatedTokens);
       this._consumeTokens(estimatedTokens);
-      this._lastActivity = new Date().toISOString();
+      this._lastActivity = this._nowISO();
 
       return { ok: true, value: result };
     } catch (err) {
@@ -914,7 +920,7 @@ export class LimenCrewAIAdapter {
           rawHookContextDigest: {
             action: toolCall.toolName,
             domain: 'execution',
-            timestamp: new Date().toISOString(),
+            timestamp: this._nowISO(),
             sessionId: session.sessionId,
             outcome: 'allowed' as const,
           },
@@ -930,7 +936,7 @@ export class LimenCrewAIAdapter {
     }
 
     await this._appendAudit('translateToolCall', 'allowed', 0, { toolName });
-    this._lastActivity = new Date().toISOString();
+    this._lastActivity = this._nowISO();
 
     return { ok: true, value: operations };
   }
@@ -972,18 +978,18 @@ export class LimenCrewAIAdapter {
     // Claim 1.10: Populate all ActionBase fields
     const computerAction: ComputerAction = {
       type: mapNativeTypeToComputerActionType(action.nativeType),
-      timestamp: action.timestamp || new Date().toISOString(),
+      timestamp: action.timestamp || this._nowISO(),
       agentId: action.agentId,
       sessionId: action.sessionId,
       missionId: null,
       taskId: null,
-      requestId: `evt-${Date.now()}` as EventId,
+      requestId: `evt-${this._nowMs()}` as EventId,
       nativeType: action.nativeType,
       nativePayload: action.nativePayload,
     };
 
     await this._appendAudit('translateActionToGovernance', 'allowed', 0);
-    this._lastActivity = new Date().toISOString();
+    this._lastActivity = this._nowISO();
 
     return { ok: true, value: computerAction };
   }
@@ -1199,6 +1205,18 @@ export class LimenCrewAIAdapter {
     return this._lifecycle.state;
   }
 
+  // ── Private: Time ──
+
+  /** F-SEC-009: Deterministic time — uses injected provider when available. */
+  private _nowMs(): number {
+    return this._time?.nowMs() ?? Date.now();
+  }
+
+  /** F-SEC-009: Deterministic ISO timestamp — uses injected provider when available. */
+  private _nowISO(): string {
+    return this._time?.nowISO() ?? new Date().toISOString();
+  }
+
   // ── Private: Guards ──
 
   /**
@@ -1239,7 +1257,7 @@ export class LimenCrewAIAdapter {
     if (this._agentState !== 'active') {
       const refVerdict: GovernanceVerdict = {
         verdict: 'refuse',
-        auditId: `evt-state-${Date.now()}` as EventId,
+        auditId: `evt-state-${this._nowMs()}` as EventId,
         reason: 'agent_state_not_active',
         rule: 'agent_state_check',
       };
@@ -1509,7 +1527,7 @@ export class LimenCrewAIAdapter {
       }
     }
 
-    return { ok: true, value: `evt-local-${Date.now()}` as EventId };
+    return { ok: true, value: `evt-local-${this._nowMs()}` as EventId };
   }
 
   /**
@@ -1539,7 +1557,7 @@ export class LimenCrewAIAdapter {
     const payload: AgentEventPayload = {
       eventId: randomUUID() as unknown as EventId,
       event,
-      timestamp: new Date().toISOString(),
+      timestamp: this._nowISO(),
       adapterId: this.adapterId,
       sessionId: session?.sessionId ?? null,
       agentId: this._config?.agentId ?? '' as AgentId,

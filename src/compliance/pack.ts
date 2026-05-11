@@ -200,7 +200,7 @@ export class EnterpriseCompliancePack {
     // F-07: Token budget manager -- actually verify by creating a temp session
     let tokenBudgetOk = false;
     let tokenBudgetDetail = 'Token budget manager check failed';
-    const tempSessionId = `__compliance_check_${Date.now()}`;
+    const tempSessionId = `__compliance_check_${this.#timeProvider.now()}`;
     try {
       const initResult = this.#tokenBudgetManager.initSession(tempSessionId, 1000, 1000);
       if (initResult.ok) {

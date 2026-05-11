@@ -204,6 +204,12 @@ export function registerLearningTools(
         if (containsControlChars(entry.statement)) {
           return mcpError('INVALID_VALUE', 'Entry statement contains prohibited control characters (U+0000–U+001F). Remove null bytes and control chars before storing.');
         }
+
+        // F-SEC-005: Check for PII patterns in statement values.
+        // Reflection entries are stored as claims — PII in statements requires consent.
+        if (containsPiiValue(entry.statement)) {
+          return mcpError('CONSENT_REQUIRED', `PII pattern detected in reflection entry statement (category: "${entry.category}"). Register consent before storing PII values.`);
+        }
       }
 
       // F-1: Wrap in try-catch
