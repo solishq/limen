@@ -40,6 +40,9 @@ import type { SubstrateConfig } from '../substrate/interfaces/substrate.js';
 import type { OrchestrationEngine } from '../orchestration/interfaces/orchestration.js';
 import type { TransitionEnforcer } from '../kernel/interfaces/lifecycle.js';
 
+// FINDING-AUDITVIS: ESM import replaces CJS require() for audit visualization (P0)
+import { createAuditQueryService } from '../audit/visualization/audit_query_service.js';
+
 // CF-004: Real factory functions for default wiring
 import { createKernel as realCreateKernel, destroyKernel as realDestroyKernel } from '../kernel/index.js';
 import { createStringEncryption } from '../kernel/crypto/crypto_engine.js';
@@ -2540,32 +2543,26 @@ export async function createLimen(
     // Phase 5 Subsystem 5: Audit Visualization (AV-8.1 through AV-8.6)
     auditVisualization: {
       queryEntries(filter: import('../audit/visualization/visualization_types.js').AuditFilter, pagination: import('../audit/visualization/visualization_types.js').Pagination) {
-        const { createAuditQueryService } = require('../audit/visualization/audit_query_service.js') as typeof import('../audit/visualization/audit_query_service.js');
         const svc = createAuditQueryService({ conn: getConnection(), timeProvider: kernel.time, clearanceLevel: getContext().clearanceLevel });
         return svc.queryEntries(filter, pagination);
       },
       getTimeline(sessionId: import('../kernel/interfaces/common.js').SessionId) {
-        const { createAuditQueryService } = require('../audit/visualization/audit_query_service.js') as typeof import('../audit/visualization/audit_query_service.js');
         const svc = createAuditQueryService({ conn: getConnection(), timeProvider: kernel.time, clearanceLevel: getContext().clearanceLevel });
         return svc.getTimeline(sessionId);
       },
       getBeliefGraph(options: import('../audit/visualization/visualization_types.js').BeliefGraphOptions) {
-        const { createAuditQueryService } = require('../audit/visualization/audit_query_service.js') as typeof import('../audit/visualization/audit_query_service.js');
         const svc = createAuditQueryService({ conn: getConnection(), timeProvider: kernel.time, clearanceLevel: getContext().clearanceLevel });
         return svc.getBeliefGraph(options);
       },
       getGovernanceHeatmap(options: import('../audit/visualization/visualization_types.js').HeatmapOptions) {
-        const { createAuditQueryService } = require('../audit/visualization/audit_query_service.js') as typeof import('../audit/visualization/audit_query_service.js');
         const svc = createAuditQueryService({ conn: getConnection(), timeProvider: kernel.time, clearanceLevel: getContext().clearanceLevel });
         return svc.getGovernanceHeatmap(options);
       },
       export(request: import('../audit/visualization/visualization_types.js').ExportRequest) {
-        const { createAuditQueryService } = require('../audit/visualization/audit_query_service.js') as typeof import('../audit/visualization/audit_query_service.js');
         const svc = createAuditQueryService({ conn: getConnection(), timeProvider: kernel.time, clearanceLevel: getContext().clearanceLevel });
         return svc.export(request);
       },
       verifyChainIntegrity(options: import('../audit/visualization/visualization_types.js').IntegrityCheckOptions) {
-        const { createAuditQueryService } = require('../audit/visualization/audit_query_service.js') as typeof import('../audit/visualization/audit_query_service.js');
         const svc = createAuditQueryService({ conn: getConnection(), timeProvider: kernel.time, clearanceLevel: getContext().clearanceLevel });
         return svc.verifyChainIntegrity(options);
       },
