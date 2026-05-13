@@ -2783,8 +2783,10 @@ Quick reference: every public method in the system.
 | AdapterRegistry | adapterRegister | 10.3 |
 | AdapterRegistry | adapterRemove | 10.4 |
 | AdapterRegistry | adapterList | 10.5 |
+| LimenAgentClient | _internalRetract (internal) | 3.5.1 |
+| Governance | erasureExecute (public, requires admin trust) | App. C |
 
-**Total: 43 methods (41 public + 2 internal)**
+**Total: 50 methods (48 public + 2 internal)**
 
 ---
 
