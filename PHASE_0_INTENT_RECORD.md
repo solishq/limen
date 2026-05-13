@@ -6,10 +6,12 @@
 Limen V5 exists to become the universal inhabited cognitive governance substrate for any AI agent framework. It turns every agent memory/action into a governed, self-healing belief with temporal decay, consent enforcement, refusal provenance, unified audit chain, and zero-bypass primitives — so agents remain truthful, auditable, and safe at scale. This is built under the SolisForge v1.5 Generic Reference as constitution, with no assumptions from prior work, no copies, no shortcuts, no patches. The goal is to invent what nobody ever thought could be built: a cognitive governance system that is truly revolutionary, achieved by one founder + AI expertise + agent team, with aerospace-precision discipline and unbreakable evidence chains.
 
 **Success definition (measurable, bounded):**  
-- 100 % of agent claims/actions route through LimenAgentClient with zero bypass possible (bounded by full proof chain).  
-- Refusal provenance + audit viz dashboard demonstrates end-to-end governance in < 2s on live MCP session (bounded by test stand evidence).  
-- Open-source core adopted by ≥ 3 major agent frameworks and one enterprise pilot signed within 6 months of ratification (bounded by adoption metrics).  
-- Internal use achieves zero hallucination-induced drift in personal agent workflows (bounded by user validation).
+- All agent claims/actions must route through LimenAgentClient with structural bypass prevention (to be proven at Phase 5.5 Test Stand).
+- Refusal provenance + audit viz dashboard demonstrates end-to-end governance in < 2s on live MCP session (bounded by test stand evidence).
+- Internal use demonstrates measurable reduction in hallucination-induced drift, validated by before/after user testing.
+
+**Business Goals (non-gate — not used for phase admission):**
+- Open-source core adopted by ≥ 3 major agent frameworks and one enterprise pilot signed within 6 months of ratification (bounded by adoption metrics).
 
 **Scope (bounded):**  
 - In: belief governance primitives, AdapterRegistry, LimenAgentClient, computer-use sandbox/refusal, unified audit viz, FSRS decay + consent + classification + self-healing cascades.  
@@ -22,6 +24,7 @@ Limen V5 exists to become the universal inhabited cognitive governance substrate
 - Human oversight and kill-switch primacy preserved.  
 - Full proof chain in FORGE-GATE.md for every artifact (SHA-256, Breaker/Certifier/Witness, ledger status).  
 - Bounded admission only until full gate process complete.
+- **Governance Tier:** Forge Critical (SolisForge v1.5 §3).
 
 **Ratified by:** Lanre — "approved" + "go" + new standing orders (per-phase branches, every decision audited)  
 **Date:** May 13, 2026  
