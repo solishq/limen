@@ -350,9 +350,13 @@ AuditOperation =
   | 'consolidation.merge'
   | 'consolidation.archive'
   | 'erasure.execute'
+  | 'erasure.retract'
+  | 'erasure.audit_tombstone'
   | 'rule.register'
   | 'rule.suspend'
   | 'rule.retire'
+  | 'rule.execute_failed'
+  | 'rule.recursion_blocked'
   | 'adapter.register'
   | 'adapter.remove'
   | 'WM_WRITE'
@@ -1499,12 +1503,13 @@ When a governance gate refuses an operation, a refusal provenance record is crea
 ```
 RefusalRecord = {
   id:               string              -- UUIDv7
+  sequenceNum:      number              -- monotonically increasing within chainId='refusal', assigned by engine at insertion time
   operation:        AuditOperation      -- what was attempted
   reason:           ErrorCode           -- which error code caused refusal
   agentId:          AgentId             -- who attempted
   timestamp:        Timestamp
   inputHash:        SHA256Hash          -- hash of the input that was refused (for replay analysis)
-  contentHash:      SHA256Hash          -- hash of (operation + reason + agentId + timestamp + inputHash)
+  contentHash:      SHA256Hash          -- hash of (sequenceNum + operation + reason + agentId + timestamp + inputHash)
   previousHash:     SHA256Hash          -- chain link to previous refusal record
   chainId:          string              -- 'refusal' chain
 }
@@ -1540,8 +1545,8 @@ RefusalVerifyError =
 Verification algorithm:
   Same as auditVerifyChain (Section 6.3) but operates on RefusalRecord entries
   using the 'refusal' chainId. RefusalRecord contains all fields needed for chain
-  verification: contentHash, previousHash, and implicit sequenceNum ordering via
-  timestamp + serialized insertion.
+  verification: contentHash, previousHash, and explicit sequenceNum (monotonically
+  increasing, gap-free within chainId='refusal').
 
 Note: RefusalRecord fields (contentHash, previousHash, chainId='refusal') follow
   identical integrity rules to AuditEntry. The verification walk is structurally
@@ -1580,7 +1585,7 @@ Default policies per classification level:
 | internal | 365 (1 year) | archive | Operational data, retain for audit |
 | confidential | 365 (1 year) | archive | Business data, retain for audit |
 | personal | 180 (6 months) | tombstone | GDPR minimization principle |
-| sensitive | 90 (3 days) | tombstone | Minimize exposure window |
+| sensitive | 90 (3 months) | tombstone | Minimize exposure window |
 | secret | 30 (1 month) | tombstone | Maximum restriction |
 
 Default policies are engine configuration. They can be overridden at engine construction time via `EngineConfig.retentionPolicies: Record<DataClassification, RetentionPolicy>`.
@@ -1740,10 +1745,14 @@ AgentReactivateInput = {
   reactivatorId: AgentId     -- must be admin or trusted
 }
 
+Constraint: reactivatorId must have trust level >= the suspended agent's trust level.
+  A trusted-level agent cannot reactivate an admin-level agent. Violation returns
+  E_AGT_INSUFFICIENT_TRUST.
+
 AgentReactivateError =
   | E_AGT_NOT_FOUND
   | E_AGT_INVALID_TRANSITION  -- not suspended, or decommissioned
-  | E_AGT_INSUFFICIENT_TRUST
+  | E_AGT_INSUFFICIENT_TRUST  -- reactivator trust < suspended agent trust, or reactivator is untrusted/probationary
   | E_SYS_DB_BUSY
   | E_SYS_INTERNAL
 
@@ -2775,7 +2784,7 @@ Quick reference: every public method in the system.
 | AdapterRegistry | adapterRemove | 10.4 |
 | AdapterRegistry | adapterList | 10.5 |
 
-**Total: 42 methods (41 public + 1 internal)**
+**Total: 43 methods (41 public + 2 internal)**
 
 ---
 
@@ -2801,7 +2810,9 @@ ErasureError =
   | E_SYS_INTERNAL
 
 Erasure semantics:
-  1. Find all claims where content or metadata matches dataSubjectId.
+  1. Find all claims where SubjectURN matches pattern `entity:user:<dataSubjectId>` or
+     `entity:person:<dataSubjectId>` (exact match on the `<id>` segment, same extraction
+     pattern as consent check in Section 3.2).
   2. For each matched claim:
      a. The original claim row is NOT modified. Its contentHash and previousHash remain
         intact. The hash chain is append-only — modifying any entry would break the
@@ -2833,6 +2844,13 @@ Erasure semantics:
      claim IDs).
   6. Audit entry appended with operation 'erasure.execute' summarizing the full operation.
   7. Single transaction.
+
+Consent bypass exception:
+  GDPR erasure exercises data subject rights per Article 17. The consent-before-read
+  gate (Section 13.4) is BYPASSED for the purpose of identifying erasure-eligible claims.
+  The erasure operation itself IS the exercise of the data subject's rights. This exception
+  applies ONLY to erasureExecute and ONLY for claims belonging to the requesting
+  dataSubjectId.
 
 Hash chain integrity note:
   No existing entry (claim or audit) is ever modified by erasure. All tombstones are
