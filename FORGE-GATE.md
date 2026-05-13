@@ -17,7 +17,7 @@
 | 0 | `FORGE-GATE.md` | `self-referential — verify via git commit hash` | Breaker CLEAN → Certifier GO → Witness pending |
 | 0 | `docs/SOLISFORGE-v1.5-GENERIC-REFERENCE.md` | `c1805f70bf875d3126a4805e2eecb2af3fcfa29f86cbbbc463f9803e4e9fb001` | Governing constitution (reference artifact) |
 | 1 | `PHASE_1_FAILURE_MODE_ATLAS.md` | `00fd30979371155cafa12af0103585f1c74080c6c91485944eb8dcf1079bc2ad` | Breaker CLEAN → Certifier GO → Witness 100/100 |
-| 2 | `PHASE_2_CONTRACT_SPECIFICATION.md` | `4da7f9763181bed04cb90f3c0b23ddf7ebb98b0da38342ee3550b9f50e7dda60` | Bounded Admission — Pending Breaker/Certifier/Witness |
+| 2 | `PHASE_2_CONTRACT_SPECIFICATION.md` | `d06d268f555f50d1b27bf42f4ddf1ca7add12810c6979571e8143c86ce80d8ff` | Bounded Admission — 3 P1 findings remediated, re-Breaker pending |
 
 ---
 

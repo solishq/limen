@@ -176,7 +176,9 @@ Claim = {
   missionId:       MissionId | null      -- mission context (null if unscoped)
   taskId:          TaskId | null         -- task context (null if unscoped)
   contentHash:     SHA256Hash            -- hash of canonical claim content
-  previousHash:    SHA256Hash | null     -- hash chain link (null for first claim in chain)
+  previousHash:    SHA256Hash | null     -- hash chain link (null for genesis claim)
+  sequenceNum:     number                -- monotonically increasing chain position, starts at 0
+                                         -- assigned at write time, authoritative for chain ordering
   fsrsState:       FSRSState             -- decay parameters, stored at creation time
   version:         number                -- monotonically increasing, starts at 1
 }
@@ -659,6 +661,10 @@ E_VAL_UNKNOWN_FIELD             -- Zod strict parsing rejected an unknown field
 E_VAL_SCHEMA_MISMATCH           -- input does not match expected schema
   severity: error
   recovery: "Check input against the documented schema"
+
+E_VAL_INVALID_REASON            -- retract reason not permitted on this API surface
+  severity: error
+  recovery: "'cascade' and 'erasure' are system-internal reasons. Use incorrect, superseded, expired, or manual"
 ```
 
 **Claim Errors (E_CLM_*)**
@@ -1074,20 +1080,22 @@ RecallBulkError =
 
 ### 3.5 forget
 
-Retract a claim.
+Retract a claim. Public API — accepts only user-initiated retract reasons.
 
 ```
 forget(input: ForgetInput): Result<Claim, ForgetError>
 
 ForgetInput = {
   claimId:  ClaimId
-  reason:   RetractReason    -- one of: incorrect, superseded, expired, manual
+  reason:   RetractReason    -- RESTRICTED: one of: incorrect, superseded, expired, manual
+                             -- 'cascade' and 'erasure' are NOT accepted here (see below)
   agentId:  AgentId
 }
 
 ForgetError =
   | E_CLM_NOT_FOUND
   | E_CLM_ALREADY_RETRACTED
+  | E_VAL_INVALID_REASON      -- if reason is 'cascade' or 'erasure'
   | E_AGT_NOT_FOUND
   | E_AGT_SUSPENDED
   | E_SYS_DB_BUSY
@@ -1099,6 +1107,44 @@ Side effects:
   3. If reason is 'incorrect' or 'manual', self-healing cascade MAY be triggered
      for claims with 'derived_from' relationships (see Section 8).
   4. Single transaction.
+
+Reason restriction:
+  `forget()` accepts only user-initiated reasons (incorrect, superseded, expired, manual).
+  System-initiated retraction (cascade, erasure) uses `_internalRetract` (below), which
+  is NOT exposed in the public API or MCP tool surface.
+```
+
+### 3.5.1 _internalRetract (engine-internal)
+
+System-internal retraction method. NOT exposed via public API, MCP tools, or adapter surface. Called ONLY by the cascade engine (Section 8.1) and the erasure engine (Appendix C).
+
+```
+_internalRetract(claimId: ClaimId, reason: RetractReason): Result<Claim, InternalRetractError>
+
+  reason: RetractReason    -- UNRESTRICTED: all 6 values accepted
+                           -- cascade engine passes 'cascade'
+                           -- erasure engine passes 'erasure'
+
+InternalRetractError =
+  | E_CLM_NOT_FOUND
+  | E_CLM_ALREADY_RETRACTED
+  | E_SYS_DB_BUSY
+  | E_SYS_INTERNAL
+
+Side effects:
+  1. Claim status set to 'retracted', retractedAt set to now(), retractedReason set.
+  2. Audit entry appended with operation reflecting the caller context
+     (e.g., 'cascade.retract' for cascade, 'erasure.retract' for erasure).
+  3. No agent validation — caller is trusted internal code.
+  4. No cascade trigger — cascade decisions are the caller's responsibility.
+  5. Within caller's existing transaction (not a new transaction).
+
+Access control:
+  - This method is a private engine internal. It MUST NOT appear on any public interface,
+    adapter bridge, or MCP tool surface.
+  - It is the ONLY code path that can set retractedReason to 'cascade' or 'erasure'.
+  - If any public path attempts to set reason='cascade' or reason='erasure', it MUST
+    return E_VAL_INVALID_REASON.
 ```
 
 ### 3.6 connect
@@ -1919,14 +1965,14 @@ CascadeTriggerError =
   | E_SYS_INTERNAL
 
 Cascade algorithm:
-  1. Start at rootClaimId. Mark as visited. Retract with reason.
+  1. Start at rootClaimId. Mark as visited. Retract via _internalRetract(rootClaimId, reason) (Section 3.5.1).
   2. Find all claims where relationship.type='derived_from' AND relationship.toId=currentClaimId.
      These are claims that DERIVE FROM the current claim (strong dependency).
   3. For each dependent:
      a. If already visited -> skip (prevents infinite loops). Record in cyclesDetected. (Prevents FM-I2-04 loop case)
      b. If already retracted -> skip. (Prevents FM-I2-04 double retraction)
      c. If depth >= maxDepth -> skip. Record depthLimited=true. (Prevents FM-I2-04 unbounded depth)
-     d. Retract the claim with reason 'cascade'.
+     d. Retract the claim via _internalRetract(claimId, 'cascade') (Section 3.5.1).
      e. Recurse to step 2 with this claim.
   4. 'supports' relationships are NOT followed. Only 'derived_from'. (Prevents FM-I2-04 over-retraction)
   5. Every retraction generates an audit entry with operation 'cascade.retract'.
@@ -2404,7 +2450,19 @@ Both chains:
   - Have gap-free sequence numbers.
   - Are verifiable via auditVerifyChain().
 
-Claim-level hashes (Claim.contentHash, Claim.previousHash) form a THIRD chain for the belief graph. Same integrity rules apply.
+Claim-level hashes (Claim.contentHash, Claim.previousHash) form a THIRD chain for the belief graph:
+  - **Chain scope:** Global. One chain across ALL claims (not per-subject or per-predicate).
+  - **Chain ID:** `claimChainId = 'belief-graph'` (constant, analogous to audit chain's chainId).
+  - **Ordering:** `previousHash` references the contentHash of the most recently committed
+    claim, ordered by sequenceNum (monotonically increasing integer assigned at write time),
+    NOT by timestamp. SequenceNum is authoritative for ordering; timestamps may collide.
+  - **Genesis:** The first claim in the chain has `previousHash = null` and `sequenceNum = 0`.
+  - **Concurrency:** Single-writer enforced at engine level. All claim writes are serialized
+    through the SQLite transaction (WAL mode, single connection for writes). No concurrent
+    claim writes are possible, so chain ordering is deterministic.
+  - **Verification:** Same integrity rules as audit and refusal chains — append-only, no
+    modification, no deletion (erasure uses tombstone append per Appendix C), gap-free
+    sequence numbers, verifiable end-to-end.
 
 ### 13.8 No Direct DB Access
 
@@ -2527,16 +2585,44 @@ ErasureError =
 
 Erasure semantics:
   1. Find all claims where content or metadata matches dataSubjectId.
-  2. TOMBSTONE each claim: replace objectValue with '[ERASED]', set status='retracted',
-     retractedReason='erasure'. The claim row REMAINS (for audit chain integrity)
-     but content is irrecoverable.
-  3. TOMBSTONE related audit entries: replace payload with '[ERASED]'.
-     Audit entries are NOT deleted -- the hash chain must remain verifiable.
-     The contentHash is recomputed for the tombstoned content (chain integrity preserved).
-  4. If includeRelated=true: follow derived_from relationships and tombstone those claims too.
-  5. Generate ErasureCertificate as proof.
-  6. Audit entry appended with operation 'erasure.execute'.
+  2. For each matched claim:
+     a. The original claim row is NOT modified. Its contentHash and previousHash remain
+        intact. The hash chain is append-only — modifying any entry would break the
+        previousHash link of the subsequent entry, making the chain unverifiable.
+     b. A new ERASURE_TOMBSTONE entry is appended to the claim chain:
+        - subject:         original claim's subject
+        - predicate:       'erasure.tombstone'
+        - objectValue:     JSON: { erasedClaimId, dataSubjectId, reason, originalClaimHash }
+        - objectType:      'json'
+        - status:          'active'
+        - retractedReason: null (tombstone itself is not retracted)
+        - contentHash:     SHA-256 of the tombstone's canonical content
+        - previousHash:    the most recent claim's contentHash (standard chain append)
+     c. The original claim is retracted via _internalRetract(claimId, 'erasure').
+        This sets status='retracted', retractedReason='erasure', retractedAt=now().
+        It does NOT modify objectValue, contentHash, or previousHash.
+     d. Downstream consumers (recall, search, query) check for active ERASURE_TOMBSTONE
+        entries. When a tombstone exists for a claim, the original claim's objectValue
+        MUST be redacted to '[ERASED]' in all read responses. The stored row is unchanged;
+        redaction is applied at read time.
+  3. TOMBSTONE related audit entries: for each audit entry containing dataSubjectId content,
+     a NEW audit entry of operation 'erasure.audit_tombstone' is appended to the audit chain
+     referencing the original entry's ID. The original audit entry is NOT modified (its
+     contentHash is part of the audit chain). Read paths redact the original entry's payload
+     when a tombstone audit entry exists for it.
+  4. If includeRelated=true: follow derived_from relationships and apply steps 2-3 to
+     those claims too.
+  5. Generate ErasureCertificate as proof (includes all tombstone entry IDs and original
+     claim IDs).
+  6. Audit entry appended with operation 'erasure.execute' summarizing the full operation.
   7. Single transaction.
+
+Hash chain integrity note:
+  No existing entry (claim or audit) is ever modified by erasure. All tombstones are
+  APPENDED to their respective chains. This preserves verifiability: auditVerifyChain()
+  and claim chain verification will pass without special-casing erasure. GDPR compliance
+  is achieved through read-time redaction driven by tombstone entries, not by mutating
+  stored data.
 ```
 
 ---
