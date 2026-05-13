@@ -4,7 +4,7 @@
 
 **Current Phase:** 0 (Intent + Property Derivation)
 **Governance Tier:** Forge Critical (SolisForge v1.5 S3)
-**Status:** Bounded Admission -- Pending Breaker/Certifier/Witness
+**Status:** Bounded Admission — Breaker CLEAN, Certifier GO, Witness pending
 
 ---
 
@@ -12,8 +12,10 @@
 
 | Phase | Artifact | SHA-256 | Gate Status |
 |-------|----------|---------|-------------|
-| 0 | `PHASE_0_INTENT_RECORD.md` | `b2b4ff433dd0561703774fb104a19d3d6b5631e8a6bb78a77550948df3250636` | Breaker complete, Certifier pending |
-| 0 | `PHASE_0_PROPERTY_DERIVATION.md` | `572ee365d225eb0faa21f4b01b8d0a1ff44007d96cae6ef72cfbe00e36ac92ac` | Breaker complete, Certifier pending |
+| 0 | `PHASE_0_INTENT_RECORD.md` | `bd43a2f5e57d32c012c4ce3738007aef687f5ce10d8094b5e55622bb3f7c3157` | Breaker CLEAN → Certifier GO → Witness pending |
+| 0 | `PHASE_0_PROPERTY_DERIVATION.md` | `3162fc6b8aad446bc1724e28d6f1bc9e9656e0906af6d1adb1aacc77081847e1` | Breaker CLEAN → Certifier GO → Witness pending |
+| 0 | `FORGE-GATE.md` | `bab0b0f3db3619e330e7e67c29080de6b0f41e1aab9e5c6da17e342a24eb1871` | Breaker CLEAN → Certifier GO → Witness pending |
+| 0 | `docs/SOLISFORGE-v1.5-GENERIC-REFERENCE.md` | `ac3f6744b4ff29a8f5852944b4305f3241829787e794ff87ffeeb37582fcf59e` | Governing constitution (reference artifact) |
 
 ---
 
@@ -36,9 +38,21 @@
 
 ---
 
+## Severity Taxonomy
+
+| Severity | Definition | Blocking Behavior |
+|----------|-----------|-------------------|
+| **P0** | System cannot function, security breach, contract violation | Blocks ALL progression |
+| **P1** | Violates governing contract, gap causing failure at next phase | Blocks phase exit |
+| **P2** | Quality concern, performance, spec gap | Fix before ratification (Phase 9) |
+| **P3** | Documentation, cosmetic | Fix before ratification |
+
+---
+
 ## Rules
 
 1. No artifact advances past Bounded Admission without SHA-256 recorded here.
 2. Breaker/Certifier/Witness verdicts are logged per-phase before the next phase opens.
 3. Any hash mismatch between this ledger and the file on disk is a blocking finding.
 4. This file is the single source of truth for Forge pipeline state.
+5. All pipeline roles (Builder, Breaker, Certifier, Witness, Independent Test Writer) are dispatched as independent sub-agents with A-27 standing orders. No inline execution by Orchestrator.

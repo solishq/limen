@@ -25,8 +25,8 @@ P2. Every decision is audited and thought about before implementation or acting 
 **Quality targets (bounded, measurable):**  
 - Governance latency ≤ 50 ms per claim (test stand validated).  
 - All defined MCP refusal scenarios pass Test Stand validation (bounded by evidence).  
-- Witness score target: 100/100 on clarity/actionability. SolisForge minimum gate: ≥ 80/100.  
-- Governance overhead ≤ 25 % (Forge Standard tier, per constitution).  
+- Witness score: 100/100 required (non-negotiable). SolisForge minimum gate ≥80/100 does not apply — project standard is higher.  
+- Governance overhead ≤ 40% (Forge Critical tier, per SolisForge v1.5 §12).  
 - Every file hashed (SHA-256) and logged in FORGE-GATE.md before next phase (standing order).
 
 **Ratified by:** Lanre — "approved" + "go" + new standing orders (per-phase branches, every decision audited)  

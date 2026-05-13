@@ -3,7 +3,7 @@
 **Intent Record** (SolisForge v1.5 Generic Reference — Fresh Start, Phase 0)
 
 **Purpose:**  
-Limen V5 exists to become the universal inhabited cognitive governance substrate for any AI agent framework. It turns every agent memory/action into a governed, self-healing belief with temporal decay, consent enforcement, refusal provenance, unified audit chain, and zero-bypass primitives — so agents remain truthful, auditable, and safe at scale. This is built under the SolisForge v1.5 Generic Reference as constitution, with no assumptions from prior work, no copies, no shortcuts, no patches. The goal is to invent what nobody ever thought could be built: a cognitive governance system that is truly revolutionary, achieved by one founder + AI expertise + agent team, with aerospace-precision discipline and unbreakable evidence chains.
+Limen V5 exists to become the universal cognitive governance substrate for any AI agent framework. It turns every agent memory/action into a governed, self-healing belief with temporal decay, consent enforcement, refusal provenance, unified audit chain, and zero-bypass primitives — so agents remain truthful, auditable, and safe at scale. This is built under the SolisForge v1.5 Generic Reference as constitution, with no assumptions from prior work, no copies, no shortcuts, no patches. The goal is to invent what nobody ever thought could be built: a cognitive governance system that is truly revolutionary, achieved by one founder + AI expertise + agent team, with aerospace-precision discipline and unbreakable evidence chains.
 
 **Success definition (measurable, bounded):**  
 - All agent claims/actions must route through LimenAgentClient with structural bypass prevention (to be proven at Phase 5.5 Test Stand).
@@ -25,6 +25,7 @@ Limen V5 exists to become the universal inhabited cognitive governance substrate
 - Full proof chain in FORGE-GATE.md for every artifact (SHA-256, Breaker/Certifier/Witness, ledger status).  
 - Bounded admission only until full gate process complete.
 - **Governance Tier:** Forge Critical (SolisForge v1.5 §3).
+- **Governing Constitution:** SolisForge v1.5 — see `docs/SOLISFORGE-v1.5-GENERIC-REFERENCE.md`
 
 **Ratified by:** Lanre — "approved" + "go" + new standing orders (per-phase branches, every decision audited)  
 **Date:** May 13, 2026  
