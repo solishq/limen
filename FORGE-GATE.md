@@ -14,7 +14,7 @@
 |-------|----------|---------|-------------|
 | 0 | `PHASE_0_INTENT_RECORD.md` | `bd43a2f5e57d32c012c4ce3738007aef687f5ce10d8094b5e55622bb3f7c3157` | Breaker CLEAN → Certifier GO → Witness pending |
 | 0 | `PHASE_0_PROPERTY_DERIVATION.md` | `3162fc6b8aad446bc1724e28d6f1bc9e9656e0906af6d1adb1aacc77081847e1` | Breaker CLEAN → Certifier GO → Witness pending |
-| 0 | `FORGE-GATE.md` | `bab0b0f3db3619e330e7e67c29080de6b0f41e1aab9e5c6da17e342a24eb1871` | Breaker CLEAN → Certifier GO → Witness pending |
+| 0 | `FORGE-GATE.md` | `self-referential — verify via git commit hash` | Breaker CLEAN → Certifier GO → Witness pending |
 | 0 | `docs/SOLISFORGE-v1.5-GENERIC-REFERENCE.md` | `ac3f6744b4ff29a8f5852944b4305f3241829787e794ff87ffeeb37582fcf59e` | Governing constitution (reference artifact) |
 
 ---
