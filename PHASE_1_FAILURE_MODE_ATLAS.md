@@ -177,7 +177,7 @@ Severity scale justification:
 - **Mechanism:** (a) Kill-switch sets a flag but the action executor checks the flag only at dispatch time, not during execution — long-running actions (file writes, network calls) complete after kill. (b) Race condition: action dispatch reads `killSwitch=false`, kill activates, action executes. (c) Kill-switch implementation is in the adapter layer but the sandbox executor doesn't check it — the adapter refuses new requests but in-flight sandbox operations continue.
 - **Severity:** CATASTROPHIC — Kill-switch is the last line of human oversight. If it fails, the human cannot stop an unsafe action. This is the most severe failure mode in the system.
 - **Severity Justification:** Human oversight and kill-switch primacy are explicitly listed as non-negotiable in both the Property Derivation and Intent Record, and in SolisForge v1.5 §1.
-- **Testability (Phase 5.5):** (1) Start a long-running sandbox action (simulated 5s file write), activate kill-switch at T=1s — action must be aborted/rolled back, not completed. (2) Dispatch 100 actions concurrently, activate kill-switch — zero actions should complete post-kill. (3) Verify kill-switch check is inside the execution loop, not only at dispatch. (4) Test kill-switch with every action type (file, network, shell) independently.
+- **Testability (Phase 5.5):** (1) Start a long-running sandbox action (simulated 5s file write), activate kill-switch at T=1s — action must be aborted/rolled back, not completed. (2) Dispatch 100 actions concurrently, activate kill-switch — zero actions should complete more than 100ms after kill signal receipt (temporal bound: actions completing within the signal propagation window are accepted; actions persisting beyond 100ms are violations). (3) Verify kill-switch check is inside the execution loop, not only at dispatch. (4) Test kill-switch with every action type (file, network, shell) independently.
 - **Preventing Principle:** SolisForge v1.5 §1 (human oversight and kill-switch primacy always preserved — verbatim from the document).
 
 ### FM-I5-02: Sandbox Escape via Provenance Forgery
@@ -506,6 +506,8 @@ Severity scale justification:
 | QT-5 (file hashing) | FM-QT5-01 | 1 |
 
 Every invariant (1-8), process constraint (P1, P2), and quality target (QT-1 through QT-5) has at least one failure mode. 37 modes enumerated across all categories. Coverage is bounded by current analysis — additional failure modes may exist and should be enumerated as they are discovered during implementation phases.
+
+**Amendment procedure:** To add a newly discovered failure mode: (1) assign the next sequential ID within the relevant invariant group (e.g., FM-I1-04), (2) complete all template fields (Source, Description, Mechanism, Severity, Testability, Preventing Principle), (3) update the Summary Matrix and Coverage Verification table, (4) recompute SHA-256 and update FORGE-GATE.md, (5) the amended atlas must pass a scoped Breaker re-attack on the new entry only (not the full atlas) per SolisForge v1.5 §6.
 
 ---
 
