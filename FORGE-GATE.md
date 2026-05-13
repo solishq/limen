@@ -17,7 +17,7 @@
 | 0 | `FORGE-GATE.md` | `self-referential — verify via git commit hash` | Breaker CLEAN → Certifier GO → Witness pending |
 | 0 | `docs/SOLISFORGE-v1.5-GENERIC-REFERENCE.md` | `c1805f70bf875d3126a4805e2eecb2af3fcfa29f86cbbbc463f9803e4e9fb001` | Governing constitution (reference artifact) |
 | 1 | `PHASE_1_FAILURE_MODE_ATLAS.md` | `00fd30979371155cafa12af0103585f1c74080c6c91485944eb8dcf1079bc2ad` | Breaker CLEAN → Certifier GO → Witness 100/100 |
-| 2 | `PHASE_2_CONTRACT_SPECIFICATION.md` | `d06d268f555f50d1b27bf42f4ddf1ca7add12810c6979571e8143c86ce80d8ff` | Bounded Admission — 3 P1 findings remediated, re-Breaker pending |
+| 2 | `PHASE_2_CONTRACT_SPECIFICATION.md` | `765de2a47041c550656f7f5ffea65b4803fcf9e7a6c66ae344b1cc12d790a3c0` | Bounded Admission — 3 P1 + 10 P2 + 1 P3 findings remediated, re-Breaker pending |
 
 ---
 
@@ -26,8 +26,8 @@
 | Phase | Name | Status |
 |-------|------|--------|
 | 0 | Intent + Property Derivation | Bounded Admission |
-| 1 | Contracts (interfaces, types, error taxonomy) | Not started |
-| 2 | Core Engine (belief store, decay, governance) | Not started |
+| 1 | Failure Mode Atlas | Breaker CLEAN → Certifier GO → Witness 100/100 |
+| 2 | Contract Specification (interfaces, types, errors) | Bounded Admission |
 | 3 | Consent + Classification + Refusal | Not started |
 | 4 | AdapterRegistry + LimenAgentClient | Not started |
 | 5 | Computer-Use Sandbox + Provenance | Not started |

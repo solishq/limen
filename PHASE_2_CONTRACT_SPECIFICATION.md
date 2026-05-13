@@ -355,6 +355,9 @@ AuditOperation =
   | 'rule.retire'
   | 'adapter.register'
   | 'adapter.remove'
+  | 'WM_WRITE'
+  | 'WM_READ'
+  | 'WM_DISCARD'
   | 'chain.verify'
   | 'audit.export'
 
@@ -369,6 +372,7 @@ AuditEntityType =
   | 'erasure'
   | 'rule'
   | 'adapter'
+  | 'working_memory'
   | 'chain'
   | 'audit'
 
@@ -665,6 +669,10 @@ E_VAL_SCHEMA_MISMATCH           -- input does not match expected schema
 E_VAL_INVALID_REASON            -- retract reason not permitted on this API surface
   severity: error
   recovery: "'cascade' and 'erasure' are system-internal reasons. Use incorrect, superseded, expired, or manual"
+
+E_VAL_QUERY_SYNTAX              -- search query contains invalid FTS5 syntax
+  severity: error
+  recovery: "Fix the search query syntax. FTS5 supports terms, phrases (\"...\"), AND, OR, NOT, prefix*"
 ```
 
 **Claim Errors (E_CLM_*)**
@@ -1002,6 +1010,10 @@ Side effects:
   4. Secret detection runs: if content matches secret patterns, classification is upgraded to 'secret'.
      (Prevents FM-CC-03)
   5. Consent is checked within the same SQLite transaction if classification >= 'personal'. (Prevents FM-I3-01)
+     Data subject extraction: the dataSubjectId for consent lookup is derived from the SubjectURN.
+     If subject matches pattern `entity:user:<id>` or `entity:person:<id>`, the `<id>` portion
+     is the dataSubjectId. If subject does not match a personal entity pattern, consent check
+     is skipped (classification alone gates storage; consent gates personal-data operations).
   6. Hash chain is extended: contentHash computed, previousHash linked. (Invariant 6)
   7. Audit entry is appended. (Invariant 6)
   8. FSRSState is initialized from engine defaults and stored on claim. (Invariant 2; prevents FM-CC-02)
@@ -1202,6 +1214,7 @@ SearchResult = {
 
 SearchError =
   | E_VAL_CONTENT_EMPTY
+  | E_VAL_QUERY_SYNTAX           -- FTS5 syntax error in query
   | E_VAL_SCHEMA_MISMATCH
   | E_AGT_NOT_FOUND
   | E_AGT_SUSPENDED
@@ -1211,7 +1224,9 @@ SearchError =
 Guarantees:
   - Same redaction and consent filtering as recall.
   - effectiveConfidence computed at read time.
-  - FTS5 query syntax errors are returned as E_VAL_SCHEMA_MISMATCH with descriptive message.
+  - FTS5 query syntax errors are returned as E_VAL_QUERY_SYNTAX with descriptive message
+    identifying the syntax problem. This replaces the generic E_VAL_SCHEMA_MISMATCH to
+    distinguish input schema violations from search query syntax errors.
 ```
 
 ### 3.8 reflect
@@ -1251,7 +1266,10 @@ ReflectError =
 
 Guarantees:
   - ALL entries succeed or ALL fail (single transaction).
-  - Each entry generates predicate = "reflection.<category>" and subject = auto-generated.
+  - Each entry generates predicate = "reflection.<category>" where category is from the input
+    (one of: decision, pattern, warning, finding).
+  - Subject is generated as `entity:reflection:<UUIDv7>`. The UUIDv7 is generated at assertion
+    time, one per entry. This ensures each reflection entry has a unique, time-ordered subject.
   - Same classification, consent, hash-chain, audit as individual remember calls.
 ```
 
@@ -1275,6 +1293,12 @@ WMWriteError =
   | E_AGT_SUSPENDED
   | E_SYS_DB_BUSY
   | E_SYS_INTERNAL
+
+Side effects:
+  1. Entry created or replaced in working memory store.
+  2. Appends audit entry with operation='WM_WRITE', entityType='working_memory',
+     entityId=taskId+'/'+key. (Invariant 13.3)
+  3. Single transaction.
 ```
 
 ### 3.10 workingMemoryRead
@@ -1295,6 +1319,11 @@ WMReadError =
   | E_AGT_SUSPENDED
   | E_SYS_DB_BUSY
   | E_SYS_INTERNAL
+
+Side effects:
+  1. Appends audit entry with operation='WM_READ', entityType='working_memory',
+     entityId=taskId+'/'+key (or taskId+'/*' if key is null). (Invariant 13.3)
+  2. Single transaction.
 ```
 
 ### 3.11 workingMemoryDiscard
@@ -1315,6 +1344,12 @@ WMDiscardError =
   | E_AGT_SUSPENDED
   | E_SYS_DB_BUSY
   | E_SYS_INTERNAL
+
+Side effects:
+  1. Entry or entries deleted from working memory store.
+  2. Appends audit entry with operation='WM_DISCARD', entityType='working_memory',
+     entityId=taskId+'/'+key (or taskId+'/*' if key is null). (Invariant 13.3)
+  3. Single transaction.
 ```
 
 ---
@@ -1477,6 +1512,111 @@ RefusalRecord = {
 Refusal provenance is hash-chained separately from the main audit chain.
 Chain integrity rules are identical to AuditEntry (Section 1.19).
 Concurrent refusals are serialized to prevent chain forks. (Prevents FM-I3-03)
+```
+
+#### 4.6.1 verifyRefusalChain
+
+Verify the integrity of the refusal provenance chain.
+
+```
+verifyRefusalChain(input: RefusalVerifyInput): Result<ChainVerifyResult, RefusalVerifyError>
+
+RefusalVerifyInput = {
+  since:  Timestamp | null    -- null = from genesis
+}
+
+ChainVerifyResult = {
+  valid:          boolean
+  entriesChecked: number
+  firstFailure:   string | null         -- refusal record ID where failure was detected
+  failureType:    'hash_mismatch' | 'gap_detected' | 'tamper_detected' | null
+  verifiedAt:     Timestamp
+}
+
+RefusalVerifyError =
+  | E_SYS_DB_BUSY
+  | E_SYS_INTERNAL
+
+Verification algorithm:
+  Same as auditVerifyChain (Section 6.3) but operates on RefusalRecord entries
+  using the 'refusal' chainId. RefusalRecord contains all fields needed for chain
+  verification: contentHash, previousHash, and implicit sequenceNum ordering via
+  timestamp + serialized insertion.
+
+Note: RefusalRecord fields (contentHash, previousHash, chainId='refusal') follow
+  identical integrity rules to AuditEntry. The verification walk is structurally
+  identical -- recompute contentHash from fields, verify previousHash linkage,
+  detect gaps.
+```
+
+### 4.7 Retention Policy Engine
+
+The retention policy engine defines how long claims are retained based on their classification, and enforces automatic cleanup.
+
+```
+RetentionPolicy = {
+  maxAgeDays:  number           -- maximum age in days before action is taken
+  action:      RetentionAction  -- what happens when maxAgeDays is exceeded
+}
+
+RetentionAction = 'archive' | 'delete' | 'tombstone'
+
+  archive:   claim is retracted with reason 'expired' (soft removal, still in DB)
+  delete:    claim row is physically removed (only for 'public' and 'internal')
+  tombstone: claim is retracted + tombstone appended (for classified data, preserves chain)
+```
+
+#### 4.7.1 getRetentionPolicy
+
+```
+getRetentionPolicy(classification: DataClassification): RetentionPolicy
+```
+
+Default policies per classification level:
+
+| Classification | maxAgeDays | Action | Rationale |
+|---------------|------------|--------|-----------|
+| public | 730 (2 years) | delete | Low-value data, safe to purge |
+| internal | 365 (1 year) | archive | Operational data, retain for audit |
+| confidential | 365 (1 year) | archive | Business data, retain for audit |
+| personal | 180 (6 months) | tombstone | GDPR minimization principle |
+| sensitive | 90 (3 days) | tombstone | Minimize exposure window |
+| secret | 30 (1 month) | tombstone | Maximum restriction |
+
+Default policies are engine configuration. They can be overridden at engine construction time via `EngineConfig.retentionPolicies: Record<DataClassification, RetentionPolicy>`.
+
+#### 4.7.2 enforceRetention
+
+```
+enforceRetention(input: EnforceRetentionInput): Result<RetentionResult, RetentionError>
+
+EnforceRetentionInput = {
+  agentId:  AgentId       -- must be admin
+  dryRun:   boolean       -- default: false
+}
+
+RetentionResult = {
+  archived:    number     -- claims archived (retracted with reason 'expired')
+  deleted:     number     -- claims physically removed
+  tombstoned:  number     -- claims tombstoned
+  dryRun:      boolean
+}
+
+RetentionError =
+  | E_AGT_NOT_FOUND
+  | E_AGT_INSUFFICIENT_TRUST    -- requires admin
+  | E_SYS_DB_BUSY
+  | E_SYS_INTERNAL
+
+Execution:
+  1. For each active claim where (now() - createdAt) > policy.maxAgeDays:
+     a. If action='archive': retract via _internalRetract(claimId, 'expired').
+     b. If action='delete': physically remove claim row (ONLY for public/internal).
+     c. If action='tombstone': retract + append tombstone entry (same pattern as erasure).
+  2. Audit entries are NEVER deleted by retention. Audit entries follow a separate
+     retention policy: archive only, never delete. (Preserves audit chain integrity.)
+  3. Every action generates an audit entry.
+  4. Single transaction.
 ```
 
 ---
@@ -2021,6 +2161,17 @@ ConsolidateError =
   | E_SYS_DB_BUSY
   | E_SYS_INTERNAL
 
+Similarity computation:
+  - Similarity is computed via exact content hash comparison (deduplication) and optional
+    embedding cosine similarity when vector search is configured.
+  - Without vector search, only exact-match merging is performed: two claims with identical
+    contentHash, same subject, and same predicate are merge candidates.
+  - The mergeSimilarityThreshold parameter applies ONLY when embedding-based similarity is
+    available. It is ignored in exact-match-only mode (exact match is effectively threshold=1.0).
+  - When embeddings are available, similarity = cosine(embedding_A, embedding_B) where
+    embeddings are computed by the configured embedding model. Claims are merge candidates
+    when similarity >= mergeSimilarityThreshold AND same subject AND same predicate.
+
 Guarantees:
   - Merge: two claims are merged IFF content similarity >= threshold AND same subject AND same predicate.
     The claim with higher confidence survives. The lower is retracted with reason 'superseded'.
@@ -2093,6 +2244,17 @@ Guarantees:
   - Messages are stored as governed claims (subject + predicate pattern).
   - Messages are immutable (same as claims).
   - Audit entry appended.
+
+Classification of A2A messages:
+  - A2A messages are classified as `internal` by default. This means they are exempt from
+    personal-data consent requirements, preventing a pathological scenario where every
+    inter-agent message triggers consent lookups.
+  - Messages containing PII patterns (detected by the same PII scanner used in the
+    Classification Engine, Section 4.5) are upgraded to `personal` classification and
+    require consent before storage. This preserves PII protection without burdening
+    routine agent coordination with consent overhead.
+  - Messages containing secret patterns are upgraded to `secret` classification and
+    redacted in read responses (same as claims).
 ```
 
 ### 9.2 a2aRead
@@ -2164,7 +2326,58 @@ RuleRegisterError =
   | E_SYS_INTERNAL
 ```
 
-### 9.5 ruleList
+### 9.5 Proactive Rule Execution
+
+Defines how registered proactive rules are evaluated and executed at runtime.
+
+```
+Rule Evaluation Lifecycle:
+
+  1. TRIGGER POINT: Rules are evaluated on every `remember()` call, after the claim
+     has been successfully stored but before the transaction commits. This means
+     rule-triggered actions participate in the same transaction boundary.
+
+  2. TRIGGER MATCHING: For each active rule where triggerType='claim_asserted' or
+     triggerType='pattern_match', the newly asserted claim's predicate is compared
+     against the rule's triggerConfig. Match semantics:
+       - 'claim_asserted': triggerConfig.predicates (array of Predicate patterns)
+         are compared against the new claim's predicate. Supports exact match and
+         trailing wildcard (e.g., "decision.*").
+       - 'pattern_match': triggerConfig.pattern (regex) is tested against the claim's
+         objectValue content.
+       - 'confidence_threshold': triggerConfig.threshold (Confidence) is compared
+         against the new claim's confidence. Fires when confidence crosses threshold.
+       - 'schedule': evaluated by a separate timer, not on remember(). Period defined
+         in triggerConfig.intervalMs.
+
+  3. EXECUTION IDENTITY: Matched rules execute under the system agent identity
+     (the agent registered with name 'system', trust level 'admin'). The rule's
+     approvedBy field serves as the authorization chain — proving an admin approved
+     this automated action.
+
+  4. GOVERNANCE PIPELINE: Rule-triggered actions go through the FULL governance
+     pipeline — classification, consent check, protected predicate enforcement,
+     audit trail. No shortcuts. A rule-triggered remember() is identical to an
+     agent-initiated remember() except for the executing identity.
+
+  5. FAILURE HANDLING: If a rule-triggered action fails:
+       a. The failure is logged as an audit entry (operation='rule.execute_failed').
+       b. The rule's consecutive failure counter is incremented.
+       c. After 3 consecutive failures, the rule is automatically suspended
+          (status set to 'suspended'). Audit entry with operation='rule.suspend'
+          is appended with reason 'auto_suspend_consecutive_failures'.
+       d. Manual reactivation is required to re-enable the rule.
+
+  6. RECURSION BLOCKING: Rule execution depth is capped at 1. If a rule-triggered
+     remember() would itself trigger another rule, the nested trigger is SKIPPED.
+     This prevents infinite loops and unbounded chain reactions. The skipped trigger
+     is logged as an audit entry (operation='rule.recursion_blocked').
+
+  7. ORDERING: When multiple rules match the same claim, they execute in rule
+     registration order (by createdAt ascending). Earlier-registered rules fire first.
+```
+
+### 9.6 ruleList
 
 ```
 ruleList(input: RuleListInput): Result<ProactiveRule[], E_SYS_INTERNAL>
@@ -2175,7 +2388,7 @@ RuleListInput = {
 }
 ```
 
-### 9.6 ruleSuspend
+### 9.7 ruleSuspend
 
 ```
 ruleSuspend(input: { ruleId: RuleId; agentId: AgentId }): Result<ProactiveRule, RuleSuspendError>
@@ -2188,7 +2401,7 @@ RuleSuspendError =
   | E_SYS_INTERNAL
 ```
 
-### 9.7 ruleRetire
+### 9.8 ruleRetire
 
 ```
 ruleRetire(input: { ruleId: RuleId; agentId: AgentId }): Result<ProactiveRule, RuleRetireError>
@@ -2490,7 +2703,7 @@ No error thrown inside the engine propagates as an uncaught exception to the cal
 
 ## Appendix A: Defect Category Coverage
 
-Per the Constitution's 9 mandatory defect categories, here is how this contract addresses each:
+Per the Constitution's 10 mandatory defect categories, here is how this contract addresses each:
 
 | # | Category | Contract Coverage |
 |---|----------|------------------|
@@ -2503,6 +2716,7 @@ Per the Constitution's 9 mandatory defect categories, here is how this contract 
 | 7 | **Credential / secret** | Classification engine secret detection (4.5). Secret claims redacted in recall (1.16). SandboxConfig.inheritEnv=false (1.22). |
 | 8 | **Behavioral / model quality** | Confidence capping (maxAutoConfidence). FSRS decay (computed at read). Classification detects adversarial content patterns. Content sanitization (direction-override stripping). |
 | 9 | **Availability / resource** | Cascade depth limit (8.1). Adapter timeout (10.3). Action execution timeout (7.1). Kill-switch propagation budget (1.22). Audit query performance requirements (6.2). |
+| 10 | **Performance / latency regression** | Governance latency budget 50ms P99 (QT-1, Appendix D). Audit query indexed-field return within 50ms for 100K entries (6.2). FSRS decay computed per-claim at read time without caching beyond request boundary (prevents FM-QT1-01, FM-QT1-02). Kill-switch poll interval 10ms (7.1). Adapter registration timeout 5000ms (10.3). |
 
 ---
 
@@ -2551,14 +2765,17 @@ Quick reference: every public method in the system.
 | Coordination | a2aRead | 9.2 |
 | Coordination | a2aChannels | 9.3 |
 | Coordination | ruleRegister | 9.4 |
-| Coordination | ruleList | 9.5 |
-| Coordination | ruleSuspend | 9.6 |
-| Coordination | ruleRetire | 9.7 |
+| Coordination | ruleList | 9.6 |
+| Coordination | ruleSuspend | 9.7 |
+| Coordination | ruleRetire | 9.8 |
+| Governance | verifyRefusalChain | 4.6.1 |
+| Governance | getRetentionPolicy | 4.7.1 |
+| Governance | enforceRetention | 4.7.2 |
 | AdapterRegistry | adapterRegister | 10.3 |
 | AdapterRegistry | adapterRemove | 10.4 |
 | AdapterRegistry | adapterList | 10.5 |
 
-**Total: 39 methods (38 public + 1 internal)**
+**Total: 42 methods (41 public + 1 internal)**
 
 ---
 
