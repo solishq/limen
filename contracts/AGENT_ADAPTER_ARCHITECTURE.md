@@ -8,7 +8,7 @@
 
 ---
 
-## 1. Purpose
+## 1. Purposevkhvh,,jhv,vh
 
 This contract defines the pluggable adapter model through which any AI agent framework connects to Limen's epistemic substrate without modifications to the Limen kernel. Each agent framework (Claude, Codex, Hermes, Gemma, custom local models) receives a dedicated adapter that **translates** its native tool-call interface into canonical `SHARED_TYPES.md` formats for governance evaluation and `LimenAgentClient` memory operations.
 
